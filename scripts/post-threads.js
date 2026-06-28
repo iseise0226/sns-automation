@@ -13,9 +13,10 @@ function req(url, options, body) {
         headers: options.headers || {},
       },
       (res) => {
-        let data = '';
-        res.on('data', (c) => (data += c));
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf8');
           try {
             resolve({ status: res.statusCode, json: JSON.parse(data || '{}') });
           } catch (e) {
