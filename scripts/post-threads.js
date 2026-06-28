@@ -116,7 +116,10 @@ async function postToThreads(account, text) {
 
 async function main() {
   const targetAccount = process.argv[2];
-  const accountsToRun = targetAccount ? [targetAccount] : Object.keys(ACCOUNTS);
+  // ko_gi_omotiは画像付き投稿(post-corgi.js)専用のため、通常実行(全件)からは除外
+  const accountsToRun = targetAccount
+    ? [targetAccount]
+    : Object.keys(ACCOUNTS).filter((a) => a !== 'ko_gi_omoti');
 
   const trends = await getBraveTrends();
   console.log('trends:', trends);
