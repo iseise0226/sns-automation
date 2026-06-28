@@ -62,13 +62,41 @@ async function generateText() {
 }
 
 async function generateImageBase64(sceneText) {
-  const prompt =
-    'プロの絵本イラストレーターが描いた、非常に緻密で精密なウェルシュコーギーの子犬の水彩イラスト。' +
-    '瞳は顔の中で大きな割合を占めるほど大きく丸い緑色で、白いハイライト（キャッチライト）が入って生き生きと輝き、感情豊かでまっすぐ生きいきとした視線。' +
-    '毛並みは一本一本丁寧に描き込まれた質感、舌を出した楽しそうな表情、躍動感のあるポーズ（走る・はしゃぐ・くつろぐなど）。' +
-    '背景は日本の住宅の室内（玄関・畳の和室・縁側など）を緻密に描き込み、観葉植物・座布団・障子・木の家具などの生活感のある小物を配置。' +
-    '夕方や窓辺からの暖かい黄金色の光が差し込み、床に反射するような奥行きのあるライティング。色調はくすんだベージュ・琥珀色・淡いオレンジを基調とした、絵本のような上質で温かみのある仕上がり。' +
-    `次のシーンを、コーギーが実際にその場所で生き生きと動いている情景として描く: ${sceneText}。`;
+  const basePrompt = `An adorable chibi Pembroke Welsh Corgi mascot character.
+Very large head, approximately 55% of the total body height.
+Extremely short legs.
+Very fluffy, rounded body.
+Compact proportions with oversized head and tiny paws.
+Soft rounded silhouette with absolutely no sharp angles.
+Large upright ears, oversized and slightly rounded at the tips.
+Huge sparkling round eyes with soft olive-green irises.
+Large glossy pupils with multiple bright reflections.
+Tiny black nose.
+Small smiling mouth with a visible pink tongue.
+Round cheeks.
+Soft innocent facial expression.
+Cute baby-like proportions.
+Symmetrical face.
+
+Cream white chest. Cream white muzzle. Cream white forehead stripe extending from forehead to nose.
+Warm orange-tan fur on the ears, back, sides and upper body.
+Long fluffy watercolor-style fur. Very soft feathered texture. No hard outlines.
+Fine fluffy fur around the cheeks and chest. Short fluffy tail or hidden tail.
+
+Soft watercolor illustration. Children's picture book style. Pastel color palette.
+Hand-painted watercolor texture. Gentle color bleeding. Minimal line art.
+Soft lighting. No harsh shadows. Paper texture. Dreamy atmosphere. Ultra cute.
+Highly detailed watercolor brush strokes. Premium children's illustration quality.
+
+Centered composition. Full body. Front facing. Eye level.
+White soft background. Pastel watercolor background. Minimal background distractions.
+
+Highest quality. Masterpiece. Extremely cute mascot. Consistent character design.
+Professional children's book illustration. Beautiful watercolor painting. Soft edges. Ultra detailed. Clean composition.
+
+Negative prompt: realistic dog, photorealistic, aggressive, sharp teeth, thin body, long legs, small ears, small eyes, blue eyes, brown eyes, dark lighting, hard shadows, anime style, 3D render, CGI, low quality, extra legs, extra ears, open mouth too wide, angry, sad, dirty fur, rough fur, collar, accessories, clothes, background objects, text, logo, watermark, cropped, side view, profile view.`;
+
+  const prompt = `${basePrompt}\n\nScene/pose for this illustration (keep the character design above exactly, only change the pose/expression to match): ${sceneText}`;
   const body = JSON.stringify({
     model: 'gpt-image-1',
     prompt,
