@@ -105,6 +105,8 @@ async function postToThreads(account, text) {
   const creationId = step1.json?.id;
   if (!creationId) throw new Error(`step1 failed for ${account}: ${JSON.stringify(step1.json)}`);
 
+  await new Promise((r) => setTimeout(r, 5000));
+
   const step2Url =
     `https://graph.threads.net/v1.0/${a.threadsUserId}/threads_publish?` +
     `creation_id=${creationId}&access_token=${encodeURIComponent(token)}`;
