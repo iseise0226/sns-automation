@@ -115,6 +115,8 @@ async function generateImages(detail, outDir) {
       'curl',
       [
         '-s',
+        '--max-time',
+        '170',
         '-X',
         'POST',
         'https://api.openai.com/v1/images/edits',
@@ -133,7 +135,7 @@ async function generateImages(detail, outDir) {
         '-o',
         `${outPath}.json`,
       ],
-      { timeout: 60000 }
+      { timeout: 180000 }
     );
     const data = JSON.parse(fs.readFileSync(`${outPath}.json`, 'utf-8'));
     const b64 = data?.data?.[0]?.b64_json;
