@@ -55,7 +55,7 @@ async function main() {
 
   execFileSync('git', ['config', 'user.name', 'note-bot']);
   execFileSync('git', ['config', 'user.email', 'note-bot@users.noreply.github.com']);
-  execFileSync('git', ['add', 'note_drafts', 'data/last_transcript.txt', 'data/note_magazine_used_facts.json']);
+  execFileSync('git', ['add', 'note_drafts', 'data']);
   try {
     execFileSync('git', ['commit', '-m', `chore: WF1 note draft ${new Date().toISOString().slice(0, 10)}`]);
     execFileSync('git', ['push']);

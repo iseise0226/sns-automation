@@ -56,7 +56,7 @@ async function groqChat(messages, maxTokens, jsonMode) {
   const body = { model: 'llama-3.3-70b-versatile', messages, max_tokens: maxTokens };
   if (jsonMode) body.response_format = { type: 'json_object' };
   const key = (process.env.GROQ_API_KEY || '').trim();
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     const res = await req(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -66,7 +66,9 @@ async function groqChat(messages, maxTokens, jsonMode) {
       JSON.stringify(body)
     );
     if (res.json?.choices) return res.json.choices[0].message.content;
-    await new Promise((r) => setTimeout(r, 2000));
+    // レート制限(429)の場合は長めに待つ。それ以外は短い待機でリトライ。
+    const isRateLimit = res.status === 429 || res.json?.error?.code === 'rate_limit_exceeded';
+    await new Promise((r) => setTimeout(r, isRateLimit ? 15000 : 3000));
   }
   throw new Error('Groq API呼び出し失敗（リトライ上限）');
 }
@@ -87,7 +89,7 @@ async function getBraveTrends() {
   const url =
     'https://api.search.brave.com/res/v1/news/search?q=' +
     encodeURIComponent('マインド プラス思考 自己成長 日本') +
-    '&count=5&country=JP&search_lang=ja';
+    '&count=5&country=JP&search_lang=jp';
   const res = await req(url, { headers: { Accept: 'application/json', 'X-Subscription-Token': key } });
   const results = res.json?.results || [];
   return results.slice(0, 3).map((r) => r.title).join('、');

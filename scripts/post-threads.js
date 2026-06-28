@@ -57,7 +57,7 @@ async function getBraveTrends() {
   const url =
     'https://api.search.brave.com/res/v1/news/search?q=' +
     encodeURIComponent('マインド プラス思考 自己成長 日本') +
-    '&count=5&country=JP&search_lang=ja';
+    '&count=5&country=JP&search_lang=jp';
   const res = await req(url, {
     headers: {
       Accept: 'application/json',

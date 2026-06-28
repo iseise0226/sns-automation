@@ -40,6 +40,7 @@ async function generateChapters(systemPrompt, sourceText) {
 
     bodyOnly.push(bodyText);
     chaptersText.push(`${ch.title}\n${EMOJIS[i % EMOJIS.length]}\n${bodyText}`);
+    await new Promise((r) => setTimeout(r, 1500));
   }
   return chaptersText.join('\n\n');
 }
