@@ -45,6 +45,7 @@ async function main() {
     } catch (e) {
       console.error(`[${account}] failed:`, e.message);
     }
+    await new Promise((r) => setTimeout(r, 10000));
   }
 
   try {
