@@ -60,7 +60,6 @@ async function getBraveTrends() {
   const res = await req(url, {
     headers: {
       Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
       'X-Subscription-Token': process.env.BRAVE_API_KEY,
     },
   });
@@ -95,19 +94,19 @@ async function generateText(account, trends) {
 
 async function postToThreads(account, text) {
   const a = ACCOUNTS[account];
-  const token = process.env[`THREADS_TOKEN_${account.toUpperCase()}`];
+  const token = (process.env[`THREADS_TOKEN_${account.toUpperCase()}`] || '').trim();
   if (!token) throw new Error(`missing token for ${account}`);
 
   const step1Url =
     `https://graph.threads.net/v1.0/${a.threadsUserId}/threads?` +
-    `media_type=TEXT&text=${encodeURIComponent(text)}&access_token=${token}`;
+    `media_type=TEXT&text=${encodeURIComponent(text)}&access_token=${encodeURIComponent(token)}`;
   const step1 = await req(step1Url, { method: 'POST' });
   const creationId = step1.json?.id;
   if (!creationId) throw new Error(`step1 failed for ${account}: ${JSON.stringify(step1.json)}`);
 
   const step2Url =
     `https://graph.threads.net/v1.0/${a.threadsUserId}/threads_publish?` +
-    `creation_id=${creationId}&access_token=${token}`;
+    `creation_id=${creationId}&access_token=${encodeURIComponent(token)}`;
   const step2 = await req(step2Url, { method: 'POST' });
   return step2.json;
 }
