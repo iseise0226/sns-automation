@@ -55,7 +55,7 @@ function reqBinary(url, options) {
 async function groqChat(messages, maxTokens, jsonMode) {
   const body = { model: 'llama-3.3-70b-versatile', messages, max_tokens: maxTokens };
   if (jsonMode) body.response_format = { type: 'json_object' };
-  const key = (process.env.GROQ_API_KEY || '').trim();
+  const key = (process.env.GROQ_API_KEY_NOTE || process.env.GROQ_API_KEY || '').trim();
   for (let attempt = 0; attempt < 15; attempt++) {
     const res = await req(
       'https://api.groq.com/openai/v1/chat/completions',
