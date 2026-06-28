@@ -52,7 +52,7 @@ async function generateText() {
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        Authorization: `Bearer ${(process.env.GROQ_API_KEY || '').trim()}`,
         'Content-Type': 'application/json',
       },
     },
@@ -75,7 +75,7 @@ async function generateImageBase64(sceneText) {
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${(process.env.OPENAI_API_KEY || '').trim()}`,
         'Content-Type': 'application/json',
       },
     },
