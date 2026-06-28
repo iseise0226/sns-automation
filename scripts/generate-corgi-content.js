@@ -264,7 +264,7 @@ async function postCarousel(imgPaths, caption) {
 
 async function main() {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const outDir = path.join('corgi_media', today);
+  const outDir = path.resolve('corgi_media', today);
   fs.mkdirSync(outDir, { recursive: true });
 
   const scenario = await generateScenario();
