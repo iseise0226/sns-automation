@@ -1,0 +1,46 @@
+name: WF4 Reels (6 accounts, every 3 days)
+
+on:
+  schedule:
+    # 毎日チェック、JST 4:00 = UTC 19:00(前日)。各アカウントは内部で3日おき判定してスキップ
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "trueなら3日おき判定を無視して強制実行"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Remotion dependencies
+        working-directory: remotion
+        run: npm install
+      - name: Ensure Remotion's headless Chromium is installed
+        working-directory: remotion
+        run: npx remotion browser ensure
+      - name: Generate and post reels
+        env:
+          WF4_FORCE: ${{ github.event.inputs.force }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          IG_TOKEN_SATOSHI_MINDSET: ${{ secrets.IG_TOKEN_SATOSHI_MINDSET }}
+          IG_TOKEN_SATOSHI_MIND_COACHING: ${{ secrets.IG_TOKEN_SATOSHI_MIND_COACHING }}
+          IG_TOKEN_ISE_SATO_KOSODATE: ${{ secrets.IG_TOKEN_ISE_SATO_KOSODATE }}
+          IG_TOKEN_SESSI_LIFE: ${{ secrets.IG_TOKEN_SESSI_LIFE }}
+          IG_TOKEN_ISE_KENKOU_OTAKU: ${{ secrets.IG_TOKEN_ISE_KENKOU_OTAKU }}
+          IG_TOKEN_TABI_LIFE_DESIGN: ${{ secrets.IG_TOKEN_TABI_LIFE_DESIGN }}
+        run: node scripts/run-wf4.js
