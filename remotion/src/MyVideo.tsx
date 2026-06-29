@@ -79,7 +79,7 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
             padding: "20px 30px",
             backgroundColor: "rgba(0,0,0,0.5)",
             borderRadius: 20,
-            fontFamily: "sans-serif",
+            fontFamily: "'Noto Sans CJK JP', 'Noto Sans JP', sans-serif",
             lineHeight: 1.4,
           }}
         >
