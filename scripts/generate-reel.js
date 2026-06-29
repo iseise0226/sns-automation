@@ -55,6 +55,10 @@ function reqBinary(url, options, body) {
   });
 }
 
+const SCENE_COUNT = 10;
+const ILLUST_COUNT = 2;
+const BROLL_COUNT = SCENE_COUNT - ILLUST_COUNT;
+
 async function generateScenario(systemPrompt) {
   const body = JSON.stringify({
     model: 'llama-3.3-70b-versatile',
@@ -63,10 +67,11 @@ async function generateScenario(systemPrompt) {
       {
         role: 'user',
         content:
-          'テーマを1つ選び、台本（ナレーション3シーン分、各20〜30文字、起→承→結の流れ）とInstagramキャプション（150文字以内）、画像説明（英語20文字以内）をJSONで返してください。{"caption":"投稿文","detail":"画像説明(英語)","narrations":["1文目","2文目","3文目"]}',
+          `テーマを1つ選び、台本（ナレーション${SCENE_COUNT}シーン分、各20〜30文字、起承転結の流れで一つのストーリーとして繋がるように）とInstagramキャプション（150文字以内）、画像説明（英語20文字以内）をJSONで返してください。` +
+          `{"caption":"投稿文","detail":"画像説明(英語)","narrations":[${SCENE_COUNT}個の文字列の配列}]}`,
       },
     ],
-    max_tokens: 500,
+    max_tokens: 800,
     response_format: { type: 'json_object' },
   });
   const res = await req(
@@ -75,30 +80,32 @@ async function generateScenario(systemPrompt) {
     body
   );
   const data = JSON.parse(res.json?.choices?.[0]?.message?.content || '{}');
+  const fallback = Array.from({ length: SCENE_COUNT }, (_, i) => `今日も一歩ずつ、進んでいこう。(${i + 1})`);
   return {
     caption: data.caption || systemPrompt,
     detail: data.detail || 'lifestyle content',
-    narrations:
-      Array.isArray(data.narrations) && data.narrations.length === 3
-        ? data.narrations
-        : ['今日はこんな出来事があった。', 'そこから見えてきたことがある。', '一歩ずつ、進んでいこう。'],
+    narrations: Array.isArray(data.narrations) && data.narrations.length === SCENE_COUNT ? data.narrations : fallback,
   };
 }
 
-async function generateIllustration(detail, imgStyle, outDir) {
+async function generateIllustrations(detail, imgStyle, outDir) {
   const apiKey = (process.env.OPENAI_API_KEY || '').trim();
-  const prompt = `${imgStyle}, ${detail}, scene 1`;
-  const body = JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'low', n: 1 });
-  const res = await req(
-    'https://api.openai.com/v1/images/generations',
-    { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } },
-    body
-  );
-  const b64 = res.json?.data?.[0]?.b64_json;
-  if (!b64) return null;
-  const p = path.join(outDir, 'image1.png');
-  fs.writeFileSync(p, Buffer.from(b64, 'base64'));
-  return { path: p, type: 'image' };
+  const items = [];
+  for (let i = 0; i < ILLUST_COUNT; i++) {
+    const prompt = `${imgStyle}, ${detail}, scene ${i + 1}`;
+    const body = JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'low', n: 1 });
+    const res = await req(
+      'https://api.openai.com/v1/images/generations',
+      { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } },
+      body
+    );
+    const b64 = res.json?.data?.[0]?.b64_json;
+    if (!b64) continue;
+    const p = path.join(outDir, `image${i + 1}.png`);
+    fs.writeFileSync(p, Buffer.from(b64, 'base64'));
+    items.push({ path: p, type: 'image' });
+  }
+  return items;
 }
 
 async function fetchPexelsVideo(keyword, usedIds) {
@@ -136,7 +143,7 @@ async function generateBroll(detail, imgStyle, outDir, account) {
   const keywordPool = [detail, styleKeyword, 'japan lifestyle', 'calm nature', 'daily life moment'].filter(Boolean);
 
   const mediaItems = [];
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < BROLL_COUNT; i++) {
     let found = null;
     for (const kw of keywordPool) {
       found = await fetchPexelsVideo(kw, usedIds);
@@ -307,8 +314,8 @@ async function main() {
   console.log(`[${account}] caption:`, scenario.caption);
 
   const mediaItems = [];
-  const illust = await generateIllustration(scenario.detail, persona.imgStyle, outDir);
-  if (illust) mediaItems.push(illust);
+  const illusts = await generateIllustrations(scenario.detail, persona.imgStyle, outDir);
+  mediaItems.push(...illusts);
   const broll = await generateBroll(scenario.detail, persona.imgStyle, outDir, account);
   mediaItems.push(...broll);
 
