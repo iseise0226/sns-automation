@@ -11,10 +11,11 @@ import {
 } from "remotion";
 
 type Scene = {
-  type?: "image" | "video";
+  type?: "image" | "video" | "textMotion";
   image: string;
   audio: string;
   narration: string;
+  textChunks?: string[];
   durationInSeconds: number;
 };
 
@@ -24,6 +25,89 @@ type Props = {
 
 const FPS = 30;
 const FADE_FRAMES = 15;
+
+// 各象限ごとに「上下どちらか1辺」「左右どちらか1辺」だけを指定する（対辺を同時指定すると
+// レイアウトエンジンによって幅・高さの解決がぶれるため、意図的に2辺だけに絞っている）
+const QUADRANT_STYLES: React.CSSProperties[] = [
+  { top: "8%", left: "6%", textAlign: "left" },
+  { top: "8%", right: "6%", textAlign: "right" },
+  { bottom: "8%", left: "6%", textAlign: "left" },
+  { bottom: "8%", right: "6%", textAlign: "right" },
+];
+
+const STAGGER_FRAMES = 12;
+const ENTRANCE_FRAMES = 18;
+
+const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
+  scene,
+  durationInFrames,
+}) => {
+  const frame = useCurrentFrame();
+  const sceneOpacity = interpolate(
+    frame,
+    [0, FADE_FRAMES, durationInFrames - FADE_FRAMES, durationInFrames],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const chunks = (scene.textChunks || []).slice(0, 4);
+
+  return (
+    <AbsoluteFill style={{ opacity: sceneOpacity, backgroundColor: "black" }}>
+      <Img
+        src={staticFile(scene.image)}
+        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+      />
+      <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.35)" }} />
+      {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
+      {chunks.map((chunk, i) => {
+        const startAt = i * STAGGER_FRAMES;
+        const localOpacity = interpolate(
+          frame,
+          [startAt, startAt + ENTRANCE_FRAMES],
+          [0, 1],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        );
+        const translateY = interpolate(
+          frame,
+          [startAt, startAt + ENTRANCE_FRAMES],
+          [30, 0],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        );
+        const scale = interpolate(
+          frame,
+          [startAt, startAt + ENTRANCE_FRAMES],
+          [0.85, 1],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        );
+        return (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              maxWidth: "42%",
+              ...QUADRANT_STYLES[i],
+            }}
+          >
+            <div
+              style={{
+                opacity: localOpacity,
+                transform: `translateY(${translateY}px) scale(${scale})`,
+                color: "white",
+                fontSize: 44,
+                fontWeight: "bold",
+                lineHeight: 1.4,
+                fontFamily: "'Noto Sans CJK JP', 'Noto Sans JP', sans-serif",
+                textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+              }}
+            >
+              {chunk}
+            </div>
+          </div>
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
 
 const SceneView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
   scene,
@@ -98,7 +182,11 @@ export const MyVideo: React.FC<Props> = ({ scenes }) => {
     startFrame += durationInFrames;
     return (
       <Sequence key={i} from={from} durationInFrames={durationInFrames}>
-        <SceneView scene={scene} durationInFrames={durationInFrames} />
+        {scene.type === "textMotion" ? (
+          <TextMotionView scene={scene} durationInFrames={durationInFrames} />
+        ) : (
+          <SceneView scene={scene} durationInFrames={durationInFrames} />
+        )}
       </Sequence>
     );
   });
