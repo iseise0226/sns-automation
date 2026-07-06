@@ -102,7 +102,7 @@ async function generateIllustrations(detail, imgStyle, outDir) {
   const apiKey = (process.env.OPENAI_API_KEY || '').trim();
   const items = [];
   for (let i = 0; i < ILLUST_COUNT; i++) {
-    const prompt = `${imgStyle}, ${detail}, scene ${i + 1}`;
+    const prompt = `${imgStyle}, ${detail}, scene ${i + 1}, no text, no letters, no words, no typography, no titles, illustration only`;
     const body = JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'low', n: 1 });
     const res = await req(
       'https://api.openai.com/v1/images/generations',
