@@ -38,6 +38,29 @@ const QUADRANT_STYLES: React.CSSProperties[] = [
 const STAGGER_FRAMES = 12;
 const ENTRANCE_FRAMES = 18;
 
+const QUADRANT_ICONS = ["💡", "✅", "📈", "❤️"];
+
+// テキスト中の数字部分（連続する数字）だけを黄色マーカー風にハイライトする
+function renderHighlighted(text: string) {
+  const parts = text.split(/(\d+)/);
+  return parts.map((part, idx) =>
+    /^\d+$/.test(part) ? (
+      <span
+        key={idx}
+        style={{
+          background: "linear-gradient(transparent 55%, #FFEB3B 55%)",
+          color: "#111",
+          padding: "0 2px",
+        }}
+      >
+        {part}
+      </span>
+    ) : (
+      <React.Fragment key={idx}>{part}</React.Fragment>
+    )
+  );
+}
+
 const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
   scene,
   durationInFrames,
@@ -92,15 +115,29 @@ const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
               style={{
                 opacity: localOpacity,
                 transform: `translateY(${translateY}px) scale(${scale})`,
-                color: "white",
-                fontSize: 44,
-                fontWeight: "bold",
-                lineHeight: 1.4,
-                fontFamily: "'Noto Sans CJK JP', 'Noto Sans JP', sans-serif",
-                textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+                display: "inline-flex",
+                flexDirection: "column",
+                alignItems: QUADRANT_STYLES[i].textAlign === "right" ? "flex-end" : "flex-start",
+                gap: 6,
+                background: "rgba(20,20,20,0.72)",
+                borderRadius: 20,
+                padding: "14px 18px",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
               }}
             >
-              {chunk}
+              <div style={{ fontSize: 34 }}>{QUADRANT_ICONS[i]}</div>
+              <div
+                style={{
+                  color: "white",
+                  fontSize: 38,
+                  fontWeight: "bold",
+                  lineHeight: 1.4,
+                  fontFamily: "'Noto Sans CJK JP', 'Noto Sans JP', sans-serif",
+                  textAlign: QUADRANT_STYLES[i].textAlign,
+                }}
+              >
+                {renderHighlighted(chunk)}
+              </div>
             </div>
           </div>
         );

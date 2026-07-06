@@ -288,6 +288,10 @@ async function postReel(igUserId, videoPath, caption) {
       `video_url=${encodeURIComponent(publicUrl)}`,
       '-d',
       `caption=${encodeURIComponent(caption)}`,
+      // 冒頭のフェードイン演出で真っ黒なフレームがサムネになるのを避けるため、
+      // 1.5秒地点（フェードインが終わり画が見えている瞬間）をカバー画像に指定する
+      '-d',
+      'thumb_offset=1500',
       '-d',
       `access_token=${igToken}`,
     ]).toString()
