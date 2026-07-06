@@ -2,8 +2,8 @@ name: WF2 Threads Auto Post
 
 on:
   schedule:
-    # JST 7,10,13,17,21時 = UTC 22,1,4,8,12時
-    - cron: "0 22,1,4,8,12 * * *"
+    # JST 8,13,20時 = UTC 23(前日),4,11時
+    - cron: "0 23,4,11 * * *"
   workflow_dispatch:
     inputs:
       account:
