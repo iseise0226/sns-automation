@@ -1,13 +1,13 @@
-name: WF4 Reels (6 accounts, every 3 days)
+name: WF4 Reels (6 accounts, every 2 days)
 
 on:
   schedule:
-    # 毎日チェック、JST 4:00 = UTC 19:00(前日)。各アカウントは内部で3日おき判定してスキップ
+    # 毎日チェック、JST 4:00 = UTC 19:00(前日)。各アカウントは内部で2日おき判定してスキップ
     - cron: "0 19 * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: "trueなら3日おき判定を無視して強制実行"
+        description: "trueなら2日おき判定を無視して強制実行"
         required: false
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
           WF4_FORCE: ${{ github.event.inputs.force }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           IG_TOKEN_SATOSHI_MINDSET: ${{ secrets.IG_TOKEN_SATOSHI_MINDSET }}

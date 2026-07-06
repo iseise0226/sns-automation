@@ -191,5 +191,10 @@ export const MyVideo: React.FC<Props> = ({ scenes }) => {
     );
   });
 
-  return <AbsoluteFill style={{ backgroundColor: "black" }}>{items}</AbsoluteFill>;
+  return (
+    <AbsoluteFill style={{ backgroundColor: "black" }}>
+      <Audio src={staticFile("bgm.mp3")} loop volume={0.12} />
+      {items}
+    </AbsoluteFill>
+  );
 };

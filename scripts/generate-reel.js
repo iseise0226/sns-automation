@@ -59,6 +59,16 @@ const SCENE_COUNT = 10;
 const ILLUST_COUNT = 2;
 const BROLL_COUNT = SCENE_COUNT - ILLUST_COUNT;
 
+const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン30文字程度(音声コストの都合で30文字を大きく超えないこと)で、以下のPASONAの流れに沿って一つのストーリーとして繋がるように書いてください。
+シーン1〜2（Problem）: 悩み・あるあるを提示する
+シーン3〜4（Affinity）: その悩みに共感する。自分の体験談を交えてもいい
+シーン5〜6（Solution）: 気づき・考え方の転換を伝える
+シーン7〜8（Offer）: 具体的な提案・今日からできる行動のヒントを伝える
+シーン9（Narrowing down）: 「特別なことじゃなくていい」と絞り込んで伝える
+シーン10（Action）: 保存・フォローをやさしく促す
+
+文章のトーン：機械的な説明文ではなく、寄り添うように、優しく、押しつけがましくならないように話し言葉で書いてください。断定しすぎず「〜かもしれません」「〜してみませんか」のような柔らかい語尾を使ってください。`;
+
 async function generateScenario(systemPrompt) {
   const body = JSON.stringify({
     model: 'llama-3.3-70b-versatile',
@@ -67,11 +77,11 @@ async function generateScenario(systemPrompt) {
       {
         role: 'user',
         content:
-          `テーマを1つ選び、台本（ナレーション${SCENE_COUNT}シーン分、各20〜30文字、起承転結の流れで一つのストーリーとして繋がるように）とInstagramキャプション（150文字以内）、画像説明（英語20文字以内）をJSONで返してください。` +
+          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nこの台本とInstagramキャプション（150文字以内）、画像説明（英語20文字以内）をJSONで返してください。` +
           `{"caption":"投稿文","detail":"画像説明(英語)","narrations":[${SCENE_COUNT}個の文字列の配列}]}`,
       },
     ],
-    max_tokens: 800,
+    max_tokens: 1000,
     response_format: { type: 'json_object' },
   });
   const res = await req(
@@ -167,25 +177,27 @@ async function generateBroll(detail, imgStyle, outDir, account) {
   return mediaItems;
 }
 
+const ELEVENLABS_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
+
 async function generateTTS(narrations, outDir) {
-  const key = (process.env.GOOGLE_TTS_KEY || '').trim();
+  const key = (process.env.ELEVENLABS_API_KEY || '').trim();
   const audioPaths = [];
   for (let i = 0; i < narrations.length; i++) {
     const body = JSON.stringify({
-      input: { text: narrations[i] },
-      voice: { languageCode: 'ja-JP', name: 'ja-JP-Wavenet-B' },
-      audioConfig: { audioEncoding: 'MP3' },
+      text: narrations[i],
+      model_id: 'eleven_multilingual_v2',
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
     });
-    const res = await req(
-      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${key}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-      body
-    );
     const audioPath = path.join(outDir, `audio${i + 1}.mp3`);
-    if (res.json?.audioContent) {
-      fs.writeFileSync(audioPath, Buffer.from(res.json.audioContent, 'base64'));
+    try {
+      const audioBuf = await reqBinary(
+        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+        { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' } },
+        body
+      );
+      fs.writeFileSync(audioPath, audioBuf);
       audioPaths.push(audioPath);
-    } else {
+    } catch (e) {
       audioPaths.push(null);
     }
   }
@@ -205,19 +217,50 @@ function getAudioDuration(audioPath) {
   }
 }
 
+// ナレーション文章を4分割して「左上・右上・左下・右下」に配置するためのチャンクに分ける
+function splitIntoQuadrants(text) {
+  const clean = (text || '').trim();
+  if (!clean) return ['', '', '', ''];
+  // 句読点があればそこで優先的に区切り、なければ文字数で均等に割る
+  const parts = clean.split(/(?<=[。、！？])/).filter(Boolean);
+  const chunks = ['', '', '', ''];
+  if (parts.length >= 4) {
+    const perGroup = Math.ceil(parts.length / 4);
+    for (let i = 0; i < 4; i++) {
+      chunks[i] = parts.slice(i * perGroup, (i + 1) * perGroup).join('');
+    }
+  } else {
+    const size = Math.ceil(clean.length / 4);
+    for (let i = 0; i < 4; i++) {
+      chunks[i] = clean.slice(i * size, (i + 1) * size);
+    }
+  }
+  return chunks;
+}
+
+// textMotionを割り当てるシーンのインデックス（0始まり）: 5枚目とラスト(10枚目)
+const TEXT_MOTION_SCENE_INDEXES = [4, 9];
+
 function renderVideo(mediaItems, audioPaths, narrations, outDir) {
-  const scenes = mediaItems.map((m, i) => ({
-    type: m.type,
-    image: path.basename(m.path),
-    audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
-    narration: narrations[i] || '',
-    durationInSeconds: audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 4.0,
-  }));
+  const scenes = mediaItems.map((m, i) => {
+    const isTextMotion = TEXT_MOTION_SCENE_INDEXES.includes(i) && m.type === 'image';
+    return {
+      type: isTextMotion ? 'textMotion' : m.type,
+      image: path.basename(m.path),
+      audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
+      narration: narrations[i] || '',
+      textChunks: isTextMotion ? splitIntoQuadrants(narrations[i]) : undefined,
+      durationInSeconds: audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 4.0,
+    };
+  });
   const propsPath = path.join(outDir, 'remotion_props.json');
   fs.writeFileSync(propsPath, JSON.stringify({ scenes }), 'utf-8');
 
-  const videoPath = path.join(outDir, 'video.mp4');
   const remotionDir = path.join(__dirname, '..', 'remotion');
+  // public-dirが実行ごとのoutDirになるため、BGMファイルもここにコピーしておく
+  fs.copyFileSync(path.join(remotionDir, 'assets', 'bgm.mp3'), path.join(outDir, 'bgm.mp3'));
+
+  const videoPath = path.join(outDir, 'video.mp4');
   execFileSync(
     'npx',
     ['remotion', 'render', 'src/index.ts', 'MyVideo', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`],
@@ -270,7 +313,7 @@ async function postReel(igUserId, videoPath, caption) {
 }
 
 const LAST_RUN_PATH = path.join(__dirname, '..', 'data', 'wf4_last_run.json');
-const INTERVAL_DAYS = 3;
+const INTERVAL_DAYS = 2;
 
 function shouldRunToday(account) {
   let lastRun = {};
@@ -313,17 +356,26 @@ async function main() {
   const scenario = await generateScenario(persona.system);
   console.log(`[${account}] caption:`, scenario.caption);
 
-  const mediaItems = [];
   const illusts = await generateIllustrations(scenario.detail, persona.imgStyle, outDir);
-  mediaItems.push(...illusts);
   const broll = await generateBroll(scenario.detail, persona.imgStyle, outDir, account);
-  mediaItems.push(...broll);
+  // イラストを5枚目・ラスト（TEXT_MOTION_SCENE_INDEXES）に配置し、残りをbrollで埋める
+  const mediaItems = new Array(SCENE_COUNT).fill(null);
+  TEXT_MOTION_SCENE_INDEXES.forEach((idx, i) => {
+    if (illusts[i]) mediaItems[idx] = illusts[i];
+  });
+  let brollCursor = 0;
+  for (let i = 0; i < SCENE_COUNT; i++) {
+    if (mediaItems[i] === null) {
+      mediaItems[i] = broll[brollCursor++] || null;
+    }
+  }
+  const finalMediaItems = mediaItems.filter(Boolean);
 
-  if (mediaItems.length < 2) throw new Error(`メディアが足りません: ${mediaItems.length}`);
-  console.log(`[${account}] media items:`, mediaItems.length);
+  if (finalMediaItems.length < 2) throw new Error(`メディアが足りません: ${finalMediaItems.length}`);
+  console.log(`[${account}] media items:`, finalMediaItems.length);
 
   const audioPaths = await generateTTS(scenario.narrations, outDir);
-  const videoPath = renderVideo(mediaItems, audioPaths, scenario.narrations, outDir);
+  const videoPath = renderVideo(finalMediaItems, audioPaths, scenario.narrations, outDir);
   console.log(`[${account}] video rendered:`, videoPath);
 
   const result = await postReel(persona.igUserId, videoPath, scenario.caption);

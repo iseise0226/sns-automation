@@ -3,3 +3,4 @@ node_modules/
 *.key
 *_key.txt
 tokens/
+wf4_media/
