@@ -2,8 +2,8 @@ name: WF3 Corgi Carousel Post
 
 on:
   schedule:
-    # JST 5:00 = UTC 20:00 (前日)
-    - cron: "0 20 * * *"
+    # JST 5:20 = UTC 20:20 (前日)（他ワークフローと時間が被らないよう20分ずらし）
+    - cron: "20 20 * * *"
   workflow_dispatch: {}
 
 permissions:

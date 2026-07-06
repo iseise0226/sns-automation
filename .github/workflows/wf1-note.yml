@@ -2,8 +2,8 @@ name: WF1 Note Draft Generation
 
 on:
   schedule:
-    # JST 6:00 = UTC 21:00 (前日)
-    - cron: "0 21 * * *"
+    # JST 6:10 = UTC 21:10 (前日)（他ワークフローと時間が被らないよう10分ずらし）
+    - cron: "10 21 * * *"
   workflow_dispatch: {}
 
 permissions:

@@ -2,8 +2,8 @@ name: WF4 Reels (6 accounts, every 2 days)
 
 on:
   schedule:
-    # 毎日チェック、JST 4:00 = UTC 19:00(前日)。各アカウントは内部で2日おき判定してスキップ
-    - cron: "0 19 * * *"
+    # 毎日チェック、JST 4:40 = UTC 19:40(前日)。各アカウントは内部で2日おき判定してスキップ（他ワークフローと時間が被らないよう40分ずらし）
+    - cron: "40 19 * * *"
   workflow_dispatch:
     inputs:
       force:
