@@ -1,5 +1,5 @@
-// WF4: 指定アカウントのInstagramリール(手描きスケッチ解説スタイル10シーン・約30秒)を生成・投稿
-// 素材DLなし: 背景・カード・装飾は全てRemotionのコードで描画する（@ClaudeCode-videoチャンネル風）
+// WF4: 指定アカウントのInstagramリール(手描きスケッチ解説スタイル・約1分)を生成・投稿
+// カード3枚→実写B-roll1枚（カード重ね）のリズム×3。カード装飾はRemotionで全描画（@ClaudeCode-videoチャンネル風）
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -56,15 +56,17 @@ function reqBinary(url, options, body) {
   });
 }
 
-const SCENE_COUNT = 10;
+const SCENE_COUNT = 12;
+// カード3枚ごとに1枚、実写B-roll背景のシーンを挟む（0始まりで4・8・12枚目）
+const BROLL_SCENE_INDEXES = [3, 7, 11];
 
-const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン20文字前後(全体で合計200文字程度・30秒の動画になる)で、以下のPASONAの流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージで、テンポよく短く言い切ってください。
+const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン25〜35文字(全体で合計350文字程度・約1分の動画になる)で、以下のPASONAの流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージで、テンポよく言い切ってください。
 シーン1〜2（Problem）: 悩み・あるあるを提示する
 シーン3〜4（Affinity）: その悩みに共感する。自分の体験談を交えてもいい
-シーン5〜6（Solution）: 気づき・考え方の転換を伝える
-シーン7〜8（Offer）: 具体的な提案・今日からできる行動のヒントを伝える
-シーン9（Narrowing down）: 「特別なことじゃなくていい」と絞り込んで伝える
-シーン10（Action）: 保存・フォローをやさしく促す
+シーン5〜7（Solution）: 気づき・考え方の転換を伝える
+シーン8〜10（Offer）: 具体的な提案・今日からできる行動のヒントを伝える
+シーン11（Narrowing down）: 「特別なことじゃなくていい」と絞り込み、全体をまとめる
+シーン12（Action）: 保存・フォローをやさしく促す
 
 文章のトーン：機械的な説明文ではなく、寄り添うように、優しく、押しつけがましくならないように話し言葉で書いてください。断定しすぎず「〜かもしれません」「〜してみませんか」のような柔らかい語尾を使ってください。`;
 
@@ -78,12 +80,13 @@ async function generateScenario(systemPrompt) {
         content:
           `テーマを1つ選び、${PASONA_STRUCTURE}\n\nさらに各シーンの「見出し」と「要点リスト」を作ってください。` +
           `見出しはそのシーンのナレーションの要点を6〜12文字で言い切る短いフレーズ（体言止めや短い断言。例:「旅費が高い問題」「1日3000円でOK」）。` +
-          `要点リストは各シーンに2〜3個、1個5〜14文字の具体的な補足（例:「宿は素泊まりでいい」「移動は鈍行が安い」「予約は3週間前まで」）。ナレーションと同じ文の繰り返しではなく、画面を読んだ人が得する追加情報にすること。最後のシーンの要点は動画全体の要点まとめ3つにすること。` +
-          `この台本・見出し・要点リストとInstagramキャプション（150文字以内）をJSONで返してください。` +
-          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」]}`,
+          `要点リストは各シーンに必ず3個、1個5〜14文字の具体的な補足（例:「宿は素泊まりでいい」「移動は鈍行が安い」「予約は3週間前まで」）。ナレーションと同じ文の繰り返しではなく、画面を読んだ人が得する追加情報にすること。シーン11の要点は動画全体の要点まとめ3つにすること。` +
+          `さらに各シーンの実写映像検索キーワード（そのシーンの内容に合う映像を表す英語2〜4語。例: "rainy window city night"）も作ってください。` +
+          `この台本・見出し・要点リスト・検索キーワードとInstagramキャプション（150文字以内）をJSONで返してください。` +
+          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列]}`,
       },
     ],
-    max_tokens: 1400,
+    max_tokens: 2800,
     response_format: { type: 'json_object' },
   });
   const res = await req(
@@ -111,7 +114,70 @@ async function generateScenario(systemPrompt) {
     narrations,
     headlines,
     points,
+    brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
   };
+}
+
+async function fetchPexelsVideo(keyword, usedIds) {
+  const key = (process.env.PEXELS_API_KEY || '').trim();
+  const res = await req(`https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=30&orientation=portrait`, {
+    headers: { Authorization: key },
+  });
+  const candidates = (res.json?.videos || []).filter((v) => v.duration >= 6 && !usedIds.has(`px_${v.id}`));
+  if (!candidates.length) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  const files = (pick.video_files || []).filter((f) => f.height && f.height <= 1920).sort((a, b) => b.height - a.height);
+  const file = files[0] || pick.video_files[0];
+  return { id: `px_${pick.id}`, url: file.link };
+}
+
+async function fetchPixabayVideo(keyword, usedIds) {
+  const key = (process.env.PIXABAY_API_KEY || '').trim();
+  const res = await req(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(keyword)}&per_page=30`, {});
+  const candidates = (res.json?.hits || []).filter((v) => v.duration >= 6 && !usedIds.has(`pb_${v.id}`));
+  if (!candidates.length) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  const v = pick.videos.medium || pick.videos.small || pick.videos.large;
+  return { id: `pb_${pick.id}`, url: v.url };
+}
+
+// B-rollシーン用の実写動画を3本だけ取得する（かぶり除外は全アカウント台帳を統合）
+async function fetchBrollVideos(keywords, outDir, account) {
+  const ledgerDir = path.join(__dirname, '..', 'data', 'wf4_used_ids');
+  const usedIdsPath = path.join(ledgerDir, `${account}.json`);
+  fs.mkdirSync(ledgerDir, { recursive: true });
+  let usedIds = [];
+  try {
+    usedIds = JSON.parse(fs.readFileSync(usedIdsPath, 'utf-8'));
+  } catch (e) {}
+  const excludeIds = new Set(usedIds);
+  for (const f of fs.readdirSync(ledgerDir)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      for (const id of JSON.parse(fs.readFileSync(path.join(ledgerDir, f), 'utf-8'))) excludeIds.add(id);
+    } catch (e) {}
+  }
+
+  const fallbackPool = ['japan lifestyle', 'calm nature', 'daily life moment'];
+  const videoBySlot = {};
+  for (let slot = 0; slot < BROLL_SCENE_INDEXES.length; slot++) {
+    const sceneIdx = BROLL_SCENE_INDEXES[slot];
+    const keywordChain = [keywords[sceneIdx], ...fallbackPool].filter(Boolean);
+    let found = null;
+    for (const kw of keywordChain) {
+      found = (await fetchPexelsVideo(kw, excludeIds)) || (await fetchPixabayVideo(kw, excludeIds));
+      if (found) break;
+    }
+    if (!found) continue; // 空振り枠は紙背景カードとして表示される
+    const buf = await reqBinary(found.url, {});
+    const p = path.join(outDir, `video${slot + 1}.mp4`);
+    fs.writeFileSync(p, buf);
+    videoBySlot[sceneIdx] = path.basename(p);
+    usedIds.push(found.id);
+    excludeIds.add(found.id);
+  }
+  fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
+  return videoBySlot;
 }
 
 const ELEVENLABS_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
@@ -154,16 +220,17 @@ function getAudioDuration(audioPath) {
   }
 }
 
-function renderVideo(narrations, headlines, points, audioPaths, outDir) {
-  // 全シーン共通: 手描きスケッチ風カード（Remotionで全描画・素材ファイルなし）
+function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir) {
+  // 手描きスケッチ風カード。B-rollシーンは実写背景の上にカードを重ねる
   const scenes = narrations.map((narration, i) => {
     const scenePoints = points[i] || [];
-    // 要点があるシーンは読む時間を確保するため最低尺を延ばす
-    const minDuration = scenePoints.length > 0 ? 3.6 : 2.4;
+    // カード3枚を読む時間を確保するため最低尺を延ばす
+    const minDuration = scenePoints.length >= 2 ? 4.2 : 2.8;
     return {
       headline: headlines[i] || '',
       narration: narration || '',
       points: scenePoints,
+      video: videoBySlot[i] || '',
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
       durationInSeconds: Math.max(minDuration, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
     };
@@ -337,8 +404,11 @@ async function main() {
   console.log(`[${account}] caption:`, scenario.caption);
   console.log(`[${account}] headlines:`, scenario.headlines.join(' / '));
 
+  const videoBySlot = await fetchBrollVideos(scenario.brollKeywords, outDir, account);
+  console.log(`[${account}] broll slots:`, Object.keys(videoBySlot).join(',') || 'none');
+
   const audioPaths = await generateTTS(scenario.narrations, outDir);
-  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, audioPaths, outDir);
+  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir);
   console.log(`[${account}] video rendered:`, videoPath);
 
   const result = await postReel(persona.igUserId, videoPath, scenario.caption);

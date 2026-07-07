@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  OffthreadVideo,
   Sequence,
   spring,
   staticFile,
@@ -20,6 +21,7 @@ type Scene = {
   headline: string;
   narration: string;
   points?: string[];
+  video?: string;
   audio: string;
   durationInSeconds: number;
 };
@@ -113,39 +115,59 @@ const SceneView: React.FC<{
   });
   // 背景の水彩ブロブはゆっくり息をする
   const blobScale = 1 + Math.sin(frame / 40) * 0.04;
+  const hasVideo = Boolean(scene.video);
+  // 実写背景はゆっくり寄っていく
+  const videoZoom = interpolate(frame, [0, durationInFrames], [1, 1.08], { extrapolateRight: "clamp" });
 
   return (
-    <AbsoluteFill style={{ opacity, backgroundColor: PAPER }}>
+    <AbsoluteFill style={{ opacity, backgroundColor: hasVideo ? "black" : PAPER }}>
       {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
 
-      {/* 黄色い水彩ブロブ（カードの後ろにふんわり） */}
-      <div
-        style={{
-          position: "absolute",
-          top: "26%",
-          left: "8%",
-          width: "84%",
-          height: "38%",
-          borderRadius: "48% 52% 55% 45% / 55% 48% 52% 45%",
-          background: `radial-gradient(ellipse at center, ${MARKER_YELLOW}55 0%, ${MARKER_YELLOW}22 60%, transparent 75%)`,
-          transform: `scale(${blobScale}) rotate(-3deg)`,
-        }}
-      />
+      {hasVideo ? (
+        <>
+          {/* 実写B-roll背景 + うっすら暗幕（カードを読みやすくする） */}
+          <div style={{ width: "100%", height: "100%", transform: `scale(${videoZoom})` }}>
+            <OffthreadVideo
+              src={staticFile(scene.video!)}
+              muted
+              loop
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </div>
+          <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.3)" }} />
+        </>
+      ) : (
+        /* 黄色い水彩ブロブ（カードの後ろにふんわり） */
+        <div
+          style={{
+            position: "absolute",
+            top: "26%",
+            left: "8%",
+            width: "84%",
+            height: "38%",
+            borderRadius: "48% 52% 55% 45% / 55% 48% 52% 45%",
+            background: `radial-gradient(ellipse at center, ${MARKER_YELLOW}55 0%, ${MARKER_YELLOW}22 60%, transparent 75%)`,
+            transform: `scale(${blobScale}) rotate(-3deg)`,
+          }}
+        />
+      )}
 
-      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 70px" }}>
+      <AbsoluteFill
+        style={{ flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 30, padding: "0 64px" }}
+      >
+        {/* 見出し札: バッジ+見出し+マーカー下線をまとめた白カード */}
         <div
           style={{
             ...sketchBorder,
-            position: "relative",
             background: "#FFFFFF",
             width: "100%",
-            padding: "90px 56px",
+            padding: "40px 44px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: 34,
+            gap: 20,
             transform: `scale(${cardScale}) rotate(${cardRotate}deg) translateY(${floatY}px)`,
-            boxShadow: "6px 8px 0 rgba(35,42,59,0.12)",
+            boxShadow: "6px 8px 0 rgba(35,42,59,0.14)",
           }}
         >
           {/* シーン種別の飾り: 1枚目=テーマ札 / 中間=丸数字 / ラスト=まとめ札 */}
@@ -154,10 +176,10 @@ const SceneView: React.FC<{
               style={{
                 transform: `scale(${badgeS})`,
                 fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
-                fontSize: 40,
+                fontSize: 36,
                 color: "#FFFFFF",
                 background: isLast ? accent : INK,
-                padding: "10px 38px",
+                padding: "8px 34px",
                 borderRadius: "120px 16px 120px 16px / 16px 120px 16px 120px",
               }}
             >
@@ -167,8 +189,8 @@ const SceneView: React.FC<{
             <div
               style={{
                 transform: `scale(${badgeS})`,
-                width: 96,
-                height: 96,
+                width: 78,
+                height: 78,
                 borderRadius: "50%",
                 background: accent,
                 color: "#FFFFFF",
@@ -176,7 +198,7 @@ const SceneView: React.FC<{
                 justifyContent: "center",
                 alignItems: "center",
                 fontFamily: `'${yuseiMagic}', sans-serif`,
-                fontSize: 52,
+                fontSize: 44,
                 boxShadow: "3px 4px 0 rgba(35,42,59,0.18)",
               }}
             >
@@ -201,71 +223,70 @@ const SceneView: React.FC<{
             style={{
               width: `${underlineW}%`,
               maxWidth: 460,
-              height: 20,
+              height: 18,
               background: MARKER_YELLOW,
               borderRadius: "40px 12px 40px 12px / 12px 40px 12px 40px",
               transform: "rotate(-1deg)",
             }}
           />
-
-          {/* 要点リスト: チェック付きの行が1つずつ左からスッと入ってくる */}
-          {points.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 22, width: "100%", marginTop: 6 }}>
-              {points.map((point, i) => {
-                const rowS = spring({
-                  frame: frame - (22 + i * 10),
-                  fps,
-                  config: { damping: 12, stiffness: 160, mass: 0.7 },
-                });
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      opacity: rowS,
-                      transform: `translateX(${(1 - rowS) * -80}px)`,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 20,
-                    }}
-                  >
-                    <div
-                      style={{
-                        flexShrink: 0,
-                        width: 52,
-                        height: 52,
-                        borderRadius: "50%",
-                        border: `4px solid ${accent}`,
-                        color: accent,
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        fontSize: 30,
-                        fontFamily: `'${yuseiMagic}', sans-serif`,
-                        background: "#FFFFFF",
-                      }}
-                    >
-                      ✓
-                    </div>
-                    <div
-                      style={{
-                        fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
-                        fontSize: 42,
-                        color: INK,
-                        lineHeight: 1.4,
-                        textAlign: "left",
-                        borderBottom: `3px dashed ${INK}33`,
-                        paddingBottom: 6,
-                        flexGrow: 1,
-                      }}
-                    >
-                      {renderMarked(point)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
+
+        {/* ミニカード3枚: 1枚ずつ左右交互にポンッと積み上がる */}
+        {points.map((point, i) => {
+          const cardT = frame - (18 + i * 12);
+          const s = spring({ frame: cardT, fps, config: { damping: 10, stiffness: 170, mass: 0.7 } });
+          const dir = i % 2 === 0 ? -1 : 1;
+          const tilts = [-1.5, 1.2, -1];
+          const cardFloat = cardT > 16 ? Math.sin((frame + i * 21) / 14) * 4 : 0;
+          return (
+            <div
+              key={i}
+              style={{
+                ...sketchBorder,
+                opacity: interpolate(cardT, [0, 5], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+                transform: `translateX(${(1 - s) * dir * 220}px) translateY(${cardFloat}px) rotate(${tilts[i] + (1 - s) * dir * 6}deg) scale(${0.4 + s * 0.6})`,
+                background: "#FFFFFF",
+                width: "94%",
+                padding: "26px 36px",
+                display: "flex",
+                alignItems: "center",
+                gap: 22,
+                boxShadow: "5px 6px 0 rgba(35,42,59,0.12)",
+              }}
+            >
+              <div
+                style={{
+                  flexShrink: 0,
+                  width: 58,
+                  height: 58,
+                  borderRadius: "50%",
+                  border: `4px solid ${accent}`,
+                  color: accent,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  fontSize: 32,
+                  fontFamily: `'${yuseiMagic}', sans-serif`,
+                  background: "#FFFFFF",
+                }}
+              >
+                {i + 1}
+              </div>
+              <div
+                style={{
+                  fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+                  fontSize: 44,
+                  color: INK,
+                  lineHeight: 1.4,
+                  textAlign: "left",
+                  flexGrow: 1,
+                }}
+              >
+                {renderMarked(point)}
+              </div>
+            </div>
+          );
+        })}
       </AbsoluteFill>
 
       {/* 下部字幕（黒帯・ナレーション全文） */}
