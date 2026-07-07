@@ -9,6 +9,9 @@ on:
       force:
         description: "trueなら2日おき判定を無視して強制実行"
         required: false
+      account:
+        description: "指定した1アカウントだけ実行（例: tabi_life_design）"
+        required: false
 
 permissions:
   contents: write
@@ -32,6 +35,7 @@ jobs:
       - name: Generate and post reels
         env:
           WF4_FORCE: ${{ github.event.inputs.force }}
+          WF4_ONLY: ${{ github.event.inputs.account }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}

@@ -11,7 +11,10 @@ const ACCOUNTS = [
   'tabi_life_design',
 ];
 
-for (const account of ACCOUNTS) {
+// WF4_ONLYが指定されていればそのアカウントだけ実行する（テスト用）
+const targets = process.env.WF4_ONLY ? ACCOUNTS.filter((a) => a === process.env.WF4_ONLY) : ACCOUNTS;
+
+for (const account of targets) {
   try {
     execFileSync('node', [path.join(__dirname, 'generate-reel.js'), account], { stdio: 'inherit' });
   } catch (e) {
