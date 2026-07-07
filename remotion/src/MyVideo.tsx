@@ -5,10 +5,16 @@ import {
   Img,
   OffthreadVideo,
   Sequence,
+  spring,
   staticFile,
   useCurrentFrame,
+  useVideoConfig,
   interpolate,
 } from "remotion";
+import { loadFont } from "@remotion/google-fonts/MPLUSRounded1c";
+
+// 丸ゴシック（YouTubeテロップ定番のM PLUS Rounded 1c）
+const { fontFamily: maruGothic } = loadFont("normal", { weights: ["500", "800"] });
 
 type Scene = {
   type?: "image" | "video" | "textMotion";
@@ -59,6 +65,7 @@ const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
   durationInFrames,
 }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const sceneOpacity = interpolate(
     frame,
     [0, FADE_FRAMES, durationInFrames - FADE_FRAMES, durationInFrames],
@@ -80,53 +87,56 @@ const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          gap: 26,
-          padding: "0 60px",
+          gap: 30,
+          padding: "0 56px",
         }}
       >
         {chunks.map((chunk, i) => {
           const startAt = 6 + i * STAGGER_FRAMES;
-          const localOpacity = interpolate(frame, [startAt, startAt + 10], [0, 1], {
+          const t = frame - startAt;
+          // バネで飛び込む（左右交互）。overshootで「ポンッ」と跳ねて着地する
+          const s = spring({
+            frame: t,
+            fps,
+            config: { damping: 11, stiffness: 160, mass: 0.8 },
+          });
+          const dir = i % 2 === 0 ? -1 : 1;
+          const translateX = (1 - s) * dir * 240;
+          const rotate = (1 - s) * dir * 8;
+          const scale = 0.3 + s * 0.7;
+          const localOpacity = interpolate(t, [0, 6], [0, 1], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
           });
-          const translateY = interpolate(frame, [startAt, startAt + 14], [46, 0], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-          });
-          // ふわっと拡大して少し戻る（ポップ感）
-          const scale = interpolate(
-            frame,
-            [startAt, startAt + 11, startAt + 18],
-            [0.7, 1.06, 1],
-            { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-          );
+          // 着地後はゆっくり上下に浮遊し続ける
+          const floatY = t > 18 ? Math.sin((frame + i * 23) / 14) * 6 : 0;
           return (
             <div
               key={i}
               style={{
                 opacity: localOpacity,
-                transform: `translateY(${translateY}px) scale(${scale})`,
+                transform: `translateX(${translateX}px) translateY(${floatY}px) rotate(${rotate}deg) scale(${scale})`,
                 display: "flex",
+                flexDirection: "column",
                 alignItems: "center",
-                gap: 18,
-                background: "rgba(15,15,18,0.78)",
-                borderRadius: 22,
-                padding: "20px 30px",
+                gap: 8,
+                background: "rgba(15,15,18,0.8)",
+                borderRadius: 24,
+                padding: "22px 34px",
                 maxWidth: "100%",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
-                borderLeft: "6px solid #FFEB3B",
+                boxShadow: "0 12px 34px rgba(0,0,0,0.5)",
+                borderBottom: "6px solid #FFEB3B",
               }}
             >
-              <div style={{ fontSize: 44, flexShrink: 0 }}>{CHUNK_ICONS[i]}</div>
+              <div style={{ fontSize: 46 }}>{CHUNK_ICONS[i]}</div>
               <div
                 style={{
                   color: "white",
-                  fontSize: 42,
-                  fontWeight: "bold",
+                  fontSize: 44,
+                  fontWeight: 800,
                   lineHeight: 1.5,
-                  fontFamily: "'Noto Sans CJK JP', 'Noto Sans JP', sans-serif",
-                  textAlign: "left",
+                  fontFamily: `'${maruGothic}', 'Noto Sans CJK JP', sans-serif`,
+                  textAlign: "center",
                 }}
               >
                 {renderHighlighted(chunk)}
@@ -193,7 +203,7 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
             padding: "20px 30px",
             backgroundColor: "rgba(0,0,0,0.5)",
             borderRadius: 20,
-            fontFamily: "'Noto Sans CJK JP', 'Noto Sans JP', sans-serif",
+            fontFamily: `'${maruGothic}', 'Noto Sans CJK JP', sans-serif`,
             lineHeight: 1.4,
           }}
         >
