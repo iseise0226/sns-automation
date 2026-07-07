@@ -26,19 +26,9 @@ type Props = {
 const FPS = 30;
 const FADE_FRAMES = 15;
 
-// 各象限ごとに「上下どちらか1辺」「左右どちらか1辺」だけを指定する（対辺を同時指定すると
-// レイアウトエンジンによって幅・高さの解決がぶれるため、意図的に2辺だけに絞っている）
-const QUADRANT_STYLES: React.CSSProperties[] = [
-  { top: "8%", left: "6%", textAlign: "left" },
-  { top: "8%", right: "6%", textAlign: "right" },
-  { bottom: "8%", left: "6%", textAlign: "left" },
-  { bottom: "8%", right: "6%", textAlign: "right" },
-];
+const STAGGER_FRAMES = 14;
 
-const STAGGER_FRAMES = 12;
-const ENTRANCE_FRAMES = 18;
-
-const QUADRANT_ICONS = ["💡", "✅", "📈", "❤️"];
+const CHUNK_ICONS = ["💡", "✅", "📈", "❤️"];
 
 // テキスト中の数字部分（連続する数字）だけを黄色マーカー風にハイライトする
 function renderHighlighted(text: string) {
@@ -48,9 +38,11 @@ function renderHighlighted(text: string) {
       <span
         key={idx}
         style={{
-          background: "linear-gradient(transparent 55%, #FFEB3B 55%)",
+          background: "#FFEB3B",
           color: "#111",
-          padding: "0 2px",
+          padding: "0 8px",
+          borderRadius: 8,
+          margin: "0 2px",
         }}
       >
         {part}
@@ -61,6 +53,7 @@ function renderHighlighted(text: string) {
   );
 }
 
+// 中央に文字の塊を上から順に積み上げ、塊ごとに時間差でポップ表示する
 const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
   scene,
   durationInFrames,
@@ -80,68 +73,68 @@ const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
         src={staticFile(scene.image)}
         style={{ width: "100%", height: "100%", objectFit: "cover" }}
       />
-      <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.35)" }} />
+      <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.45)" }} />
       {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
-      {chunks.map((chunk, i) => {
-        const startAt = i * STAGGER_FRAMES;
-        const localOpacity = interpolate(
-          frame,
-          [startAt, startAt + ENTRANCE_FRAMES],
-          [0, 1],
-          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-        );
-        const translateY = interpolate(
-          frame,
-          [startAt, startAt + ENTRANCE_FRAMES],
-          [30, 0],
-          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-        );
-        const scale = interpolate(
-          frame,
-          [startAt, startAt + ENTRANCE_FRAMES],
-          [0.85, 1],
-          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-        );
-        return (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              maxWidth: "42%",
-              ...QUADRANT_STYLES[i],
-            }}
-          >
+      <AbsoluteFill
+        style={{
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: 26,
+          padding: "0 60px",
+        }}
+      >
+        {chunks.map((chunk, i) => {
+          const startAt = 6 + i * STAGGER_FRAMES;
+          const localOpacity = interpolate(frame, [startAt, startAt + 10], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
+          const translateY = interpolate(frame, [startAt, startAt + 14], [46, 0], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
+          // ふわっと拡大して少し戻る（ポップ感）
+          const scale = interpolate(
+            frame,
+            [startAt, startAt + 11, startAt + 18],
+            [0.7, 1.06, 1],
+            { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+          );
+          return (
             <div
+              key={i}
               style={{
                 opacity: localOpacity,
                 transform: `translateY(${translateY}px) scale(${scale})`,
-                display: "inline-flex",
-                flexDirection: "column",
-                alignItems: QUADRANT_STYLES[i].textAlign === "right" ? "flex-end" : "flex-start",
-                gap: 6,
-                background: "rgba(20,20,20,0.72)",
-                borderRadius: 20,
-                padding: "14px 18px",
-                boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+                display: "flex",
+                alignItems: "center",
+                gap: 18,
+                background: "rgba(15,15,18,0.78)",
+                borderRadius: 22,
+                padding: "20px 30px",
+                maxWidth: "100%",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
+                borderLeft: "6px solid #FFEB3B",
               }}
             >
-              <div style={{ fontSize: 34 }}>{QUADRANT_ICONS[i]}</div>
+              <div style={{ fontSize: 44, flexShrink: 0 }}>{CHUNK_ICONS[i]}</div>
               <div
                 style={{
                   color: "white",
-                  fontSize: 38,
+                  fontSize: 42,
                   fontWeight: "bold",
-                  lineHeight: 1.4,
+                  lineHeight: 1.5,
                   fontFamily: "'Noto Sans CJK JP', 'Noto Sans JP', sans-serif",
-                  textAlign: QUADRANT_STYLES[i].textAlign,
+                  textAlign: "left",
                 }}
               >
                 {renderHighlighted(chunk)}
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </AbsoluteFill>
     </AbsoluteFill>
   );
 };

@@ -233,23 +233,21 @@ function getAudioDuration(audioPath) {
   }
 }
 
-// ナレーション文章を4分割して「左上・右上・左下・右下」に配置するためのチャンクに分ける
-function splitIntoQuadrants(text) {
+// ナレーション文章を「句読点の位置でのみ」最大4つの塊に分ける。
+// 句読点がなければ全文を1塊にする（文中でぶった切ると読めない表示になるため）。
+function splitIntoChunks(text) {
   const clean = (text || '').trim();
-  if (!clean) return ['', '', '', ''];
-  // 句読点があればそこで優先的に区切り、なければ文字数で均等に割る
-  const parts = clean.split(/(?<=[。、！？])/).filter(Boolean);
-  const chunks = ['', '', '', ''];
-  if (parts.length >= 4) {
-    const perGroup = Math.ceil(parts.length / 4);
-    for (let i = 0; i < 4; i++) {
-      chunks[i] = parts.slice(i * perGroup, (i + 1) * perGroup).join('');
-    }
-  } else {
-    const size = Math.ceil(clean.length / 4);
-    for (let i = 0; i < 4; i++) {
-      chunks[i] = clean.slice(i * size, (i + 1) * size);
-    }
+  if (!clean) return [];
+  const parts = clean
+    .split(/(?<=[。、！？!?])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return [clean];
+  const target = Math.min(4, parts.length);
+  const per = Math.ceil(parts.length / target);
+  const chunks = [];
+  for (let i = 0; i < parts.length; i += per) {
+    chunks.push(parts.slice(i, i + per).join(''));
   }
   return chunks;
 }
@@ -265,7 +263,7 @@ function renderVideo(mediaItems, audioPaths, narrations, outDir) {
       image: path.basename(m.path),
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
       narration: narrations[i] || '',
-      textChunks: isTextMotion ? splitIntoQuadrants(narrations[i]) : undefined,
+      textChunks: isTextMotion ? splitIntoChunks(narrations[i]) : undefined,
       durationInSeconds: audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 4.0,
     };
   });
