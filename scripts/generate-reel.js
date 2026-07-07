@@ -283,11 +283,29 @@ function renderVideo(mediaItems, audioPaths, narrations, outDir) {
   return videoPath;
 }
 
+// 動画を公開URLにアップロードする。catbox.moe(直リンクで安定)を優先し、失敗時はtmpfiles.orgに落ちる
+function uploadPublic(videoPath) {
+  try {
+    const out = execFileSync(
+      'curl',
+      ['-s', '-F', 'reqtype=fileupload', '-F', `fileToUpload=@${videoPath}`, 'https://catbox.moe/user/api.php'],
+      { timeout: 180000 }
+    )
+      .toString()
+      .trim();
+    if (out.startsWith('https://')) return out;
+    console.log('catbox failed:', out.slice(0, 200));
+  } catch (e) {
+    console.log('catbox error:', e.message);
+  }
+  const uploadOut = execFileSync('curl', ['-s', '-F', `file=@${videoPath}`, 'https://tmpfiles.org/api/v1/upload']).toString();
+  return JSON.parse(uploadOut).data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+}
+
 async function postReel(igUserId, videoPath, caption) {
   const igToken = (process.env[`IG_TOKEN_${process.env.WF4_ACCOUNT_UPPER}`] || '').trim();
 
-  const uploadOut = execFileSync('curl', ['-s', '-F', `file=@${videoPath}`, 'https://tmpfiles.org/api/v1/upload']).toString();
-  const publicUrl = JSON.parse(uploadOut).data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+  const publicUrl = uploadPublic(videoPath);
   const sizeMb = (fs.statSync(videoPath).size / 1024 / 1024).toFixed(1);
   console.log(`upload: ${publicUrl} (${sizeMb}MB)`);
 
@@ -317,7 +335,7 @@ async function postReel(igUserId, videoPath, caption) {
   let statusCode = 'IN_PROGRESS';
   for (let i = 0; i < 20 && statusCode !== 'FINISHED'; i++) {
     await new Promise((r) => setTimeout(r, 6000));
-    const statusUrl = `https://graph.facebook.com/v23.0/${container.id}?fields=status_code&access_token=${igToken}`;
+    const statusUrl = `https://graph.facebook.com/v23.0/${container.id}?fields=status_code,status&access_token=${igToken}`;
     const statusRes = JSON.parse(execFileSync('curl', ['-s', statusUrl]).toString());
     statusCode = statusRes.status_code;
     if (statusCode === 'ERROR') throw new Error(`processing error: ${JSON.stringify(statusRes)}`);
