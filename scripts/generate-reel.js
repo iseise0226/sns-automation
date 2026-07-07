@@ -288,6 +288,8 @@ async function postReel(igUserId, videoPath, caption) {
 
   const uploadOut = execFileSync('curl', ['-s', '-F', `file=@${videoPath}`, 'https://tmpfiles.org/api/v1/upload']).toString();
   const publicUrl = JSON.parse(uploadOut).data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+  const sizeMb = (fs.statSync(videoPath).size / 1024 / 1024).toFixed(1);
+  console.log(`upload: ${publicUrl} (${sizeMb}MB)`);
 
   const createUrl = `https://graph.facebook.com/v23.0/${igUserId}/media`;
   const container = JSON.parse(
