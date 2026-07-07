@@ -1,4 +1,4 @@
-// WF4: 指定アカウントのInstagramリール(ブランドイラスト1枚+実写B-roll2本)を生成・投稿
+// WF4: 指定アカウントのInstagramリール(実写B-roll10本+塊テロップ・約30秒)を生成・投稿
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -56,10 +56,9 @@ function reqBinary(url, options, body) {
 }
 
 const SCENE_COUNT = 10;
-const ILLUST_COUNT = 2;
-const BROLL_COUNT = SCENE_COUNT - ILLUST_COUNT;
+const BROLL_COUNT = SCENE_COUNT;
 
-const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン30文字程度(音声コストの都合で30文字を大きく超えないこと)で、以下のPASONAの流れに沿って一つのストーリーとして繋がるように書いてください。
+const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン20文字前後(全体で合計200文字程度・30秒の動画になる)で、以下のPASONAの流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージで、テンポよく短く言い切ってください。
 シーン1〜2（Problem）: 悩み・あるあるを提示する
 シーン3〜4（Affinity）: その悩みに共感する。自分の体験談を交えてもいい
 シーン5〜6（Solution）: 気づき・考え方の転換を伝える
@@ -97,26 +96,6 @@ async function generateScenario(systemPrompt) {
     narrations: Array.isArray(data.narrations) && data.narrations.length === SCENE_COUNT ? data.narrations : fallback,
     brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
   };
-}
-
-async function generateIllustrations(detail, imgStyle, outDir) {
-  const apiKey = (process.env.OPENAI_API_KEY || '').trim();
-  const items = [];
-  for (let i = 0; i < ILLUST_COUNT; i++) {
-    const prompt = `${imgStyle}, ${detail}, scene ${i + 1}, no text, no letters, no words, no typography, no titles, illustration only`;
-    const body = JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'low', n: 1 });
-    const res = await req(
-      'https://api.openai.com/v1/images/generations',
-      { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } },
-      body
-    );
-    const b64 = res.json?.data?.[0]?.b64_json;
-    if (!b64) continue;
-    const p = path.join(outDir, `image${i + 1}.png`);
-    fs.writeFileSync(p, Buffer.from(b64, 'base64'));
-    items.push({ path: p, type: 'image' });
-  }
-  return items;
 }
 
 async function fetchPexelsVideo(keyword, usedIds) {
@@ -187,6 +166,9 @@ async function generateBroll(detail, imgStyle, outDir, account, sceneKeywords) {
       mediaItems.push({ path: p, type: 'video' });
       usedIds.push(found.id);
       excludeIds.add(found.id);
+    } else if (mediaItems.length > 0) {
+      // 全キーワードで空振りした枠は、既に取得済みの映像を再利用してシーン数とナレーションのズレを防ぐ
+      mediaItems.push(mediaItems[Math.floor(Math.random() * mediaItems.length)]);
     }
   }
   fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
@@ -252,19 +234,16 @@ function splitIntoChunks(text) {
   return chunks;
 }
 
-// textMotionを割り当てるシーンのインデックス（0始まり）: 5枚目とラスト(10枚目)
-const TEXT_MOTION_SCENE_INDEXES = [4, 9];
-
 function renderVideo(mediaItems, audioPaths, narrations, outDir) {
+  // 全シーン共通: 実写B-roll背景 + 塊テロップ（YouTubeショート風）
   const scenes = mediaItems.map((m, i) => {
-    const isTextMotion = TEXT_MOTION_SCENE_INDEXES.includes(i) && m.type === 'image';
     return {
-      type: isTextMotion ? 'textMotion' : m.type,
+      type: m.type,
       image: path.basename(m.path),
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
       narration: narrations[i] || '',
-      textChunks: isTextMotion ? splitIntoChunks(narrations[i]) : undefined,
-      durationInSeconds: audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 4.0,
+      textChunks: splitIntoChunks(narrations[i]),
+      durationInSeconds: Math.max(2.4, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
     };
   });
   const propsPath = path.join(outDir, 'remotion_props.json');
@@ -435,25 +414,8 @@ async function main() {
   const scenario = await generateScenario(persona.system);
   console.log(`[${account}] caption:`, scenario.caption);
 
-  const illusts = await generateIllustrations(scenario.detail, persona.imgStyle, outDir);
-  // B-rollが入るシーン（イラスト配置箇所を除く）のキーワードを、シーン順に並べて渡す
-  const brollSceneKeywords = [];
-  for (let i = 0; i < SCENE_COUNT; i++) {
-    if (!TEXT_MOTION_SCENE_INDEXES.includes(i)) brollSceneKeywords.push(scenario.brollKeywords[i] || '');
-  }
-  const broll = await generateBroll(scenario.detail, persona.imgStyle, outDir, account, brollSceneKeywords);
-  // イラストを5枚目・ラスト（TEXT_MOTION_SCENE_INDEXES）に配置し、残りをbrollで埋める
-  const mediaItems = new Array(SCENE_COUNT).fill(null);
-  TEXT_MOTION_SCENE_INDEXES.forEach((idx, i) => {
-    if (illusts[i]) mediaItems[idx] = illusts[i];
-  });
-  let brollCursor = 0;
-  for (let i = 0; i < SCENE_COUNT; i++) {
-    if (mediaItems[i] === null) {
-      mediaItems[i] = broll[brollCursor++] || null;
-    }
-  }
-  const finalMediaItems = mediaItems.filter(Boolean);
+  // 全10シーンを実写B-rollで構成（蒼井シン方式・GPTイラストなし）
+  const finalMediaItems = await generateBroll(scenario.detail, persona.imgStyle, outDir, account, scenario.brollKeywords);
 
   if (finalMediaItems.length < 2) throw new Error(`メディアが足りません: ${finalMediaItems.length}`);
   console.log(`[${account}] media items:`, finalMediaItems.length);

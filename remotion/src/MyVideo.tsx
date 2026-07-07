@@ -30,27 +30,23 @@ type Props = {
 };
 
 const FPS = 30;
-const FADE_FRAMES = 15;
+const FADE_FRAMES = 8;
+const STAGGER_FRAMES = 12;
 
-const STAGGER_FRAMES = 14;
+// 塊の文字数に応じてフォントサイズを決める（短い言葉ほどドンと大きく）
+function chunkFontSize(len: number) {
+  if (len <= 6) return 72;
+  if (len <= 10) return 62;
+  if (len <= 14) return 54;
+  return 46;
+}
 
-const CHUNK_ICONS = ["💡", "✅", "📈", "❤️"];
-
-// テキスト中の数字部分（連続する数字）だけを黄色マーカー風にハイライトする
-function renderHighlighted(text: string) {
+// 数字はテロップの強調色（黄色）で塗る
+function renderColored(text: string) {
   const parts = text.split(/(\d+)/);
   return parts.map((part, idx) =>
     /^\d+$/.test(part) ? (
-      <span
-        key={idx}
-        style={{
-          background: "#FFEB3B",
-          color: "#111",
-          padding: "0 8px",
-          borderRadius: 8,
-          margin: "0 2px",
-        }}
-      >
+      <span key={idx} style={{ color: "#FFE94A" }}>
         {part}
       </span>
     ) : (
@@ -59,101 +55,44 @@ function renderHighlighted(text: string) {
   );
 }
 
-// 中央に文字の塊を上から順に積み上げ、塊ごとに時間差でポップ表示する
-const TextMotionView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
-  scene,
-  durationInFrames,
-}) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const sceneOpacity = interpolate(
-    frame,
-    [0, FADE_FRAMES, durationInFrames - FADE_FRAMES, durationInFrames],
-    [0, 1, 1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-  );
-  const chunks = (scene.textChunks || []).slice(0, 4);
-
+// 黒フチ付きテロップ文字。下層に太いストロークだけの文字、上層に本文を重ねて
+// （-webkit-text-strokeが本文を食い潰さないように）縁取りを作る
+const StrokedText: React.FC<{ text: string; fontSize: number }> = ({ text, fontSize }) => {
+  const base: React.CSSProperties = {
+    fontSize,
+    fontWeight: 800,
+    lineHeight: 1.35,
+    fontFamily: `'${maruGothic}', 'Noto Sans CJK JP', sans-serif`,
+    textAlign: "center",
+    whiteSpace: "pre-wrap",
+  };
   return (
-    <AbsoluteFill style={{ opacity: sceneOpacity, backgroundColor: "black" }}>
-      <Img
-        src={staticFile(scene.image)}
-        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-      />
-      <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.45)" }} />
-      {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
-      <AbsoluteFill
+    <div style={{ position: "relative" }}>
+      <div
         style={{
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 30,
-          padding: "0 56px",
+          ...base,
+          position: "absolute",
+          inset: 0,
+          color: "black",
+          WebkitTextStroke: `${Math.max(10, fontSize * 0.22)}px black`,
         }}
+        aria-hidden
       >
-        {chunks.map((chunk, i) => {
-          const startAt = 6 + i * STAGGER_FRAMES;
-          const t = frame - startAt;
-          // バネで飛び込む（左右交互）。overshootで「ポンッ」と跳ねて着地する
-          const s = spring({
-            frame: t,
-            fps,
-            config: { damping: 11, stiffness: 160, mass: 0.8 },
-          });
-          const dir = i % 2 === 0 ? -1 : 1;
-          const translateX = (1 - s) * dir * 240;
-          const rotate = (1 - s) * dir * 8;
-          const scale = 0.3 + s * 0.7;
-          const localOpacity = interpolate(t, [0, 6], [0, 1], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-          });
-          // 着地後はゆっくり上下に浮遊し続ける
-          const floatY = t > 18 ? Math.sin((frame + i * 23) / 14) * 6 : 0;
-          return (
-            <div
-              key={i}
-              style={{
-                opacity: localOpacity,
-                transform: `translateX(${translateX}px) translateY(${floatY}px) rotate(${rotate}deg) scale(${scale})`,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 8,
-                background: "rgba(15,15,18,0.8)",
-                borderRadius: 24,
-                padding: "22px 34px",
-                maxWidth: "100%",
-                boxShadow: "0 12px 34px rgba(0,0,0,0.5)",
-                borderBottom: "6px solid #FFEB3B",
-              }}
-            >
-              <div style={{ fontSize: 46 }}>{CHUNK_ICONS[i]}</div>
-              <div
-                style={{
-                  color: "white",
-                  fontSize: 44,
-                  fontWeight: 800,
-                  lineHeight: 1.5,
-                  fontFamily: `'${maruGothic}', 'Noto Sans CJK JP', sans-serif`,
-                  textAlign: "center",
-                }}
-              >
-                {renderHighlighted(chunk)}
-              </div>
-            </div>
-          );
-        })}
-      </AbsoluteFill>
-    </AbsoluteFill>
+        {text}
+      </div>
+      <div style={{ ...base, position: "relative", color: "white" }}>{renderColored(text)}</div>
+    </div>
   );
 };
 
+// 全シーン共通ビュー: 実写B-roll（ゆっくりズーム）+ 中央に塊テロップが
+// バネで左右交互に飛び込んでくる（YouTubeショート風）
 const SceneView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
   scene,
   durationInFrames,
 }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
 
   const opacity = interpolate(
     frame,
@@ -162,53 +101,77 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
 
+  // 実写にゆっくり寄っていくKen Burns風ズームで映像側にも動きを出す
+  const zoom = interpolate(frame, [0, durationInFrames], [1, 1.08], {
+    extrapolateRight: "clamp",
+  });
+
+  const chunks = (scene.textChunks && scene.textChunks.length > 0
+    ? scene.textChunks
+    : [scene.narration]
+  )
+    .filter(Boolean)
+    .slice(0, 4);
+
   return (
     <AbsoluteFill style={{ opacity, backgroundColor: "black" }}>
-      {scene.type === "video" ? (
-        <OffthreadVideo
-          src={staticFile(scene.image)}
-          muted
-          loop
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-      ) : (
-        <Img
-          src={staticFile(scene.image)}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-      )}
+      <div style={{ width: "100%", height: "100%", transform: `scale(${zoom})` }}>
+        {scene.type === "video" ? (
+          <OffthreadVideo
+            src={staticFile(scene.image)}
+            muted
+            loop
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <Img
+            src={staticFile(scene.image)}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        )}
+      </div>
+      <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.22)" }} />
       {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
       <AbsoluteFill
         style={{
-          justifyContent: "flex-end",
+          flexDirection: "column",
+          justifyContent: "center",
           alignItems: "center",
-          paddingBottom: 160,
+          gap: 18,
+          padding: "0 48px",
         }}
       >
-        <div
-          style={{
-            color: "white",
-            fontSize: 56,
-            fontWeight: "bold",
-            textAlign: "center",
-            maxWidth: "85%",
-            padding: "20px 30px",
-            backgroundColor: "rgba(0,0,0,0.5)",
-            borderRadius: 20,
-            fontFamily: `'${maruGothic}', 'Noto Sans CJK JP', sans-serif`,
-            lineHeight: 1.4,
-          }}
-        >
-          {scene.narration}
-        </div>
+        {chunks.map((chunk, i) => {
+          const startAt = 4 + i * STAGGER_FRAMES;
+          const t = frame - startAt;
+          // バネで飛び込む（左右交互）。overshootで「ポンッ」と跳ねて着地する
+          const s = spring({
+            frame: t,
+            fps,
+            config: { damping: 10, stiffness: 170, mass: 0.7 },
+          });
+          const dir = i % 2 === 0 ? -1 : 1;
+          const translateX = (1 - s) * dir * 260;
+          const rotate = (1 - s) * dir * 10;
+          const scale = 0.2 + s * 0.8;
+          const localOpacity = interpolate(t, [0, 5], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
+          // 着地後はゆっくり上下に浮遊し続ける
+          const floatY = t > 16 ? Math.sin((frame + i * 23) / 13) * 5 : 0;
+          return (
+            <div
+              key={i}
+              style={{
+                opacity: localOpacity,
+                transform: `translateX(${translateX}px) translateY(${floatY}px) rotate(${rotate}deg) scale(${scale})`,
+              }}
+            >
+              <StrokedText text={chunk} fontSize={chunkFontSize(chunk.length)} />
+            </div>
+          );
+        })}
       </AbsoluteFill>
     </AbsoluteFill>
   );
@@ -222,11 +185,7 @@ export const MyVideo: React.FC<Props> = ({ scenes }) => {
     startFrame += durationInFrames;
     return (
       <Sequence key={i} from={from} durationInFrames={durationInFrames}>
-        {scene.type === "textMotion" ? (
-          <TextMotionView scene={scene} durationInFrames={durationInFrames} />
-        ) : (
-          <SceneView scene={scene} durationInFrames={durationInFrames} />
-        )}
+        <SceneView scene={scene} durationInFrames={durationInFrames} />
       </Sequence>
     );
   });
