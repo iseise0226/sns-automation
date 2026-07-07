@@ -77,11 +77,11 @@ async function generateScenario(systemPrompt) {
       {
         role: 'user',
         content:
-          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nこの台本とInstagramキャプション（150文字以内）、画像説明（英語20文字以内）をJSONで返してください。` +
-          `{"caption":"投稿文","detail":"画像説明(英語)","narrations":[${SCENE_COUNT}個の文字列の配列}]}`,
+          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nこの台本とInstagramキャプション（150文字以内）、画像説明（英語20文字以内）、各シーンの実写映像検索キーワード（そのシーンのナレーション内容に合う具体的な映像を表す英語2〜4語。例: "rainy window city night", "woman walking sunrise beach"）をJSONで返してください。` +
+          `{"caption":"投稿文","detail":"画像説明(英語)","narrations":[${SCENE_COUNT}個の文字列の配列],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列の配列]}`,
       },
     ],
-    max_tokens: 1000,
+    max_tokens: 1400,
     response_format: { type: 'json_object' },
   });
   const res = await req(
@@ -95,6 +95,7 @@ async function generateScenario(systemPrompt) {
     caption: data.caption || systemPrompt,
     detail: data.detail || 'lifestyle content',
     narrations: Array.isArray(data.narrations) && data.narrations.length === SCENE_COUNT ? data.narrations : fallback,
+    brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
   };
 }
 
@@ -120,7 +121,7 @@ async function generateIllustrations(detail, imgStyle, outDir) {
 
 async function fetchPexelsVideo(keyword, usedIds) {
   const key = (process.env.PEXELS_API_KEY || '').trim();
-  const res = await req(`https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=15&orientation=portrait`, {
+  const res = await req(`https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=30&orientation=portrait`, {
     headers: { Authorization: key },
   });
   const candidates = (res.json?.videos || []).filter((v) => v.duration >= 6 && !usedIds.includes(`px_${v.id}`));
@@ -133,7 +134,7 @@ async function fetchPexelsVideo(keyword, usedIds) {
 
 async function fetchPixabayVideo(keyword, usedIds) {
   const key = (process.env.PIXABAY_API_KEY || '').trim();
-  const res = await req(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(keyword)}&per_page=15`, {});
+  const res = await req(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(keyword)}&per_page=30`, {});
   const candidates = (res.json?.hits || []).filter((v) => v.duration >= 6 && !usedIds.includes(`pb_${v.id}`));
   if (!candidates.length) return null;
   const pick = candidates[Math.floor(Math.random() * candidates.length)];
@@ -141,27 +142,41 @@ async function fetchPixabayVideo(keyword, usedIds) {
   return { id: `pb_${pick.id}`, url: v.url };
 }
 
-async function generateBroll(detail, imgStyle, outDir, account) {
-  const usedIdsPath = path.join(__dirname, '..', 'data', 'wf4_used_ids', `${account}.json`);
-  fs.mkdirSync(path.dirname(usedIdsPath), { recursive: true });
+async function generateBroll(detail, imgStyle, outDir, account, sceneKeywords) {
+  const ledgerDir = path.join(__dirname, '..', 'data', 'wf4_used_ids');
+  const usedIdsPath = path.join(ledgerDir, `${account}.json`);
+  fs.mkdirSync(ledgerDir, { recursive: true });
   let usedIds = [];
   try {
     usedIds = JSON.parse(fs.readFileSync(usedIdsPath, 'utf-8'));
   } catch (e) {}
 
+  // かぶり防止: 除外リストは全アカウントの台帳を統合して作る（記録は自アカウントのみ）
+  const excludeIds = new Set(usedIds);
+  for (const f of fs.readdirSync(ledgerDir)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      for (const id of JSON.parse(fs.readFileSync(path.join(ledgerDir, f), 'utf-8'))) excludeIds.add(id);
+    } catch (e) {}
+  }
+
   const styleKeyword = imgStyle.split(',')[0].trim();
-  const keywordPool = [detail, styleKeyword, 'japan lifestyle', 'calm nature', 'daily life moment'].filter(Boolean);
+  const fallbackPool = [detail, styleKeyword, 'japan lifestyle', 'calm nature', 'daily life moment'].filter(Boolean);
 
   const mediaItems = [];
   for (let i = 0; i < BROLL_COUNT; i++) {
+    // 空振り防止: そのシーンのキーワード → 全体の画像説明 → 汎用キーワードの順で試す
+    const sceneKw = (sceneKeywords || [])[i];
+    const keywordChain = [sceneKw, ...fallbackPool].filter(Boolean);
+    const exclude = [...excludeIds];
     let found = null;
-    for (const kw of keywordPool) {
-      found = await fetchPexelsVideo(kw, usedIds);
+    for (const kw of keywordChain) {
+      found = await fetchPexelsVideo(kw, exclude);
       if (found) break;
     }
     if (!found) {
-      for (const kw of keywordPool) {
-        found = await fetchPixabayVideo(kw, usedIds);
+      for (const kw of keywordChain) {
+        found = await fetchPixabayVideo(kw, exclude);
         if (found) break;
       }
     }
@@ -171,6 +186,7 @@ async function generateBroll(detail, imgStyle, outDir, account) {
       fs.writeFileSync(p, buf);
       mediaItems.push({ path: p, type: 'video' });
       usedIds.push(found.id);
+      excludeIds.add(found.id);
     }
   }
   fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
@@ -361,7 +377,12 @@ async function main() {
   console.log(`[${account}] caption:`, scenario.caption);
 
   const illusts = await generateIllustrations(scenario.detail, persona.imgStyle, outDir);
-  const broll = await generateBroll(scenario.detail, persona.imgStyle, outDir, account);
+  // B-rollが入るシーン（イラスト配置箇所を除く）のキーワードを、シーン順に並べて渡す
+  const brollSceneKeywords = [];
+  for (let i = 0; i < SCENE_COUNT; i++) {
+    if (!TEXT_MOTION_SCENE_INDEXES.includes(i)) brollSceneKeywords.push(scenario.brollKeywords[i] || '');
+  }
+  const broll = await generateBroll(scenario.detail, persona.imgStyle, outDir, account, brollSceneKeywords);
   // イラストを5枚目・ラスト（TEXT_MOTION_SCENE_INDEXES）に配置し、残りをbrollで埋める
   const mediaItems = new Array(SCENE_COUNT).fill(null);
   TEXT_MOTION_SCENE_INDEXES.forEach((idx, i) => {
