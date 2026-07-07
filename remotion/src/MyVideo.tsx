@@ -19,6 +19,7 @@ const { fontFamily: maruGothic } = loadMaru("normal", { weights: ["500", "800"] 
 type Scene = {
   headline: string;
   narration: string;
+  points?: string[];
   audio: string;
   durationInSeconds: number;
 };
@@ -36,11 +37,13 @@ const MARKER_YELLOW = "#F7DE5A";
 // シーンごとに巡回するアクセント色（丸数字バッジなど）
 const ACCENTS = ["#E8722C", "#3E7CB1", "#4C9A5F", "#D0544B"];
 
-function headlineFontSize(len: number) {
-  if (len <= 6) return 96;
-  if (len <= 10) return 80;
-  if (len <= 14) return 66;
-  return 56;
+function headlineFontSize(len: number, hasPoints: boolean) {
+  // 要点リストがあるカードは見出しを少し控えめにしてスペースを空ける
+  const scale = hasPoints ? 0.82 : 1;
+  if (len <= 6) return Math.round(96 * scale);
+  if (len <= 10) return Math.round(80 * scale);
+  if (len <= 14) return Math.round(66 * scale);
+  return Math.round(56 * scale);
 }
 
 // 数字だけ黄色マーカーで塗る（手描き解説の強調表現）
@@ -88,6 +91,7 @@ const SceneView: React.FC<{
   const isFirst = index === 0;
   const isLast = index === total - 1;
   const accent = ACCENTS[index % ACCENTS.length];
+  const points = (scene.points || []).slice(0, 3);
 
   // カードがバネでポンッと現れる
   const cardS = spring({ frame: frame - 3, fps, config: { damping: 11, stiffness: 150, mass: 0.8 } });
@@ -183,7 +187,7 @@ const SceneView: React.FC<{
           <div
             style={{
               fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
-              fontSize: headlineFontSize(scene.headline.length),
+              fontSize: headlineFontSize(scene.headline.length, points.length > 0),
               color: INK,
               textAlign: "center",
               lineHeight: 1.45,
@@ -203,6 +207,64 @@ const SceneView: React.FC<{
               transform: "rotate(-1deg)",
             }}
           />
+
+          {/* 要点リスト: チェック付きの行が1つずつ左からスッと入ってくる */}
+          {points.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 22, width: "100%", marginTop: 6 }}>
+              {points.map((point, i) => {
+                const rowS = spring({
+                  frame: frame - (22 + i * 10),
+                  fps,
+                  config: { damping: 12, stiffness: 160, mass: 0.7 },
+                });
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      opacity: rowS,
+                      transform: `translateX(${(1 - rowS) * -80}px)`,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 20,
+                    }}
+                  >
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        width: 52,
+                        height: 52,
+                        borderRadius: "50%",
+                        border: `4px solid ${accent}`,
+                        color: accent,
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        fontSize: 30,
+                        fontFamily: `'${yuseiMagic}', sans-serif`,
+                        background: "#FFFFFF",
+                      }}
+                    >
+                      ✓
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+                        fontSize: 42,
+                        color: INK,
+                        lineHeight: 1.4,
+                        textAlign: "left",
+                        borderBottom: `3px dashed ${INK}33`,
+                        paddingBottom: 6,
+                        flexGrow: 1,
+                      }}
+                    >
+                      {renderMarked(point)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </AbsoluteFill>
 

@@ -76,8 +76,11 @@ async function generateScenario(systemPrompt) {
       {
         role: 'user',
         content:
-          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nさらに各シーンの「見出し」を作ってください。見出しはそのシーンのナレーションの要点を6〜12文字で言い切る短いフレーズ（体言止めや短い断言。例:「旅費が高い問題」「1日3000円でOK」）。この台本・見出しとInstagramキャプション（150文字以内）をJSONで返してください。` +
-          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列の配列],"headlines":[${SCENE_COUNT}個の文字列の配列]}`,
+          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nさらに各シーンの「見出し」と「要点リスト」を作ってください。` +
+          `見出しはそのシーンのナレーションの要点を6〜12文字で言い切る短いフレーズ（体言止めや短い断言。例:「旅費が高い問題」「1日3000円でOK」）。` +
+          `要点リストは各シーンに2〜3個、1個5〜14文字の具体的な補足（例:「宿は素泊まりでいい」「移動は鈍行が安い」「予約は3週間前まで」）。ナレーションと同じ文の繰り返しではなく、画面を読んだ人が得する追加情報にすること。最後のシーンの要点は動画全体の要点まとめ3つにすること。` +
+          `この台本・見出し・要点リストとInstagramキャプション（150文字以内）をJSONで返してください。` +
+          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」]}`,
       },
     ],
     max_tokens: 1400,
@@ -97,10 +100,17 @@ async function generateScenario(systemPrompt) {
     const h = Array.isArray(data.headlines) ? String(data.headlines[i] || '').trim() : '';
     return h || String(narrations[i]).replace(/[。、！？!?]/g, '').slice(0, 12);
   });
+  // 要点リスト（欠けたシーンは空配列＝見出しだけのカードになる）
+  const points = Array.from({ length: SCENE_COUNT }, (_, i) => {
+    const p = Array.isArray(data.points) ? data.points[i] : null;
+    if (!Array.isArray(p)) return [];
+    return p.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 3);
+  });
   return {
     caption: data.caption || systemPrompt,
     narrations,
     headlines,
+    points,
   };
 }
 
@@ -144,14 +154,18 @@ function getAudioDuration(audioPath) {
   }
 }
 
-function renderVideo(narrations, headlines, audioPaths, outDir) {
+function renderVideo(narrations, headlines, points, audioPaths, outDir) {
   // 全シーン共通: 手描きスケッチ風カード（Remotionで全描画・素材ファイルなし）
   const scenes = narrations.map((narration, i) => {
+    const scenePoints = points[i] || [];
+    // 要点があるシーンは読む時間を確保するため最低尺を延ばす
+    const minDuration = scenePoints.length > 0 ? 3.6 : 2.4;
     return {
       headline: headlines[i] || '',
       narration: narration || '',
+      points: scenePoints,
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
-      durationInSeconds: Math.max(2.4, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
+      durationInSeconds: Math.max(minDuration, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
     };
   });
   const propsPath = path.join(outDir, 'remotion_props.json');
@@ -324,7 +338,7 @@ async function main() {
   console.log(`[${account}] headlines:`, scenario.headlines.join(' / '));
 
   const audioPaths = await generateTTS(scenario.narrations, outDir);
-  const videoPath = renderVideo(scenario.narrations, scenario.headlines, audioPaths, outDir);
+  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, audioPaths, outDir);
   console.log(`[${account}] video rendered:`, videoPath);
 
   const result = await postReel(persona.igUserId, videoPath, scenario.caption);
