@@ -283,23 +283,64 @@ function renderVideo(mediaItems, audioPaths, narrations, outDir) {
   return videoPath;
 }
 
-// 動画を公開URLにアップロードする。catbox.moe(直リンクで安定)を優先し、失敗時はtmpfiles.orgに落ちる
-function uploadPublic(videoPath) {
+// URLが「200で video/* を直接返すか」を確認する（HTMLページやリダイレクト先がHTMLだとIGの取得が失敗するため）
+function isDirectVideoUrl(url) {
   try {
-    const out = execFileSync(
-      'curl',
-      ['-s', '-F', 'reqtype=fileupload', '-F', `fileToUpload=@${videoPath}`, 'https://catbox.moe/user/api.php'],
-      { timeout: 180000 }
-    )
+    const out = execFileSync('curl', ['-s', '-I', '-L', '-o', '/dev/null', '-w', '%{http_code} %{content_type}', url], {
+      timeout: 30000,
+    })
       .toString()
       .trim();
-    if (out.startsWith('https://')) return out;
-    console.log('catbox failed:', out.slice(0, 200));
+    const [code, type] = out.split(' ');
+    return code === '200' && (type || '').startsWith('video/');
   } catch (e) {
-    console.log('catbox error:', e.message);
+    return false;
   }
-  const uploadOut = execFileSync('curl', ['-s', '-F', `file=@${videoPath}`, 'https://tmpfiles.org/api/v1/upload']).toString();
-  return JSON.parse(uploadOut).data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+}
+
+// 動画を公開URLにアップロードする。複数ホストを順に試し、直リンクとして機能するものだけを採用する
+// (tmpfiles.orgは2026-07に/dl/がHTMLへの302を返す仕様になり、IG側でエラー2207082になった)
+function uploadPublic(videoPath) {
+  const uploaders = [
+    {
+      name: 'litterbox',
+      run: () =>
+        execFileSync(
+          'curl',
+          ['-s', '-F', 'reqtype=fileupload', '-F', 'time=24h', '-F', `fileToUpload=@${videoPath}`, 'https://litterbox.catbox.moe/resources/internals/api.php'],
+          { timeout: 300000 }
+        )
+          .toString()
+          .trim(),
+    },
+    {
+      name: 'uguu',
+      run: () =>
+        execFileSync('curl', ['-s', '-F', `files[]=@${videoPath}`, 'https://uguu.se/upload?output=text'], { timeout: 300000 })
+          .toString()
+          .trim(),
+    },
+    {
+      name: 'tmpfiles',
+      run: () => {
+        const out = execFileSync('curl', ['-s', '-F', `file=@${videoPath}`, 'https://tmpfiles.org/api/v1/upload'], { timeout: 300000 }).toString();
+        return JSON.parse(out).data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+      },
+    },
+  ];
+  for (const up of uploaders) {
+    try {
+      const url = up.run();
+      if (url.startsWith('https://') && isDirectVideoUrl(url)) {
+        console.log(`upload host: ${up.name}`);
+        return url;
+      }
+      console.log(`${up.name} rejected: ${url.slice(0, 120)}`);
+    } catch (e) {
+      console.log(`${up.name} error:`, e.message.slice(0, 120));
+    }
+  }
+  throw new Error('全アップロードホストが失敗しました');
 }
 
 async function postReel(igUserId, videoPath, caption) {
