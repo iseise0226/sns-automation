@@ -205,10 +205,61 @@ function renderVideo(imgPaths, audioPaths, narrations, outDir) {
 async function postCarousel(imgPaths, caption) {
   const igToken = (process.env.IG_TOKEN_KO_GI_OMOTI || '').trim();
 
+  // URLが「200で image/* を直接返すか」を確認する
+  function isDirectImageUrl(url) {
+    try {
+      const out = execFileSync('curl', ['-s', '-I', '-L', '-o', '/dev/null', '-w', '%{http_code} %{content_type}', url], {
+        timeout: 30000,
+      })
+        .toString()
+        .trim();
+      const [code, type] = out.split(' ');
+      return code === '200' && (type || '').startsWith('image/');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 複数ホストを順に試し、直リンクとして機能するものだけを採用する
+  // (tmpfiles.orgは2026-07に/dl/がHTMLへの302を返す仕様になり、IG側で取得エラーになった)
   function uploadImage(imgPath) {
-    const out = execFileSync('curl', ['-s', '-F', `file=@${imgPath}`, 'https://tmpfiles.org/api/v1/upload']).toString();
-    const data = JSON.parse(out);
-    return data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+    const uploaders = [
+      {
+        name: 'litterbox',
+        run: () =>
+          execFileSync(
+            'curl',
+            ['-s', '-F', 'reqtype=fileupload', '-F', 'time=24h', '-F', `fileToUpload=@${imgPath}`, 'https://litterbox.catbox.moe/resources/internals/api.php'],
+            { timeout: 120000 }
+          )
+            .toString()
+            .trim(),
+      },
+      {
+        name: 'uguu',
+        run: () =>
+          execFileSync('curl', ['-s', '-F', `files[]=@${imgPath}`, 'https://uguu.se/upload?output=text'], { timeout: 120000 })
+            .toString()
+            .trim(),
+      },
+      {
+        name: 'tmpfiles',
+        run: () => {
+          const out = execFileSync('curl', ['-s', '-F', `file=@${imgPath}`, 'https://tmpfiles.org/api/v1/upload'], { timeout: 120000 }).toString();
+          return JSON.parse(out).data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+        },
+      },
+    ];
+    for (const up of uploaders) {
+      try {
+        const url = up.run();
+        if (url.startsWith('https://') && isDirectImageUrl(url)) return url;
+        console.log(`${up.name} rejected: ${url.slice(0, 120)}`);
+      } catch (e) {
+        console.log(`${up.name} error:`, e.message.slice(0, 120));
+      }
+    }
+    throw new Error('全アップロードホストが失敗しました');
   }
 
   function createContainer(imageUrl) {
