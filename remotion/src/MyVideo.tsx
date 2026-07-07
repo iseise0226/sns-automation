@@ -2,8 +2,6 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
-  Img,
-  OffthreadVideo,
   Sequence,
   spring,
   staticFile,
@@ -11,17 +9,17 @@ import {
   useVideoConfig,
   interpolate,
 } from "remotion";
-import { loadFont } from "@remotion/google-fonts/MPLUSRounded1c";
+import { loadFont as loadYusei } from "@remotion/google-fonts/YuseiMagic";
+import { loadFont as loadMaru } from "@remotion/google-fonts/MPLUSRounded1c";
 
-// 丸ゴシック（YouTubeテロップ定番のM PLUS Rounded 1c）
-const { fontFamily: maruGothic } = loadFont("normal", { weights: ["500", "800"] });
+// 手描きマーカー風フォント（見出し用）と丸ゴシック（字幕用）
+const { fontFamily: yuseiMagic } = loadYusei("normal", { weights: ["400"] });
+const { fontFamily: maruGothic } = loadMaru("normal", { weights: ["500", "800"] });
 
 type Scene = {
-  type?: "image" | "video" | "textMotion";
-  image: string;
-  audio: string;
+  headline: string;
   narration: string;
-  textChunks?: string[];
+  audio: string;
   durationInSeconds: number;
 };
 
@@ -31,22 +29,32 @@ type Props = {
 
 const FPS = 30;
 const FADE_FRAMES = 8;
-const STAGGER_FRAMES = 12;
 
-// 塊の文字数に応じてフォントサイズを決める（短い言葉ほどドンと大きく）
-function chunkFontSize(len: number) {
-  if (len <= 6) return 72;
-  if (len <= 10) return 62;
-  if (len <= 14) return 54;
-  return 46;
+const INK = "#232A3B";
+const PAPER = "#FAF7F0";
+const MARKER_YELLOW = "#F7DE5A";
+// シーンごとに巡回するアクセント色（丸数字バッジなど）
+const ACCENTS = ["#E8722C", "#3E7CB1", "#4C9A5F", "#D0544B"];
+
+function headlineFontSize(len: number) {
+  if (len <= 6) return 96;
+  if (len <= 10) return 80;
+  if (len <= 14) return 66;
+  return 56;
 }
 
-// 数字はテロップの強調色（黄色）で塗る
-function renderColored(text: string) {
+// 数字だけ黄色マーカーで塗る（手描き解説の強調表現）
+function renderMarked(text: string) {
   const parts = text.split(/(\d+)/);
   return parts.map((part, idx) =>
     /^\d+$/.test(part) ? (
-      <span key={idx} style={{ color: "#FFE94A" }}>
+      <span
+        key={idx}
+        style={{
+          background: `linear-gradient(transparent 35%, ${MARKER_YELLOW} 35%)`,
+          padding: "0 4px",
+        }}
+      >
         {part}
       </span>
     ) : (
@@ -55,42 +63,18 @@ function renderColored(text: string) {
   );
 }
 
-// 黒フチ付きテロップ文字。下層に太いストロークだけの文字、上層に本文を重ねて
-// （-webkit-text-strokeが本文を食い潰さないように）縁取りを作る
-const StrokedText: React.FC<{ text: string; fontSize: number }> = ({ text, fontSize }) => {
-  const base: React.CSSProperties = {
-    fontSize,
-    fontWeight: 800,
-    lineHeight: 1.35,
-    fontFamily: `'${maruGothic}', 'Noto Sans CJK JP', sans-serif`,
-    textAlign: "center",
-    whiteSpace: "pre-wrap",
-  };
-  return (
-    <div style={{ position: "relative" }}>
-      <div
-        style={{
-          ...base,
-          position: "absolute",
-          inset: 0,
-          color: "black",
-          WebkitTextStroke: `${Math.max(10, fontSize * 0.22)}px black`,
-        }}
-        aria-hidden
-      >
-        {text}
-      </div>
-      <div style={{ ...base, position: "relative", color: "white" }}>{renderColored(text)}</div>
-    </div>
-  );
+// 手描き風のヨレた枠線（CSSのborder-radiusトリック）
+const sketchBorder: React.CSSProperties = {
+  border: `5px solid ${INK}`,
+  borderRadius: "255px 25px 225px 25px / 25px 225px 25px 255px",
 };
 
-// 全シーン共通ビュー: 実写B-roll（ゆっくりズーム）+ 中央に塊テロップが
-// バネで左右交互に飛び込んでくる（YouTubeショート風）
-const SceneView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
-  scene,
-  durationInFrames,
-}) => {
+const SceneView: React.FC<{
+  scene: Scene;
+  durationInFrames: number;
+  index: number;
+  total: number;
+}> = ({ scene, durationInFrames, index, total }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -101,77 +85,146 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number }> = ({
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
 
-  // 実写にゆっくり寄っていくKen Burns風ズームで映像側にも動きを出す
-  const zoom = interpolate(frame, [0, durationInFrames], [1, 1.08], {
+  const isFirst = index === 0;
+  const isLast = index === total - 1;
+  const accent = ACCENTS[index % ACCENTS.length];
+
+  // カードがバネでポンッと現れる
+  const cardS = spring({ frame: frame - 3, fps, config: { damping: 11, stiffness: 150, mass: 0.8 } });
+  const cardScale = 0.55 + cardS * 0.45;
+  const cardRotate = (1 - cardS) * -4;
+  // バッジ（丸数字）はカードの後に遅れてポンッ
+  const badgeS = spring({ frame: frame - 12, fps, config: { damping: 9, stiffness: 200, mass: 0.6 } });
+  // 黄色マーカーの下線が左から右へスッと引かれる
+  const underlineW = interpolate(frame, [16, 30], [0, 100], {
+    extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-
-  const chunks = (scene.textChunks && scene.textChunks.length > 0
-    ? scene.textChunks
-    : [scene.narration]
-  )
-    .filter(Boolean)
-    .slice(0, 4);
+  // 着地後はゆっくり浮遊
+  const floatY = frame > 20 ? Math.sin(frame / 14) * 5 : 0;
+  // 字幕はカードの後にフェードイン
+  const subOpacity = interpolate(frame, [10, 18], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  // 背景の水彩ブロブはゆっくり息をする
+  const blobScale = 1 + Math.sin(frame / 40) * 0.04;
 
   return (
-    <AbsoluteFill style={{ opacity, backgroundColor: "black" }}>
-      <div style={{ width: "100%", height: "100%", transform: `scale(${zoom})` }}>
-        {scene.type === "video" ? (
-          <OffthreadVideo
-            src={staticFile(scene.image)}
-            muted
-            loop
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        ) : (
-          <Img
-            src={staticFile(scene.image)}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        )}
-      </div>
-      <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.22)" }} />
+    <AbsoluteFill style={{ opacity, backgroundColor: PAPER }}>
       {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
-      <AbsoluteFill
+
+      {/* 黄色い水彩ブロブ（カードの後ろにふんわり） */}
+      <div
         style={{
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 18,
-          padding: "0 48px",
+          position: "absolute",
+          top: "26%",
+          left: "8%",
+          width: "84%",
+          height: "38%",
+          borderRadius: "48% 52% 55% 45% / 55% 48% 52% 45%",
+          background: `radial-gradient(ellipse at center, ${MARKER_YELLOW}55 0%, ${MARKER_YELLOW}22 60%, transparent 75%)`,
+          transform: `scale(${blobScale}) rotate(-3deg)`,
         }}
-      >
-        {chunks.map((chunk, i) => {
-          const startAt = 4 + i * STAGGER_FRAMES;
-          const t = frame - startAt;
-          // バネで飛び込む（左右交互）。overshootで「ポンッ」と跳ねて着地する
-          const s = spring({
-            frame: t,
-            fps,
-            config: { damping: 10, stiffness: 170, mass: 0.7 },
-          });
-          const dir = i % 2 === 0 ? -1 : 1;
-          const translateX = (1 - s) * dir * 260;
-          const rotate = (1 - s) * dir * 10;
-          const scale = 0.2 + s * 0.8;
-          const localOpacity = interpolate(t, [0, 5], [0, 1], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-          });
-          // 着地後はゆっくり上下に浮遊し続ける
-          const floatY = t > 16 ? Math.sin((frame + i * 23) / 13) * 5 : 0;
-          return (
+      />
+
+      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 70px" }}>
+        <div
+          style={{
+            ...sketchBorder,
+            position: "relative",
+            background: "#FFFFFF",
+            width: "100%",
+            padding: "90px 56px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 34,
+            transform: `scale(${cardScale}) rotate(${cardRotate}deg) translateY(${floatY}px)`,
+            boxShadow: "6px 8px 0 rgba(35,42,59,0.12)",
+          }}
+        >
+          {/* シーン種別の飾り: 1枚目=テーマ札 / 中間=丸数字 / ラスト=まとめ札 */}
+          {isFirst || isLast ? (
             <div
-              key={i}
               style={{
-                opacity: localOpacity,
-                transform: `translateX(${translateX}px) translateY(${floatY}px) rotate(${rotate}deg) scale(${scale})`,
+                transform: `scale(${badgeS})`,
+                fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+                fontSize: 40,
+                color: "#FFFFFF",
+                background: isLast ? accent : INK,
+                padding: "10px 38px",
+                borderRadius: "120px 16px 120px 16px / 16px 120px 16px 120px",
               }}
             >
-              <StrokedText text={chunk} fontSize={chunkFontSize(chunk.length)} />
+              {isFirst ? "きょうのテーマ" : "まとめ"}
             </div>
-          );
-        })}
+          ) : (
+            <div
+              style={{
+                transform: `scale(${badgeS})`,
+                width: 96,
+                height: 96,
+                borderRadius: "50%",
+                background: accent,
+                color: "#FFFFFF",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                fontFamily: `'${yuseiMagic}', sans-serif`,
+                fontSize: 52,
+                boxShadow: "3px 4px 0 rgba(35,42,59,0.18)",
+              }}
+            >
+              {index}
+            </div>
+          )}
+
+          <div
+            style={{
+              fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+              fontSize: headlineFontSize(scene.headline.length),
+              color: INK,
+              textAlign: "center",
+              lineHeight: 1.45,
+            }}
+          >
+            {renderMarked(scene.headline)}
+          </div>
+
+          {/* 黄色マーカーの下線 */}
+          <div
+            style={{
+              width: `${underlineW}%`,
+              maxWidth: 460,
+              height: 20,
+              background: MARKER_YELLOW,
+              borderRadius: "40px 12px 40px 12px / 12px 40px 12px 40px",
+              transform: "rotate(-1deg)",
+            }}
+          />
+        </div>
+      </AbsoluteFill>
+
+      {/* 下部字幕（黒帯・ナレーション全文） */}
+      <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: 130 }}>
+        <div
+          style={{
+            opacity: subOpacity,
+            maxWidth: "90%",
+            background: "rgba(22,24,30,0.82)",
+            color: "#FFFFFF",
+            fontFamily: `'${maruGothic}', 'Noto Sans CJK JP', sans-serif`,
+            fontWeight: 500,
+            fontSize: 40,
+            lineHeight: 1.5,
+            textAlign: "center",
+            padding: "18px 34px",
+            borderRadius: 16,
+          }}
+        >
+          {scene.narration}
+        </div>
       </AbsoluteFill>
     </AbsoluteFill>
   );
@@ -185,13 +238,13 @@ export const MyVideo: React.FC<Props> = ({ scenes }) => {
     startFrame += durationInFrames;
     return (
       <Sequence key={i} from={from} durationInFrames={durationInFrames}>
-        <SceneView scene={scene} durationInFrames={durationInFrames} />
+        <SceneView scene={scene} durationInFrames={durationInFrames} index={i} total={scenes.length} />
       </Sequence>
     );
   });
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "black" }}>
+    <AbsoluteFill style={{ backgroundColor: PAPER }}>
       <Audio src={staticFile("bgm.mp3")} loop volume={0.12} />
       {items}
     </AbsoluteFill>

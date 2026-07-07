@@ -1,4 +1,5 @@
-// WF4: 指定アカウントのInstagramリール(実写B-roll10本+塊テロップ・約30秒)を生成・投稿
+// WF4: 指定アカウントのInstagramリール(手描きスケッチ解説スタイル10シーン・約30秒)を生成・投稿
+// 素材DLなし: 背景・カード・装飾は全てRemotionのコードで描画する（@ClaudeCode-videoチャンネル風）
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -56,7 +57,6 @@ function reqBinary(url, options, body) {
 }
 
 const SCENE_COUNT = 10;
-const BROLL_COUNT = SCENE_COUNT;
 
 const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン20文字前後(全体で合計200文字程度・30秒の動画になる)で、以下のPASONAの流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージで、テンポよく短く言い切ってください。
 シーン1〜2（Problem）: 悩み・あるあるを提示する
@@ -76,8 +76,8 @@ async function generateScenario(systemPrompt) {
       {
         role: 'user',
         content:
-          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nこの台本とInstagramキャプション（150文字以内）、画像説明（英語20文字以内）、各シーンの実写映像検索キーワード（そのシーンのナレーション内容に合う具体的な映像を表す英語2〜4語。例: "rainy window city night", "woman walking sunrise beach"）をJSONで返してください。` +
-          `{"caption":"投稿文","detail":"画像説明(英語)","narrations":[${SCENE_COUNT}個の文字列の配列],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列の配列]}`,
+          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nさらに各シーンの「見出し」を作ってください。見出しはそのシーンのナレーションの要点を6〜12文字で言い切る短いフレーズ（体言止めや短い断言。例:「旅費が高い問題」「1日3000円でOK」）。この台本・見出しとInstagramキャプション（150文字以内）をJSONで返してください。` +
+          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列の配列],"headlines":[${SCENE_COUNT}個の文字列の配列]}`,
       },
     ],
     max_tokens: 1400,
@@ -90,89 +90,18 @@ async function generateScenario(systemPrompt) {
   );
   const data = JSON.parse(res.json?.choices?.[0]?.message?.content || '{}');
   const fallback = Array.from({ length: SCENE_COUNT }, (_, i) => `今日も一歩ずつ、進んでいこう。(${i + 1})`);
+  const narrations =
+    Array.isArray(data.narrations) && data.narrations.length === SCENE_COUNT ? data.narrations : fallback;
+  // 見出しが欠けたシーンはナレーション先頭を切り出して代用する
+  const headlines = Array.from({ length: SCENE_COUNT }, (_, i) => {
+    const h = Array.isArray(data.headlines) ? String(data.headlines[i] || '').trim() : '';
+    return h || String(narrations[i]).replace(/[。、！？!?]/g, '').slice(0, 12);
+  });
   return {
     caption: data.caption || systemPrompt,
-    detail: data.detail || 'lifestyle content',
-    narrations: Array.isArray(data.narrations) && data.narrations.length === SCENE_COUNT ? data.narrations : fallback,
-    brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
+    narrations,
+    headlines,
   };
-}
-
-async function fetchPexelsVideo(keyword, usedIds) {
-  const key = (process.env.PEXELS_API_KEY || '').trim();
-  const res = await req(`https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=30&orientation=portrait`, {
-    headers: { Authorization: key },
-  });
-  const candidates = (res.json?.videos || []).filter((v) => v.duration >= 6 && !usedIds.includes(`px_${v.id}`));
-  if (!candidates.length) return null;
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  const files = (pick.video_files || []).filter((f) => f.height && f.height <= 1920).sort((a, b) => b.height - a.height);
-  const file = files[0] || pick.video_files[0];
-  return { id: `px_${pick.id}`, url: file.link };
-}
-
-async function fetchPixabayVideo(keyword, usedIds) {
-  const key = (process.env.PIXABAY_API_KEY || '').trim();
-  const res = await req(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(keyword)}&per_page=30`, {});
-  const candidates = (res.json?.hits || []).filter((v) => v.duration >= 6 && !usedIds.includes(`pb_${v.id}`));
-  if (!candidates.length) return null;
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  const v = pick.videos.medium || pick.videos.small || pick.videos.large;
-  return { id: `pb_${pick.id}`, url: v.url };
-}
-
-async function generateBroll(detail, imgStyle, outDir, account, sceneKeywords) {
-  const ledgerDir = path.join(__dirname, '..', 'data', 'wf4_used_ids');
-  const usedIdsPath = path.join(ledgerDir, `${account}.json`);
-  fs.mkdirSync(ledgerDir, { recursive: true });
-  let usedIds = [];
-  try {
-    usedIds = JSON.parse(fs.readFileSync(usedIdsPath, 'utf-8'));
-  } catch (e) {}
-
-  // かぶり防止: 除外リストは全アカウントの台帳を統合して作る（記録は自アカウントのみ）
-  const excludeIds = new Set(usedIds);
-  for (const f of fs.readdirSync(ledgerDir)) {
-    if (!f.endsWith('.json')) continue;
-    try {
-      for (const id of JSON.parse(fs.readFileSync(path.join(ledgerDir, f), 'utf-8'))) excludeIds.add(id);
-    } catch (e) {}
-  }
-
-  const styleKeyword = imgStyle.split(',')[0].trim();
-  const fallbackPool = [detail, styleKeyword, 'japan lifestyle', 'calm nature', 'daily life moment'].filter(Boolean);
-
-  const mediaItems = [];
-  for (let i = 0; i < BROLL_COUNT; i++) {
-    // 空振り防止: そのシーンのキーワード → 全体の画像説明 → 汎用キーワードの順で試す
-    const sceneKw = (sceneKeywords || [])[i];
-    const keywordChain = [sceneKw, ...fallbackPool].filter(Boolean);
-    const exclude = [...excludeIds];
-    let found = null;
-    for (const kw of keywordChain) {
-      found = await fetchPexelsVideo(kw, exclude);
-      if (found) break;
-    }
-    if (!found) {
-      for (const kw of keywordChain) {
-        found = await fetchPixabayVideo(kw, exclude);
-        if (found) break;
-      }
-    }
-    if (found) {
-      const buf = await reqBinary(found.url, {});
-      const p = path.join(outDir, `video${i + 1}.mp4`);
-      fs.writeFileSync(p, buf);
-      mediaItems.push({ path: p, type: 'video' });
-      usedIds.push(found.id);
-      excludeIds.add(found.id);
-    } else if (mediaItems.length > 0) {
-      // 全キーワードで空振りした枠は、既に取得済みの映像を再利用してシーン数とナレーションのズレを防ぐ
-      mediaItems.push(mediaItems[Math.floor(Math.random() * mediaItems.length)]);
-    }
-  }
-  fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
-  return mediaItems;
 }
 
 const ELEVENLABS_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
@@ -215,34 +144,13 @@ function getAudioDuration(audioPath) {
   }
 }
 
-// ナレーション文章を「句読点の位置でのみ」最大4つの塊に分ける。
-// 句読点がなければ全文を1塊にする（文中でぶった切ると読めない表示になるため）。
-function splitIntoChunks(text) {
-  const clean = (text || '').trim();
-  if (!clean) return [];
-  const parts = clean
-    .split(/(?<=[。、！？!?])/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (parts.length <= 1) return [clean];
-  const target = Math.min(4, parts.length);
-  const per = Math.ceil(parts.length / target);
-  const chunks = [];
-  for (let i = 0; i < parts.length; i += per) {
-    chunks.push(parts.slice(i, i + per).join(''));
-  }
-  return chunks;
-}
-
-function renderVideo(mediaItems, audioPaths, narrations, outDir) {
-  // 全シーン共通: 実写B-roll背景 + 塊テロップ（YouTubeショート風）
-  const scenes = mediaItems.map((m, i) => {
+function renderVideo(narrations, headlines, audioPaths, outDir) {
+  // 全シーン共通: 手描きスケッチ風カード（Remotionで全描画・素材ファイルなし）
+  const scenes = narrations.map((narration, i) => {
     return {
-      type: m.type,
-      image: path.basename(m.path),
+      headline: headlines[i] || '',
+      narration: narration || '',
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
-      narration: narrations[i] || '',
-      textChunks: splitIntoChunks(narrations[i]),
       durationInSeconds: Math.max(2.4, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
     };
   });
@@ -413,15 +321,10 @@ async function main() {
 
   const scenario = await generateScenario(persona.system);
   console.log(`[${account}] caption:`, scenario.caption);
-
-  // 全10シーンを実写B-rollで構成（蒼井シン方式・GPTイラストなし）
-  const finalMediaItems = await generateBroll(scenario.detail, persona.imgStyle, outDir, account, scenario.brollKeywords);
-
-  if (finalMediaItems.length < 2) throw new Error(`メディアが足りません: ${finalMediaItems.length}`);
-  console.log(`[${account}] media items:`, finalMediaItems.length);
+  console.log(`[${account}] headlines:`, scenario.headlines.join(' / '));
 
   const audioPaths = await generateTTS(scenario.narrations, outDir);
-  const videoPath = renderVideo(finalMediaItems, audioPaths, scenario.narrations, outDir);
+  const videoPath = renderVideo(scenario.narrations, scenario.headlines, audioPaths, outDir);
   console.log(`[${account}] video rendered:`, videoPath);
 
   const result = await postReel(persona.igUserId, videoPath, scenario.caption);
