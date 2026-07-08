@@ -1,5 +1,5 @@
 // WF4: 指定アカウントのInstagramリール(手描きスケッチ解説スタイル・約1分)を生成・投稿
-// カード3枚→実写B-roll1枚（カード重ね）のリズム×3。カード装飾はRemotionで全描画（@ClaudeCode-videoチャンネル風）
+// 全12シーン実写B-roll背景の上に手描き風カードを重ねる。カード装飾はRemotionで全描画（@ClaudeCode-videoチャンネル風）
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -57,8 +57,8 @@ function reqBinary(url, options, body) {
 }
 
 const SCENE_COUNT = 12;
-// カード3枚ごとに1枚、実写B-roll背景のシーンを挟む（0始まりで4・8・12枚目）
-const BROLL_SCENE_INDEXES = [3, 7, 11];
+// 全シーンを実写B-roll背景にする（2026-07-08 聖さん指示）
+const BROLL_SCENE_INDEXES = Array.from({ length: SCENE_COUNT }, (_, i) => i);
 
 const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン25〜35文字(全体で合計350文字程度・約1分の動画になる)で、以下のPASONAの流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージで、テンポよく言い切ってください。
 シーン1〜2（Problem）: 悩み・あるあるを提示する
@@ -141,7 +141,7 @@ async function fetchPixabayVideo(keyword, usedIds) {
   return { id: `pb_${pick.id}`, url: v.url };
 }
 
-// B-rollシーン用の実写動画を3本だけ取得する（かぶり除外は全アカウント台帳を統合）
+// 各シーン用の実写動画を取得する（かぶり除外は全アカウント台帳を統合）
 async function fetchBrollVideos(keywords, outDir, account) {
   const ledgerDir = path.join(__dirname, '..', 'data', 'wf4_used_ids');
   const usedIdsPath = path.join(ledgerDir, `${account}.json`);
@@ -168,7 +168,12 @@ async function fetchBrollVideos(keywords, outDir, account) {
       found = (await fetchPexelsVideo(kw, excludeIds)) || (await fetchPixabayVideo(kw, excludeIds));
       if (found) break;
     }
-    if (!found) continue; // 空振り枠は紙背景カードとして表示される
+    if (!found) {
+      // 空振り枠は取得済みの映像を再利用（それも無ければ紙背景カードにフォールバック）
+      const have = Object.values(videoBySlot);
+      if (have.length > 0) videoBySlot[sceneIdx] = have[Math.floor(Math.random() * have.length)];
+      continue;
+    }
     const buf = await reqBinary(found.url, {});
     const p = path.join(outDir, `video${slot + 1}.mp4`);
     fs.writeFileSync(p, buf);
