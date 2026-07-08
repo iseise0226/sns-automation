@@ -251,7 +251,8 @@ function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, out
   execFileSync(
     'npx',
     ['remotion', 'render', 'src/index.ts', 'MyVideo', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`],
-    { cwd: remotionDir, timeout: 180000, shell: true, stdio: 'inherit' }
+    // 実写背景12本×約1分の構成でレンダリングが重いため余裕を持たせる
+    { cwd: remotionDir, timeout: 600000, shell: true, stdio: 'inherit' }
   );
   return videoPath;
 }
