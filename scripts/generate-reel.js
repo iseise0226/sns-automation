@@ -366,7 +366,7 @@ async function postReel(igUserId, videoPath, caption) {
 }
 
 const LAST_RUN_PATH = path.join(__dirname, '..', 'data', 'wf4_last_run.json');
-const INTERVAL_DAYS = 2;
+const INTERVAL_DAYS = 1;
 
 function shouldRunToday(account) {
   let lastRun = {};
