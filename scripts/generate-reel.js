@@ -420,7 +420,9 @@ async function main() {
   const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir);
   console.log(`[${account}] video rendered:`, videoPath);
 
-  const result = await postReel(persona.igUserId, videoPath, scenario.caption);
+  // マインド系アカウントはキャプション末尾にLINE誘導を固定で追加
+  const caption = persona.ctaLine ? scenario.caption + persona.ctaLine : scenario.caption;
+  const result = await postReel(persona.igUserId, videoPath, caption);
   console.log(`[${account}] posted:`, result.id);
   markRanToday(account);
 

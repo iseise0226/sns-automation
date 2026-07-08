@@ -44,6 +44,20 @@ const THREADS_USER_IDS = {
 
 // persona本文（system/userTemplate）はpersonas.jsonから読み込む（リポジトリ内に同梱、トークン等は含まない）
 const personas = require('./personas.json');
+
+// マインド系2アカウントは、通常投稿の代わりに週数回の頻度でLINE誘導投稿を混ぜる
+const LINE_CTA_ACCOUNTS = new Set(['satoshi_mindset', 'satoshi_mind_coaching']);
+// 1日3回配信・週21回中 約3回(1/7)の確率でCTA投稿にする
+const LINE_CTA_CHANCE = 1 / 7;
+const LINE_CTA_TEXTS = [
+  '頑張ってるのに、なぜか苦しい。\n\nそう感じている経営者の方へ。\n心が軽くなる考え方を、7日間に分けてLINEで届けています。\n\n登録は無料、売り込みもありません。\nプロフィールのリンクから読んでみてください。',
+  '経営をしていれば、壁は必ず来ます。\n大事なのは、その壁をどう捉えるか。\n\n25年間、現場で学んできた「心が軽くなる考え方」を、LINEで7日間お届けしています。\n\n気になる方はプロフィールのリンクからどうぞ。',
+  '「もっと頑張らなきゃ」と思っているあなたへ。\n\n足りないのは努力じゃなく、考え方の土台かもしれません。\n無料の7日間LINE配信で、その土台の整え方をお伝えしています。\n\nプロフィールのリンクから、登録は無料です。',
+];
+
+function pickCtaText() {
+  return LINE_CTA_TEXTS[Math.floor(Math.random() * LINE_CTA_TEXTS.length)];
+}
 const ACCOUNTS = {};
 for (const key of Object.keys(THREADS_USER_IDS)) {
   ACCOUNTS[key] = {
@@ -126,11 +140,13 @@ async function main() {
 
   for (const acc of accountsToRun) {
     try {
-      const text = await generateText(acc, trends);
+      const useCta = LINE_CTA_ACCOUNTS.has(acc) && Math.random() < LINE_CTA_CHANCE;
+      const text = useCta ? pickCtaText() : await generateText(acc, trends);
       if (!text) {
         console.error(`[${acc}] text generation failed, skipping`);
         continue;
       }
+      if (useCta) console.log(`[${acc}] LINE誘導投稿を使用`);
       const result = await postToThreads(acc, text);
       console.log(`[${acc}] posted:`, result?.id || result);
     } catch (e) {
