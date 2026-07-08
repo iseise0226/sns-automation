@@ -366,9 +366,10 @@ async function postReel(igUserId, videoPath, caption) {
 }
 
 const LAST_RUN_PATH = path.join(__dirname, '..', 'data', 'wf4_last_run.json');
-const INTERVAL_DAYS = 3;
+// アカウントごとの間隔はdata/wf4_accounts.jsonのintervalDaysで指定（未指定時は3日おき）
+const DEFAULT_INTERVAL_DAYS = 3;
 
-function shouldRunToday(account) {
+function shouldRunToday(account, intervalDays) {
   let lastRun = {};
   try {
     lastRun = JSON.parse(fs.readFileSync(LAST_RUN_PATH, 'utf-8'));
@@ -376,7 +377,7 @@ function shouldRunToday(account) {
   const last = lastRun[account];
   if (!last) return true;
   const daysSince = (Date.now() - new Date(last).getTime()) / 86400000;
-  return daysSince >= INTERVAL_DAYS;
+  return daysSince >= intervalDays;
 }
 
 function markRanToday(account) {
@@ -394,13 +395,15 @@ async function main() {
     console.error('usage: node generate-reel.js <account>');
     process.exit(1);
   }
-  if (!process.env.WF4_FORCE && !shouldRunToday(account)) {
-    console.log(`[${account}] skip: 前回実行から${INTERVAL_DAYS}日経過していません`);
+  const persona = require('../data/wf4_accounts.json')[account];
+  if (!persona) throw new Error(`unknown account: ${account}`);
+  const intervalDays = persona.intervalDays || DEFAULT_INTERVAL_DAYS;
+
+  if (!process.env.WF4_FORCE && !shouldRunToday(account, intervalDays)) {
+    console.log(`[${account}] skip: 前回実行から${intervalDays}日経過していません`);
     return;
   }
   process.env.WF4_ACCOUNT_UPPER = account.toUpperCase();
-  const persona = require('../data/wf4_accounts.json')[account];
-  if (!persona) throw new Error(`unknown account: ${account}`);
 
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const outDir = path.resolve('wf4_media', account, today);
