@@ -59,6 +59,8 @@ function buildUserPrompt(topic) {
 1. screen: 画面に出すスライドの見出し(15字以内)と箇条書き2〜3個(各20字以内)。強調したい語は**語**で囲む。
 2. narration: 実際にナレーションで読み上げる自然な話し言葉(150〜300文字)。**数字は必ず全部ひらがな表記にする**(例:「26万円」→「にじゅうろくまんえん」、「40歳」→「よんじゅっさい」、「1年」→「いちねん」)。英数字やアルファベットも使わない。
 
+**重要**: 日本語(ひらがな・カタカナ・漢字)のみを使ってください。韓国語・中国語・英数字などの他言語の文字は絶対に混入させないこと。
+
 JSON形式で出力:
 {
   "title": "YouTubeタイトル(32文字前後、興味を引く形。【】を使ってよい)",
@@ -69,6 +71,26 @@ JSON形式で出力:
   ]
 }
 1枚目と10枚目は bullets を省略して screenTitle だけにしてもよい(type:titleのイメージ)。`;
+}
+
+// LLMがまれに混入させる他言語文字(ハングル・キリル文字等)を除去する安全策
+function stripForeignChars(text) {
+  if (!text) return text;
+  return text
+    .replace(/[가-힣]/g, '') // ハングル
+    .replace(/[Ѐ-ӿ]/g, '') // キリル文字
+    .replace(/[฀-๿]/g, ''); // タイ文字
+}
+
+function sanitizeScript(script) {
+  script.title = stripForeignChars(script.title);
+  script.description = stripForeignChars(script.description);
+  for (const s of script.slides) {
+    s.screenTitle = stripForeignChars(s.screenTitle);
+    s.narration = stripForeignChars(s.narration);
+    if (Array.isArray(s.bullets)) s.bullets = s.bullets.map(stripForeignChars);
+  }
+  return script;
 }
 
 async function generateScript(topic) {
@@ -89,7 +111,7 @@ async function generateScript(topic) {
   const json = JSON.parse(res.text);
   const content = json.choices?.[0]?.message?.content;
   if (!content) throw new Error('Groq応答が空: ' + res.text.slice(0, 300));
-  return JSON.parse(content);
+  return sanitizeScript(JSON.parse(content));
 }
 
 async function tts(text, outPath) {
