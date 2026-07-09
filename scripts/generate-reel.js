@@ -193,7 +193,7 @@ async function generateTTS(narrations, outDir) {
   for (let i = 0; i < narrations.length; i++) {
     const body = JSON.stringify({
       text: narrations[i],
-      model_id: 'eleven_multilingual_v2',
+      model_id: 'eleven_flash_v2_5', // 0.5クレジット/文字。リールはBGM付き短文なので軽量版で十分(YouTube長尺はmultilingual_v2を使う)
       voice_settings: { stability: 0.5, similarity_boost: 0.75 },
     });
     const audioPath = path.join(outDir, `audio${i + 1}.mp3`);
