@@ -5,6 +5,7 @@ import {
   Sequence,
   interpolate,
   spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
@@ -25,11 +26,13 @@ export type Slide = {
   bullets?: string[]; // **強調** で金下線
   page?: string; // "03 / 10" など
   durationInSeconds: number;
+  audio?: string; // このスライドのナレーション(public/内の相対パス)
 };
 
 export type SlideVideoProps = {
   slides: Slide[];
-  audio?: string; // ナレーション音声(絶対パス or URL)。無ければ無音
+  audio?: string; // 全体ナレーション(public/内の相対パス)。スライド個別audioと併用しない
+  bgm?: string; // BGM(public/内の相対パス)。小音量でループ
   footer?: string;
 };
 
@@ -316,17 +319,20 @@ const SlideView: React.FC<{ slide: Slide; footer: string }> = ({ slide, footer }
 export const SlideVideo: React.FC<SlideVideoProps> = ({
   slides,
   audio,
+  bgm,
   footer = "心の土台を、整える。｜伊勢 聖",
 }) => {
   const { fps } = useVideoConfig();
   let from = 0;
   return (
     <AbsoluteFill style={{ backgroundColor: PAPER }}>
-      {audio ? <Audio src={audio} /> : null}
+      {audio ? <Audio src={staticFile(audio)} /> : null}
+      {bgm ? <Audio src={staticFile(bgm)} loop volume={0.07} /> : null}
       {slides.map((slide, i) => {
         const dur = Math.round(slide.durationInSeconds * fps);
         const seq = (
           <Sequence key={i} from={from} durationInFrames={dur}>
+            {slide.audio ? <Audio src={staticFile(slide.audio)} /> : null}
             <SlideView slide={slide} footer={footer} />
           </Sequence>
         );
