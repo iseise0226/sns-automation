@@ -1,0 +1,29 @@
+{
+  "slides": [
+    {
+      "type": "title",
+      "kicker": "SANMEIGAKU × MIND",
+      "title": "頑張ってるのに、\nなぜか苦しい。",
+      "page": "01 / 10",
+      "durationInSeconds": 6
+    },
+    {
+      "type": "bullets",
+      "kicker": "やり方コレクターの罠",
+      "title": "頑張っても苦しい人が、\n集めているもの。",
+      "bullets": [
+        "セミナー・本・成功者の真似……**「やり方」のコレクション**",
+        "手に入れた瞬間だけ安心して、**数週間で元の不安に戻る**",
+        "足りなかったのは努力ではなく、**考え方の「土台」**"
+      ],
+      "page": "02 / 10",
+      "durationInSeconds": 9
+    },
+    {
+      "type": "quote",
+      "title": "やり方より、**あり方**。",
+      "page": "03 / 10",
+      "durationInSeconds": 5
+    }
+  ]
+}
