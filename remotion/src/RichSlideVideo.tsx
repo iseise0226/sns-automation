@@ -30,7 +30,7 @@ export type Beat = {
 
 export type Scene = {
   type: "points" | "stock" | "title" | "cta";
-  layout?: "stack" | "row" | "compare" | "panels" | "timeline" | "grid"; // pointsの並べ方: 縦積み / 横並び(→) / 対比(≠) / パネルが左から順に増える / 一直線に並ぶ年表 / マス目に埋まる
+  layout?: "stack" | "row" | "compare" | "panels" | "timeline" | "grid" | "pyramid" | "meter"; // pointsの並べ方: 縦積み / 横並び(→) / 対比(≠) / パネルが左から順に増える / 一直線に並ぶ年表 / マス目に埋まる / 下から積み上がる土台 / ゲージが満ちていく
   separator?: string; // row/compareの区切り記号（既定: row=→ compare=≠）
   title?: string;
   kicker?: string;
@@ -472,6 +472,97 @@ const GridItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({ be
   );
 };
 
+// ピラミッド(pyramid)用: 下から順に土台が積み上がっていく
+const PyramidRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const total = beats.length;
+  const baseWidth = 760;
+  const shrink = baseWidth / (total + 1.6);
+  return (
+    <div style={{ display: "flex", flexDirection: "column-reverse", alignItems: "center" }}>
+      {beats.map((b, i) => {
+        const accent = ACCENTS[i % ACCENTS.length];
+        const startAt = starts[i];
+        const s = spring({ frame: frame - startAt, fps, config: { damping: 12, stiffness: 150, mass: 0.7 } });
+        const width = baseWidth - i * shrink;
+        return (
+          <div
+            key={i}
+            style={{
+              opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+              transform: `translateY(${(1 - s) * 26}px) scale(${0.9 + s * 0.1})`,
+              width,
+              marginTop: i === 0 ? 0 : 10,
+              background: "#fff",
+              border: `4px solid ${accent}`,
+              borderRadius: 14,
+              padding: "20px 30px",
+              textAlign: "center",
+              boxShadow: "5px 6px 0 rgba(0,0,0,0.08)",
+              fontFamily: MARKER,
+              fontSize: total >= 4 ? 32 : 38,
+              lineHeight: 1.4,
+              color: INK,
+            }}
+          >
+            <MultiLine text={b.text} accent={accent} keyPrefix={`py${i}`} />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// メーター(meter)用: 段階が進むほどゲージが満ちていく
+const MeterRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const total = beats.length;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 34, width: 900 }}>
+      {beats.map((b, i) => {
+        const accent = ACCENTS[i % ACCENTS.length];
+        const startAt = starts[i];
+        const targetPct = Math.round(((i + 1) / total) * 100);
+        const fillPct = interpolate(frame, [startAt, startAt + 20], [0, targetPct], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+        const labelOp = interpolate(frame, [startAt, startAt + 8], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+        return (
+          <div key={i} style={{ opacity: labelOp }}>
+            <div
+              style={{
+                fontFamily: MARKER,
+                fontSize: 34,
+                color: INK,
+                marginBottom: 10,
+              }}
+            >
+              <MultiLine text={b.text} accent={accent} keyPrefix={`m${i}`} />
+            </div>
+            <div
+              style={{
+                width: "100%",
+                height: 30,
+                borderRadius: 15,
+                background: "#e8e0cf",
+                border: `3px solid ${INK}`,
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ width: `${fillPct}%`, height: "100%", background: accent }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, starts }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
@@ -538,6 +629,14 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
             {scene.beats.map((b, i) => (
               <GridItem key={i} beat={b} index={i} startAt={starts[i]} />
             ))}
+          </div>
+        ) : layout === "pyramid" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <PyramidRow beats={scene.beats} starts={starts} />
+          </div>
+        ) : layout === "meter" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <MeterRow beats={scene.beats} starts={starts} />
           </div>
         ) : (
           <div
