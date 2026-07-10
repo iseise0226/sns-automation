@@ -79,6 +79,31 @@ function sanitizeScenes(scenes) {
   return scenes;
 }
 
+// pointsシーンのlayoutをコード側で確実にランダム化する(AI任せだと偏る/連続するため)
+// ビート数に合わないレイアウトは候補から除外し、直前と同じレイアウトは避ける
+const ALL_LAYOUTS = ['stack', 'panels', 'row', 'compare', 'timeline', 'grid', 'pyramid', 'meter'];
+function compatibleLayouts(beatCount) {
+  return ALL_LAYOUTS.filter((l) => {
+    if (l === 'compare') return beatCount === 2;
+    if (l === 'grid') return beatCount >= 2 && beatCount <= 4;
+    if (l === 'timeline' || l === 'pyramid' || l === 'meter') return beatCount >= 2 && beatCount <= 4;
+    return true;
+  });
+}
+function randomizeLayouts(scenes) {
+  let prevLayout = null;
+  for (const sc of scenes) {
+    if (sc.type !== 'points') continue;
+    const candidates = compatibleLayouts((sc.beats || []).length).filter((l) => l !== prevLayout);
+    const pool = candidates.length ? candidates : compatibleLayouts((sc.beats || []).length);
+    sc.layout = pool[Math.floor(Math.random() * pool.length)];
+    if (sc.layout === 'compare' || sc.layout === 'row') sc.separator = sc.layout === 'compare' ? '≠' : '→';
+    else delete sc.separator;
+    prevLayout = sc.layout;
+  }
+  return scenes;
+}
+
 const SYSTEM_PROMPT = `あなたはYouTubeスライド動画の台本作家です。出力は厳密なJSONのみ。説明文や前置きは書かないこと。
 
 台本の構造:
@@ -130,7 +155,7 @@ async function main() {
   console.log(`[${accountKey}] お題: ${topic}`);
 
   const generated = await generate(cfg, topic);
-  generated.scenes = sanitizeScenes(generated.scenes);
+  generated.scenes = randomizeLayouts(sanitizeScenes(generated.scenes));
   generated.youtubeTitle = stripForeignChars(generated.youtubeTitle);
   generated.description = stripForeignChars(generated.description);
 
