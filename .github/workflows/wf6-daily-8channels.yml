@@ -1,0 +1,109 @@
+name: WF6 8チャンネル毎日自動投稿
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: '手動実行時のアカウント名'
+        required: false
+        default: ''
+  schedule:
+    - cron: '3 21 * * *'   # ise_satoshi        06:03 JST
+    - cron: '17 23 * * *'  # satoshi_mindset    08:17 JST
+    - cron: '41 1 * * *'   # satoshi_mind_coach 10:41 JST
+    - cron: '29 3 * * *'   # ise_sato_kosodate  12:29 JST
+    - cron: '53 5 * * *'   # ise_kenkou_otaku   14:53 JST
+    - cron: '7 8 * * *'    # tabi_life_design40 17:07 JST
+    - cron: '22 10 * * *'  # sessi_life         19:22 JST
+    - cron: '38 12 * * *'  # ko_gi_omoti        21:38 JST
+
+jobs:
+  post-one-channel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: アカウント決定
+        id: pick
+        run: |
+          if [ -n "${{ github.event.inputs.account }}" ]; then
+            echo "account=${{ github.event.inputs.account }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "${{ github.event.schedule }}" in
+            "3 21 * * *")  echo "account=ise_satoshi" >> "$GITHUB_OUTPUT" ;;
+            "17 23 * * *") echo "account=satoshi_mindset" >> "$GITHUB_OUTPUT" ;;
+            "41 1 * * *")  echo "account=satoshi_mind_coach" >> "$GITHUB_OUTPUT" ;;
+            "29 3 * * *")  echo "account=ise_sato_kosodate" >> "$GITHUB_OUTPUT" ;;
+            "53 5 * * *")  echo "account=ise_kenkou_otaku" >> "$GITHUB_OUTPUT" ;;
+            "7 8 * * *")   echo "account=tabi_life_design40" >> "$GITHUB_OUTPUT" ;;
+            "22 10 * * *") echo "account=sessi_life" >> "$GITHUB_OUTPUT" ;;
+            "38 12 * * *") echo "account=ko_gi_omoti" >> "$GITHUB_OUTPUT" ;;
+            *) echo "account=" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: ffmpeg導入
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Chromium依存ライブラリ導入(Remotion用)
+        run: sudo apt-get install -y libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64 libxss1 libxtst6
+
+      - name: VOICEVOXエンジンをキャッシュ
+        id: cache-voicevox
+        uses: actions/cache@v4
+        with:
+          path: scripts/daily-pipeline/voicevox_engine
+          key: voicevox-engine-linux-cpu-x64-0.25.2
+
+      - name: VOICEVOXエンジン取得
+        if: steps.cache-voicevox.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p scripts/daily-pipeline/voicevox_engine
+          cd scripts/daily-pipeline/voicevox_engine
+          curl -sL -o engine.7z https://github.com/VOICEVOX/voicevox_engine/releases/download/0.25.2/voicevox_engine-linux-cpu-x64-0.25.2.7z.001
+          sudo apt-get install -y p7zip-full
+          7z x engine.7z
+          chmod +x linux-cpu-x64/run || chmod +x run || true
+
+      - name: Remotion依存インストール
+        working-directory: remotion
+        run: npm install
+
+      - name: スクリプト依存インストール
+        working-directory: scripts
+        run: npm install googleapis
+
+      - name: 台本生成(Groq)
+        if: steps.pick.outputs.account != ''
+        working-directory: scripts/daily-pipeline
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: node generate_script.js "${{ steps.pick.outputs.account }}"
+
+      - name: 動画ビルド＆アップロード
+        if: steps.pick.outputs.account != ''
+        working-directory: scripts/daily-pipeline
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
+          ENGINE_DIR: ${{ github.workspace }}/scripts/daily-pipeline/voicevox_engine
+        run: |
+          TODAY=$(date -u +%Y%m%d)
+          node build_and_upload.js "generated/daily_${{ steps.pick.outputs.account }}_${TODAY}.json"
+
+      - name: お題の進行状況をコミット
+        if: always() && steps.pick.outputs.account != ''
+        run: |
+          git config user.name "wf6-bot"
+          git config user.email "wf6-bot@users.noreply.github.com"
+          git add data/daily_state.json
+          git diff --cached --quiet || git commit -m "chore: WF6 topic progress - ${{ steps.pick.outputs.account }}"
+          git push || echo "push失敗(無視)"

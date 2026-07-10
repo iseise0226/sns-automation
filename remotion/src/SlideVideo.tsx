@@ -27,6 +27,7 @@ export type Slide = {
   page?: string; // "03 / 10" など
   durationInSeconds: number;
   audio?: string; // このスライドのナレーション(public/内の相対パス)
+  se?: string; // スライド切替時の効果音(public/内の相対パス)
 };
 
 export type SlideVideoProps = {
@@ -333,6 +334,7 @@ export const SlideVideo: React.FC<SlideVideoProps> = ({
         const seq = (
           <Sequence key={i} from={from} durationInFrames={dur}>
             {slide.audio ? <Audio src={staticFile(slide.audio)} /> : null}
+            {slide.se ? <Audio src={staticFile(slide.se)} volume={0.18} /> : null}
             <SlideView slide={slide} footer={footer} />
           </Sequence>
         );
