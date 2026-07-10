@@ -30,7 +30,7 @@ export type Beat = {
 
 export type Scene = {
   type: "points" | "stock" | "title" | "cta";
-  layout?: "stack" | "row" | "compare" | "panels"; // pointsの並べ方: 縦積み / 横並び(→) / 対比(≠) / パネルが左から順に増える
+  layout?: "stack" | "row" | "compare" | "panels" | "timeline" | "grid"; // pointsの並べ方: 縦積み / 横並び(→) / 対比(≠) / パネルが左から順に増える / 一直線に並ぶ年表 / マス目に埋まる
   separator?: string; // row/compareの区切り記号（既定: row=→ compare=≠）
   title?: string;
   kicker?: string;
@@ -304,6 +304,174 @@ const PanelItem: React.FC<{ beat: Beat; index: number; startAt: number; total: n
   );
 };
 
+// タイムライン(timeline)用: 一本の線の上をマーカーが左から順に進んでいく
+const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total: number }> = ({
+  beat,
+  index,
+  startAt,
+  total,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const accent = ACCENTS[index % ACCENTS.length];
+  const s = spring({ frame: frame - startAt, fps, config: { damping: 11, stiffness: 180, mass: 0.6 } });
+  const width = total >= 4 ? 300 : 380;
+  const isTop = index % 2 === 0;
+  return (
+    <div
+      style={{
+        width,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+      }}
+    >
+      <div
+        style={{
+          minHeight: 96,
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          marginBottom: isTop ? 18 : 0,
+          order: 0,
+          transform: `translateY(${(1 - s) * -20}px)`,
+        }}
+      >
+        {isTop ? (
+          <div
+            style={{
+              fontFamily: MARKER,
+              fontSize: 32,
+              lineHeight: 1.4,
+              color: INK,
+              textAlign: "center",
+              background: "#fff",
+              border: `3px solid ${accent}`,
+              borderRadius: 14,
+              padding: "14px 18px",
+              boxShadow: "4px 5px 0 rgba(0,0,0,0.08)",
+            }}
+          >
+            <MultiLine text={beat.text} accent={accent} keyPrefix={`tl${index}`} />
+          </div>
+        ) : null}
+      </div>
+      <div
+        style={{
+          order: 1,
+          width: 30,
+          height: 30,
+          borderRadius: "50%",
+          background: accent,
+          border: "4px solid #fff",
+          boxShadow: `0 0 0 3px ${accent}`,
+          transform: `scale(${0.6 + s * 0.4})`,
+        }}
+      />
+      <div
+        style={{
+          minHeight: 96,
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "center",
+          marginTop: isTop ? 0 : 18,
+          order: 2,
+          transform: `translateY(${(1 - s) * 20}px)`,
+        }}
+      >
+        {!isTop ? (
+          <div
+            style={{
+              fontFamily: MARKER,
+              fontSize: 32,
+              lineHeight: 1.4,
+              color: INK,
+              textAlign: "center",
+              background: "#fff",
+              border: `3px solid ${accent}`,
+              borderRadius: 14,
+              padding: "14px 18px",
+              boxShadow: "4px 5px 0 rgba(0,0,0,0.08)",
+            }}
+          >
+            <MultiLine text={beat.text} accent={accent} keyPrefix={`tl${index}`} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+const TimelineRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const lastStart = starts[starts.length - 1] ?? 0;
+  const lineW = interpolate(frame, [starts[0] ?? 0, lastStart + 14], [0, 100], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return (
+    <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+      <div
+        style={{
+          position: "absolute",
+          left: "6%",
+          right: "6%",
+          top: "50%",
+          height: 5,
+          background: "#d8d0bf",
+          transform: "translateY(-50%)",
+        }}
+      >
+        <div style={{ width: `${lineW}%`, height: "100%", background: ACCENTS[1] }} />
+      </div>
+      {beats.map((b, i) => (
+        <TimelineItem key={i} beat={b} index={i} startAt={starts[i]} total={beats.length} />
+      ))}
+    </div>
+  );
+};
+
+// グリッド(grid)用: マス目に読む順で1個ずつ埋まっていく
+const GridItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({ beat, index, startAt }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const accent = ACCENTS[index % ACCENTS.length];
+  const s = spring({ frame: frame - startAt, fps, config: { damping: 13, stiffness: 160, mass: 0.6 } });
+  return (
+    <div
+      style={{
+        opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+        transform: `scale(${0.8 + s * 0.2})`,
+        width: 460,
+        minHeight: 150,
+        background: "#fff",
+        border: `4px solid ${accent}`,
+        borderRadius: 20,
+        boxShadow: "5px 6px 0 rgba(0,0,0,0.08)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px 30px",
+        gap: 16,
+      }}
+    >
+      <Marker beat={beat} index={index} accent={accent} />
+      <div
+        style={{
+          fontFamily: MARKER,
+          fontSize: 34,
+          lineHeight: 1.45,
+          color: INK,
+          textAlign: "left",
+        }}
+      >
+        <MultiLine text={beat.text} accent={accent} keyPrefix={`g${index}`} />
+      </div>
+    </div>
+  );
+};
+
 const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, starts }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
@@ -350,6 +518,25 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
           >
             {scene.beats.map((b, i) => (
               <PanelItem key={i} beat={b} index={i} startAt={starts[i]} total={scene.beats.length} />
+            ))}
+          </div>
+        ) : layout === "timeline" ? (
+          <div style={{ display: "flex", alignItems: "center", flex: 1, width: "100%" }}>
+            <TimelineRow beats={scene.beats} starts={starts} />
+          </div>
+        ) : layout === "grid" ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignContent: "center",
+              justifyContent: "center",
+              gap: 24,
+              flex: 1,
+            }}
+          >
+            {scene.beats.map((b, i) => (
+              <GridItem key={i} beat={b} index={i} startAt={starts[i]} />
             ))}
           </div>
         ) : (
