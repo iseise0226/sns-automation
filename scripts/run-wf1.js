@@ -4,8 +4,8 @@ const path = require('path');
 const { execFileSync, execFileSync: run } = require('child_process');
 const { req, getBraveTrends } = require('./note-lib');
 
-const ACCOUNTS = [
-  'ise_satoshi',
+const MAIN_ACCOUNT = 'ise_satoshi';
+const WEEKLY_ACCOUNTS = [
   'satoshi_mindset',
   'satoshi_mind_coaching',
   'ise_sato_kosodate',
@@ -13,6 +13,15 @@ const ACCOUNTS = [
   'ise_kenkou_otaku',
   'tabi_life_design40',
 ];
+// 週1(月曜)にまとめて生成。手動コピペの負担を毎日7件→1件+週1件にするため。
+const WEEKLY_DAY = 1; // 0=日,1=月,...
+
+function isWeeklyDay() {
+  const jstDay = new Date(Date.now() + 9 * 60 * 60 * 1000).getUTCDay();
+  return jstDay === WEEKLY_DAY;
+}
+
+const ACCOUNTS = [MAIN_ACCOUNT, ...(isWeeklyDay() ? WEEKLY_ACCOUNTS : [])];
 
 const TRANSCRIPT_CACHE = path.join(__dirname, '..', 'data', 'last_transcript.txt');
 const TRANSCRIPT_DOC_URL =
