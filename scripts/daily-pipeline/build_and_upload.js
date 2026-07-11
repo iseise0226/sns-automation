@@ -147,7 +147,7 @@ function pickSe() {
   return path.join(SE_DIR, files.find((f) => /transition/i.test(f)) || files[0]);
 }
 
-async function uploadToYoutube(videoPath, title, description, refreshToken) {
+async function uploadToYoutube(videoPath, title, description, refreshToken, thumbnailPath) {
   const oauth2Client = new google.auth.OAuth2(process.env.YOUTUBE_CLIENT_ID, process.env.YOUTUBE_CLIENT_SECRET);
   oauth2Client.setCredentials({ refresh_token: refreshToken });
   const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
@@ -159,6 +159,14 @@ async function uploadToYoutube(videoPath, title, description, refreshToken) {
     },
     media: { body: fs.createReadStream(videoPath) },
   });
+  if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+    try {
+      await youtube.thumbnails.set({ videoId: res.data.id, media: { body: fs.createReadStream(thumbnailPath) } });
+      console.log('サムネイル設定完了');
+    } catch (e) {
+      console.log('サムネイル設定失敗:', e.message);
+    }
+  }
   return res.data.id;
 }
 
@@ -236,6 +244,23 @@ async function main() {
   });
   console.log(`完成: ${videoPath}`);
 
+  let thumbnailPath;
+  if (script.thumbnailText) {
+    thumbnailPath = path.join(outDir, 'thumbnail.png');
+    const thumbProps = {
+      text: script.thumbnailText,
+      kicker: script.thumbnailKicker || '',
+      footer: script.footer || '',
+      accentIndex: Math.floor(Math.random() * 4),
+    };
+    const thumbPropsPath = path.join(outDir, 'thumb-props.json');
+    fs.writeFileSync(thumbPropsPath, JSON.stringify(thumbProps, null, 2));
+    execFileSync('npx', ['remotion', 'still', 'src/index.ts', 'Thumbnail', thumbnailPath, `--props=${thumbPropsPath}`], {
+      cwd: REMOTION_DIR, timeout: 300000, stdio: 'inherit', shell: true,
+    });
+    console.log('サムネイル生成完了:', thumbnailPath);
+  }
+
   if (script.account) {
     const accountsJson = process.env.ACCOUNTS_JSON;
     if (!accountsJson) { console.log('ACCOUNTS_JSON未設定のためアップロードをスキップ'); return; }
@@ -245,7 +270,7 @@ async function main() {
     const cta = script.cta || '';
     const description = script.description + cta;
     try {
-      const videoId = await uploadToYoutube(videoPath, script.youtubeTitle, description, acc.refreshToken);
+      const videoId = await uploadToYoutube(videoPath, script.youtubeTitle, description, acc.refreshToken, thumbnailPath);
       console.log('アップロード完了: https://youtu.be/' + videoId);
     } catch (e) {
       console.log('アップロード失敗:', e.message);

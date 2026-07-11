@@ -1,7 +1,8 @@
-import { Composition } from "remotion";
+import { Composition, Still } from "remotion";
 import { MyVideo } from "./MyVideo";
 import { SlideVideo } from "./SlideVideo";
 import { RichSlideVideo } from "./RichSlideVideo";
+import { Thumbnail } from "./Thumbnail";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -71,6 +72,18 @@ export const RemotionRoot: React.FC = () => {
           0
         );
         return { durationInFrames: total };
+      }}
+    />
+    <Still
+      id="Thumbnail"
+      component={Thumbnail}
+      width={1280}
+      height={720}
+      defaultProps={{
+        text: "サンプル\n**サムネイル**",
+        kicker: "サンプル",
+        footer: "伊勢 聖",
+        accentIndex: 0,
       }}
     />
     </>
