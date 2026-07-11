@@ -17,9 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Generate image and post to Threads
+      - name: Post text to Threads
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           THREADS_TOKEN_KO_GI_OMOTI: ${{ secrets.THREADS_TOKEN_KO_GI_OMOTI }}
         run: node scripts/post-corgi.js
