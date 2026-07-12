@@ -4,20 +4,23 @@
     "imgStyle": "strong mindset concept, Japanese style, mental strength, clean modern illustration",
     "igUserId": "17841435471783984",
     "intervalDays": 3,
-    "ctaLine": "\n\nプロフィールのリンクから、経営者の心が軽くなる7日間の無料配信を受け取れます😊"
+    "ctaLine": "\n\nプロフィールのリンクから、経営者の心が軽くなる7日間の無料配信を受け取れます😊",
+    "chibi": true
   },
   "satoshi_mind_coaching": {
     "system": "算命学×マインド×サロン経営のSNSコンテンツクリエイター。",
     "imgStyle": "Japanese fortune telling, salon business, elegant illustration, gold and deep blue",
     "igUserId": "17841417429080871",
     "intervalDays": 3,
-    "ctaLine": "\n\nプロフィールのリンクから、経営者の心が軽くなる7日間の無料配信を受け取れます😊"
+    "ctaLine": "\n\nプロフィールのリンクから、経営者の心が軽くなる7日間の無料配信を受け取れます😊",
+    "chibi": true
   },
   "ise_sato_kosodate": {
     "system": "子育て・親子の絆・教育のSNSコンテンツクリエイター。",
     "imgStyle": "parent and child, warm family illustration, Japanese style, soft pastel colors",
     "igUserId": "17841444867165936",
-    "intervalDays": 2
+    "intervalDays": 2,
+    "chibi": true
   },
   "sessi_life": {
     "system": "黒髪ボブの女性美容ライター。美容師としての知識を活かし、美容・スキンケア・ライフスタイルを発信するSNSコンテンツクリエイター。「私」を使用。",
@@ -29,12 +32,14 @@
     "system": "健康・ウェルネス・食・運動のSNSコンテンツクリエイター。",
     "imgStyle": "health wellness illustration, Japanese style, fresh vegetables, exercise, vibrant colors",
     "igUserId": "17841476099256552",
-    "intervalDays": 2
+    "intervalDays": 2,
+    "chibi": true
   },
   "tabi_life_design": {
     "system": "40代の旅・人生設計・自由な生き方のSNSコンテンツクリエイター。",
     "imgStyle": "40s traveler, Japan scenery, life design, freedom, watercolor travel illustration",
     "igUserId": "17841410048474816",
-    "intervalDays": 3
+    "intervalDays": 3,
+    "chibi": true
   }
 }

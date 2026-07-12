@@ -3,6 +3,7 @@ import { MyVideo } from "./MyVideo";
 import { SlideVideo } from "./SlideVideo";
 import { RichSlideVideo } from "./RichSlideVideo";
 import { Thumbnail } from "./Thumbnail";
+import { TalkingChibi } from "./TalkingChibi";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -72,6 +73,17 @@ export const RemotionRoot: React.FC = () => {
           0
         );
         return { durationInFrames: total };
+      }}
+    />
+    <Composition
+      id="TalkingChibi"
+      component={TalkingChibi}
+      durationInFrames={663}
+      fps={30}
+      width={1080}
+      height={1350}
+      defaultProps={{
+        audioSrc: "satoshi_chibi/test_audio.wav",
       }}
     />
     <Still

@@ -82,8 +82,9 @@ async function generateScenario(systemPrompt) {
           `見出しはそのシーンのナレーションの要点を6〜12文字で言い切る短いフレーズ（体言止めや短い断言。例:「旅費が高い問題」「1日3000円でOK」）。` +
           `要点リストは各シーンに必ず3個、1個5〜14文字の具体的な補足（例:「宿は素泊まりでいい」「移動は鈍行が安い」「予約は3週間前まで」）。ナレーションと同じ文の繰り返しではなく、画面を読んだ人が得する追加情報にすること。シーン11の要点は動画全体の要点まとめ3つにすること。` +
           `さらに各シーンの実写映像検索キーワード（そのシーンの内容に合う映像を表す英語2〜4語。例: "rainy window city night"）も作ってください。` +
-          `この台本・見出し・要点リスト・検索キーワードとInstagramキャプション（150文字以内）をJSONで返してください。` +
-          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列]}`,
+          `さらに各シーンで画面に映る解説キャラクターのポーズを次の候補から1つずつ選んでください: "default"(口パクで喋る・基本), "arms_crossed"(腕組み・問題提起), "thinking"(考える・悩み), "explaining"(説明), "pointing_left"(指差し・注目), "guts"(ガッツポーズ・励まし), "thumbs_up"(いいね・肯定), "bowing"(お辞儀・挨拶)。半分以上のシーンは"default"にして、内容に特に合う場面だけ他のポーズを使うこと。` +
+          `この台本・見出し・要点リスト・検索キーワード・ポーズとInstagramキャプション（150文字以内）をJSONで返してください。` +
+          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列],"chibi_poses":[${SCENE_COUNT}個の文字列]}`,
       },
     ],
     max_tokens: 2800,
@@ -109,11 +110,18 @@ async function generateScenario(systemPrompt) {
     if (!Array.isArray(p)) return [];
     return p.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 3);
   });
+  // ちびキャラのポーズ(不正値はdefault=口パクに落とす)
+  const VALID_POSES = ['default', 'arms_crossed', 'bowing', 'explaining', 'guts', 'pointing_left', 'thinking', 'thumbs_up'];
+  const chibiPoses = Array.from({ length: SCENE_COUNT }, (_, i) => {
+    const p = Array.isArray(data.chibi_poses) ? String(data.chibi_poses[i] || '').trim() : '';
+    return VALID_POSES.includes(p) ? p : 'default';
+  });
   return {
     caption: data.caption || systemPrompt,
     narrations,
     headlines,
     points,
+    chibiPoses,
     brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
   };
 }
@@ -225,7 +233,7 @@ function getAudioDuration(audioPath) {
   }
 }
 
-function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir) {
+function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir, useChibi, chibiPoses) {
   // 手描きスケッチ風カード。B-rollシーンは実写背景の上にカードを重ねる
   const scenes = narrations.map((narration, i) => {
     const scenePoints = points[i] || [];
@@ -238,14 +246,27 @@ function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, out
       video: videoBySlot[i] || '',
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
       durationInSeconds: Math.max(minDuration, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
+      pose: (chibiPoses && chibiPoses[i]) || 'default',
     };
   });
   const propsPath = path.join(outDir, 'remotion_props.json');
-  fs.writeFileSync(propsPath, JSON.stringify({ scenes }), 'utf-8');
+  fs.writeFileSync(propsPath, JSON.stringify({ scenes, chibi: Boolean(useChibi) }), 'utf-8');
 
   const remotionDir = path.join(__dirname, '..', 'remotion');
   // public-dirが実行ごとのoutDirになるため、BGMファイルもここにコピーしておく
   fs.copyFileSync(path.join(remotionDir, 'assets', 'bgm.mp3'), path.join(outDir, 'bgm.mp3'));
+  if (useChibi) {
+    // ちびキャラの口差分・ポーズ画像もpublic-dir(outDir)に置く
+    const chibiSrc = path.join(remotionDir, 'assets', 'satoshi_chibi');
+    const chibiDst = path.join(outDir, 'satoshi_chibi');
+    fs.mkdirSync(path.join(chibiDst, 'poses'), { recursive: true });
+    for (const f of fs.readdirSync(chibiSrc)) {
+      if (f.startsWith('mouth_')) fs.copyFileSync(path.join(chibiSrc, f), path.join(chibiDst, f));
+    }
+    for (const f of fs.readdirSync(path.join(chibiSrc, 'poses'))) {
+      fs.copyFileSync(path.join(chibiSrc, 'poses', f), path.join(chibiDst, 'poses', f));
+    }
+  }
 
   const videoPath = path.join(outDir, 'video.mp4');
   execFileSync(
@@ -417,7 +438,7 @@ async function main() {
   console.log(`[${account}] broll slots:`, Object.keys(videoBySlot).join(',') || 'none');
 
   const audioPaths = await generateTTS(scenario.narrations, outDir);
-  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir);
+  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses);
   console.log(`[${account}] video rendered:`, videoPath);
 
   // マインド系アカウントはキャプション末尾にLINE誘導を固定で追加

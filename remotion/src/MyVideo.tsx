@@ -12,6 +12,7 @@ import {
 } from "remotion";
 import { loadFont as loadYusei } from "@remotion/google-fonts/YuseiMagic";
 import { loadFont as loadMaru } from "@remotion/google-fonts/MPLUSRounded1c";
+import { ChibiOverlay, ChibiPose } from "./ChibiOverlay";
 
 // 手描きマーカー風フォント（見出し用）と丸ゴシック（字幕用）
 const { fontFamily: yuseiMagic } = loadYusei("normal", { weights: ["400"] });
@@ -24,10 +25,15 @@ type Scene = {
   video?: string;
   audio: string;
   durationInSeconds: number;
+  // ちびキャラのポーズ名(ChibiOverlayのCHIBI_POSES)。"default"は口パク、それ以外は静止ポーズ
+  pose?: string;
 };
 
 type Props = {
   scenes: Scene[];
+  // trueのとき聖さんちびキャラのワイプ(口パク)を全シーンに重ねる。
+  // アカウント設定(wf4_accounts.jsonのchibi)から渡ってくる。女性設定のsessi_lifeでは使わない。
+  chibi?: boolean;
 };
 
 const FPS = 30;
@@ -79,7 +85,8 @@ const SceneView: React.FC<{
   durationInFrames: number;
   index: number;
   total: number;
-}> = ({ scene, durationInFrames, index, total }) => {
+  chibi?: boolean;
+}> = ({ scene, durationInFrames, index, total, chibi }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -309,11 +316,14 @@ const SceneView: React.FC<{
           {scene.narration}
         </div>
       </AbsoluteFill>
+
+      {/* 聖さんちびキャラのワイプ(音声に合わせて口パク・シーンによってポーズ切り替え) */}
+      {chibi && scene.audio ? <ChibiOverlay audioSrc={scene.audio} pose={scene.pose as ChibiPose | undefined} /> : null}
     </AbsoluteFill>
   );
 };
 
-export const MyVideo: React.FC<Props> = ({ scenes }) => {
+export const MyVideo: React.FC<Props> = ({ scenes, chibi }) => {
   let startFrame = 0;
   const items = scenes.map((scene, i) => {
     const durationInFrames = Math.round(scene.durationInSeconds * FPS);
@@ -321,7 +331,7 @@ export const MyVideo: React.FC<Props> = ({ scenes }) => {
     startFrame += durationInFrames;
     return (
       <Sequence key={i} from={from} durationInFrames={durationInFrames}>
-        <SceneView scene={scene} durationInFrames={durationInFrames} index={i} total={scenes.length} />
+        <SceneView scene={scene} durationInFrames={durationInFrames} index={i} total={scenes.length} chibi={chibi} />
       </Sequence>
     );
   });
