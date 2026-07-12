@@ -260,11 +260,15 @@ function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, out
     const chibiSrc = path.join(remotionDir, 'assets', 'satoshi_chibi');
     const chibiDst = path.join(outDir, 'satoshi_chibi');
     fs.mkdirSync(path.join(chibiDst, 'poses'), { recursive: true });
+    fs.mkdirSync(path.join(chibiDst, 'se'), { recursive: true });
     for (const f of fs.readdirSync(chibiSrc)) {
       if (f.startsWith('mouth_')) fs.copyFileSync(path.join(chibiSrc, f), path.join(chibiDst, f));
     }
     for (const f of fs.readdirSync(path.join(chibiSrc, 'poses'))) {
       fs.copyFileSync(path.join(chibiSrc, 'poses', f), path.join(chibiDst, 'poses', f));
+    }
+    for (const f of fs.readdirSync(path.join(chibiSrc, 'se'))) {
+      fs.copyFileSync(path.join(chibiSrc, 'se', f), path.join(chibiDst, 'se', f));
     }
   }
 
