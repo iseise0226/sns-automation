@@ -27,6 +27,8 @@ type Scene = {
   durationInSeconds: number;
   // ちびキャラのポーズ名(ChibiOverlayのCHIBI_POSES)。"default"は口パク、それ以外は静止ポーズ
   pose?: string;
+  // ナレーション内容に台本生成側のAIが合うと判断した時だけ入る効果音ファイル名(拡張子なし)。無ければ鳴らさない
+  se?: string;
 };
 
 type Props = {
@@ -129,6 +131,7 @@ const SceneView: React.FC<{
   return (
     <AbsoluteFill style={{ opacity, backgroundColor: hasVideo ? "black" : PAPER }}>
       {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
+      {scene.se ? <Audio src={staticFile(`se/${scene.se}.mp3`)} volume={0.55} /> : null}
 
       {hasVideo ? (
         <>

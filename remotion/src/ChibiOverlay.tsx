@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, Img, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 
 // 聖さんちびキャラを動画右下に固定表示するワイプ。
@@ -11,8 +11,7 @@ import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 // ポーズ切り替え: scene.poseにAI(台本生成側)がシーン内容から選んだポーズ名が入る。
 // "default"(=指差し口パクセット)以外は口差分を持たない静止ポーズ画像(体の動きフォルダ由来)を
 // そのまま表示する。口パクは無いが、要所でポーズが変わることで単調さを防ぐ。
-// ポーズが切り替わったシーンの頭で、そのポーズ専用のSE(satoshi_chibi/se/<pose>.mp3)を1回だけ鳴らす
-// (Sequenceで包まれているためChibiOverlayは各シーンでframe=0からマウントし直される)。
+// (SEはポーズ連動ではなく、MyVideo側でナレーション内容に応じてAIが選ぶ独立の仕組みになっている)
 
 const ASSET_DIR = "satoshi_chibi";
 const MOUTH_OPEN = `${ASSET_DIR}/mouth_open.png`;
@@ -68,7 +67,6 @@ export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({ audioSrc, pose = "de
 
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
-      {pose !== "default" ? <Audio src={staticFile(`${ASSET_DIR}/se/${pose}.mp3`)} volume={0.7} /> : null}
       <div
         style={{
           position: "absolute",

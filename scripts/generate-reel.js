@@ -83,8 +83,9 @@ async function generateScenario(systemPrompt) {
           `要点リストは各シーンに必ず3個、1個5〜14文字の具体的な補足（例:「宿は素泊まりでいい」「移動は鈍行が安い」「予約は3週間前まで」）。ナレーションと同じ文の繰り返しではなく、画面を読んだ人が得する追加情報にすること。シーン11の要点は動画全体の要点まとめ3つにすること。` +
           `さらに各シーンの実写映像検索キーワード（そのシーンの内容に合う映像を表す英語2〜4語。例: "rainy window city night"）も作ってください。` +
           `さらに各シーンで画面に映る解説キャラクターのポーズを次の候補から1つずつ選んでください: "default"(口パクで喋る・基本), "arms_crossed"(腕組み・問題提起), "thinking"(考える・悩み), "explaining"(説明), "pointing_left"(指差し・注目), "guts"(ガッツポーズ・励まし), "thumbs_up"(いいね・肯定), "bowing"(お辞儀・挨拶)。半分以上のシーンは"default"にして、内容に特に合う場面だけ他のポーズを使うこと。` +
-          `この台本・見出し・要点リスト・検索キーワード・ポーズとInstagramキャプション（150文字以内）をJSONで返してください。` +
-          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列],"chibi_poses":[${SCENE_COUNT}個の文字列]}`,
+          `さらに、ナレーションの内容に効果音がハマるシーンだけ、次の候補から1つ選んでください（合う場面が無いシーンはnullのままでよい。無理に全シーンに入れないこと。目安は12シーン中2〜4個程度）: "kakan_impact"(コツンと軽い衝撃・失敗や気づき), "cancel"(否定・やめる・キャンセル), "kira_sparkle"(キラッと閃き・良いこと), "chiin_disappointment"(チーン・がっかり・落ち込み), "don_impact"(ドンと強い決意・インパクト), "pa_switch"(パッと場面転換・切り替え), "papa_quick_switch"(テンポよく2段階の切り替え), "register_payment"(お金・購入・レジ), "small_punch"(軽いツッコミ), "kotsuzumi_japanese"(和風の間・情緒), "hyoshigi1_japanese"(拍子木・和風の場面転換1), "hyoshigi2_japanese"(拍子木・和風の場面転換2), "decide1_button"(決定・確定1), "decide2_button"(決定・確定2), "suzu1_bell"(鈴・キラキラした気づき), "suzu2_bell_ring"(鈴・お知らせ・合図)。` +
+          `この台本・見出し・要点リスト・検索キーワード・ポーズ・効果音とInstagramキャプション（150文字以内）をJSONで返してください。` +
+          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列],"chibi_poses":[${SCENE_COUNT}個の文字列],"se":[${SCENE_COUNT}個の「文字列またはnull」]}`,
       },
     ],
     max_tokens: 2800,
@@ -116,12 +117,23 @@ async function generateScenario(systemPrompt) {
     const p = Array.isArray(data.chibi_poses) ? String(data.chibi_poses[i] || '').trim() : '';
     return VALID_POSES.includes(p) ? p : 'default';
   });
+  // 効果音(内容に合う場面だけAIが選ぶ。不正値・null・空文字は「鳴らさない」)
+  const VALID_SE = [
+    'kakan_impact', 'cancel', 'kira_sparkle', 'chiin_disappointment', 'don_impact', 'pa_switch',
+    'papa_quick_switch', 'register_payment', 'small_punch', 'kotsuzumi_japanese', 'hyoshigi1_japanese',
+    'hyoshigi2_japanese', 'decide1_button', 'decide2_button', 'suzu1_bell', 'suzu2_bell_ring',
+  ];
+  const seChoices = Array.from({ length: SCENE_COUNT }, (_, i) => {
+    const s = Array.isArray(data.se) ? String(data.se[i] || '').trim() : '';
+    return VALID_SE.includes(s) ? s : null;
+  });
   return {
     caption: data.caption || systemPrompt,
     narrations,
     headlines,
     points,
     chibiPoses,
+    seChoices,
     brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
   };
 }
@@ -233,7 +245,7 @@ function getAudioDuration(audioPath) {
   }
 }
 
-function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir, useChibi, chibiPoses) {
+function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir, useChibi, chibiPoses, seChoices) {
   // 手描きスケッチ風カード。B-rollシーンは実写背景の上にカードを重ねる
   const scenes = narrations.map((narration, i) => {
     const scenePoints = points[i] || [];
@@ -247,28 +259,31 @@ function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, out
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
       durationInSeconds: Math.max(minDuration, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
       pose: (chibiPoses && chibiPoses[i]) || 'default',
+      se: (seChoices && seChoices[i]) || null,
     };
   });
   const propsPath = path.join(outDir, 'remotion_props.json');
   fs.writeFileSync(propsPath, JSON.stringify({ scenes, chibi: Boolean(useChibi) }), 'utf-8');
 
   const remotionDir = path.join(__dirname, '..', 'remotion');
-  // public-dirが実行ごとのoutDirになるため、BGMファイルもここにコピーしておく
+  // public-dirが実行ごとのoutDirになるため、BGM・効果音ファイルもここにコピーしておく
   fs.copyFileSync(path.join(remotionDir, 'assets', 'bgm.mp3'), path.join(outDir, 'bgm.mp3'));
+  const seSrc = path.join(remotionDir, 'assets', 'se');
+  const seDst = path.join(outDir, 'se');
+  fs.mkdirSync(seDst, { recursive: true });
+  for (const f of fs.readdirSync(seSrc)) {
+    fs.copyFileSync(path.join(seSrc, f), path.join(seDst, f));
+  }
   if (useChibi) {
     // ちびキャラの口差分・ポーズ画像もpublic-dir(outDir)に置く
     const chibiSrc = path.join(remotionDir, 'assets', 'satoshi_chibi');
     const chibiDst = path.join(outDir, 'satoshi_chibi');
     fs.mkdirSync(path.join(chibiDst, 'poses'), { recursive: true });
-    fs.mkdirSync(path.join(chibiDst, 'se'), { recursive: true });
     for (const f of fs.readdirSync(chibiSrc)) {
       if (f.startsWith('mouth_')) fs.copyFileSync(path.join(chibiSrc, f), path.join(chibiDst, f));
     }
     for (const f of fs.readdirSync(path.join(chibiSrc, 'poses'))) {
       fs.copyFileSync(path.join(chibiSrc, 'poses', f), path.join(chibiDst, 'poses', f));
-    }
-    for (const f of fs.readdirSync(path.join(chibiSrc, 'se'))) {
-      fs.copyFileSync(path.join(chibiSrc, 'se', f), path.join(chibiDst, 'se', f));
     }
   }
 
@@ -442,7 +457,7 @@ async function main() {
   console.log(`[${account}] broll slots:`, Object.keys(videoBySlot).join(',') || 'none');
 
   const audioPaths = await generateTTS(scenario.narrations, outDir);
-  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses);
+  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses, scenario.seChoices);
   console.log(`[${account}] video rendered:`, videoPath);
 
   // マインド系アカウントはキャプション末尾にLINE誘導を固定で追加
