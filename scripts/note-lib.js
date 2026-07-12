@@ -73,6 +73,30 @@ async function groqChat(messages, maxTokens, jsonMode) {
   throw new Error('Groq API呼び出し失敗（リトライ上限）');
 }
 
+async function fetchPexelsImage(query) {
+  const key = (process.env.PEXELS_API_KEY || '').trim();
+  if (!key) return null;
+  const res = await req(
+    `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=portrait`,
+    { headers: { Authorization: key } }
+  );
+  const photoUrl = res.json?.photos?.[0]?.src?.large;
+  if (!photoUrl) return null;
+  return reqBinary(photoUrl, {});
+}
+
+async function fetchPixabayImage(query) {
+  const key = (process.env.PIXABAY_API_KEY || '').trim();
+  if (!key) return null;
+  const res = await req(
+    `https://pixabay.com/api/?key=${key}&q=${encodeURIComponent(query)}&image_type=photo&orientation=vertical&per_page=3&safesearch=true`,
+    {}
+  );
+  const photoUrl = res.json?.hits?.[0]?.largeImageURL;
+  if (!photoUrl) return null;
+  return reqBinary(photoUrl, {});
+}
+
 async function fetchUnsplashImage(query) {
   const key = (process.env.UNSPLASH_API_KEY || '').trim();
   const res = await req(
@@ -82,6 +106,23 @@ async function fetchUnsplashImage(query) {
   const photoUrl = res.json?.results?.[0]?.urls?.regular;
   if (!photoUrl) return null;
   return reqBinary(photoUrl, {});
+}
+
+// Pexels→Pixabay→Unsplashの順で試し、最初に取れた画像を返す
+async function fetchStockImage(query) {
+  try {
+    const buf = await fetchPexelsImage(query);
+    if (buf && buf.length) return buf;
+  } catch (e) {}
+  try {
+    const buf = await fetchPixabayImage(query);
+    if (buf && buf.length) return buf;
+  } catch (e) {}
+  try {
+    const buf = await fetchUnsplashImage(query);
+    if (buf && buf.length) return buf;
+  } catch (e) {}
+  return null;
 }
 
 async function getBraveTrends() {
@@ -95,4 +136,4 @@ async function getBraveTrends() {
   return results.slice(0, 3).map((r) => r.title).join('、');
 }
 
-module.exports = { req, reqBinary, groqChat, fetchUnsplashImage, getBraveTrends };
+module.exports = { req, reqBinary, groqChat, fetchUnsplashImage, fetchPexelsImage, fetchPixabayImage, fetchStockImage, getBraveTrends };

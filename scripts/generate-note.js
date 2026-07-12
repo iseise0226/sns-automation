@@ -1,7 +1,7 @@
 // WF1: 指定アカウントのNote記事(章立て+本文+画像)を生成し、note_drafts/<account>/<date>/に保存
 const fs = require('fs');
 const path = require('path');
-const { groqChat, fetchUnsplashImage } = require('./note-lib');
+const { groqChat, fetchStockImage } = require('./note-lib');
 
 const EMOJIS = ['👇🏻', '💬', '✨', '👉', '🕰️', '🌱'];
 
@@ -54,7 +54,9 @@ async function attachImages(content, outDir) {
         {
           role: 'user',
           content:
-            '以下の記事の雰囲気に合う、5枚分の英語の検索キーワード（2〜3語、Unsplash検索用）をJSON配列で返してください。{"keywords":["k1","k2","k3","k4","k5"]}\n\n記事:\n' +
+            '以下は有料note記事の冒頭（無料公開部分）です。読者が「続きを読みたい／買いたい」と感じるような、雰囲気の良い写真を5枚選びたいです。' +
+            '記事の世界観に合う、英語の検索キーワードを5個（2〜3語、ストックフォト検索用）JSON配列で返してください。' +
+            '温かみ・希望・成長・丁寧な暮らしを感じさせるような画像が合います。{"keywords":["k1","k2","k3","k4","k5"]}\n\n記事:\n' +
             content.slice(0, 1000),
         },
       ],
@@ -69,7 +71,7 @@ async function attachImages(content, outDir) {
   const imgFilenames = [];
   for (let i = 0; i < Math.min(5, keywords.length); i++) {
     try {
-      const buf = await fetchUnsplashImage(keywords[i]);
+      const buf = await fetchStockImage(keywords[i]);
       if (buf) {
         const fname = `image${i + 1}.jpg`;
         fs.writeFileSync(path.join(outDir, fname), buf);
@@ -79,21 +81,32 @@ async function attachImages(content, outDir) {
       // この1枚はスキップ
     }
   }
+  if (!imgFilenames.length) return content;
 
   const parts = content.split('\n\n');
-  const candidateIdx = [];
-  for (let i = 1; i < parts.length; i++) candidateIdx.push(i);
-  for (let i = candidateIdx.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [candidateIdx[i], candidateIdx[j]] = [candidateIdx[j], candidateIdx[i]];
-  }
-  const insertPositions = candidateIdx.slice(0, imgFilenames.length).sort((a, b) => a - b);
 
+  // 1枚目は冒頭直後（無料部分の一番目立つ位置）に固定で置き、続きを読みたくなるフックにする
   let offset = 0;
-  for (let i = 0; i < insertPositions.length; i++) {
-    parts.splice(insertPositions[i] + offset, 0, `📷【ここに画像${i + 1}を挿入: ${imgFilenames[i]}】`);
-    offset += 1;
+  parts.splice(1, 0, `📷【ここに画像1を挿入: ${imgFilenames[0]}】`);
+  offset += 1;
+
+  // 残りはランダムな段落間に分散
+  const remaining = imgFilenames.slice(1);
+  if (remaining.length) {
+    const candidateIdx = [];
+    for (let i = 2 + offset; i < parts.length; i++) candidateIdx.push(i);
+    for (let i = candidateIdx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidateIdx[i], candidateIdx[j]] = [candidateIdx[j], candidateIdx[i]];
+    }
+    const positions = candidateIdx.slice(0, remaining.length).sort((a, b) => a - b);
+    let extraOffset = 0;
+    for (let i = 0; i < positions.length; i++) {
+      parts.splice(positions[i] + extraOffset, 0, `📷【ここに画像${i + 2}を挿入: ${remaining[i]}】`);
+      extraOffset += 1;
+    }
   }
+
   return parts.join('\n\n');
 }
 
