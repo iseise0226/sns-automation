@@ -74,6 +74,9 @@ async function getThreadsFollowers(account) {
       `https://graph.threads.net/v1.0/${userId}/threads_insights?metric=followers_count&access_token=${encodeURIComponent(token)}`
     );
     const value = res.json?.data?.[0]?.total_value?.value;
+    if (typeof value !== 'number') {
+      console.error(`[threads:${account}] no value, status=${res.status} body=${JSON.stringify(res.json)}`);
+    }
     return typeof value === 'number' ? value : null;
   } catch (e) {
     console.error(`[threads:${account}] error:`, e.message);
