@@ -1,0 +1,44 @@
+name: WF7 Weekly Stats
+
+on:
+  schedule:
+    # 毎週月曜 JST9時 = UTC 前日(日曜)24時
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Collect weekly stats
+        env:
+          THREADS_TOKEN_ISE_SATOSHI: ${{ secrets.THREADS_TOKEN_ISE_SATOSHI }}
+          THREADS_TOKEN_SATOSHI_MINDSET: ${{ secrets.THREADS_TOKEN_SATOSHI_MINDSET }}
+          THREADS_TOKEN_SATOSHI_MIND_COACHING: ${{ secrets.THREADS_TOKEN_SATOSHI_MIND_COACHING }}
+          THREADS_TOKEN_ISE_SATO_KOSODATE: ${{ secrets.THREADS_TOKEN_ISE_SATO_KOSODATE }}
+          THREADS_TOKEN_SESSI_LIFE: ${{ secrets.THREADS_TOKEN_SESSI_LIFE }}
+          THREADS_TOKEN_ISE_KENKOU_OTAKU: ${{ secrets.THREADS_TOKEN_ISE_KENKOU_OTAKU }}
+          THREADS_TOKEN_TABI_LIFE_DESIGN40: ${{ secrets.THREADS_TOKEN_TABI_LIFE_DESIGN40 }}
+          THREADS_TOKEN_KO_GI_OMOTI: ${{ secrets.THREADS_TOKEN_KO_GI_OMOTI }}
+          IG_TOKEN_SATOSHI_MINDSET: ${{ secrets.IG_TOKEN_SATOSHI_MINDSET }}
+          IG_TOKEN_SATOSHI_MIND_COACHING: ${{ secrets.IG_TOKEN_SATOSHI_MIND_COACHING }}
+          IG_TOKEN_ISE_SATO_KOSODATE: ${{ secrets.IG_TOKEN_ISE_SATO_KOSODATE }}
+          IG_TOKEN_SESSI_LIFE: ${{ secrets.IG_TOKEN_SESSI_LIFE }}
+          IG_TOKEN_ISE_KENKOU_OTAKU: ${{ secrets.IG_TOKEN_ISE_KENKOU_OTAKU }}
+          IG_TOKEN_TABI_LIFE_DESIGN: ${{ secrets.IG_TOKEN_TABI_LIFE_DESIGN }}
+          IG_TOKEN_KO_GI_OMOTI: ${{ secrets.IG_TOKEN_KO_GI_OMOTI }}
+          LH_ADMIN_API_KEY: ${{ secrets.LH_ADMIN_API_KEY }}
+        run: node scripts/weekly-stats.js
+      - name: Commit weekly_stats.csv
+        run: |
+          git config user.name "wf7-bot"
+          git config user.email "wf7-bot@users.noreply.github.com"
+          git add data/weekly_stats.csv
+          git diff --cached --quiet || git commit -m "chore: WF7 weekly stats $(date +%F)"
+          git push || echo "push失敗(無視)"
