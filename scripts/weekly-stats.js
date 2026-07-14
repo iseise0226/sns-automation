@@ -92,6 +92,9 @@ async function getIgFollowers(account) {
     const res = await req(
       `https://graph.facebook.com/v23.0/${igUserId}?fields=followers_count&access_token=${encodeURIComponent(token)}`
     );
+    if (typeof res.json?.followers_count !== 'number') {
+      console.error(`[ig:${account}] no value, status=${res.status} body=${JSON.stringify(res.json)}`);
+    }
     return typeof res.json?.followers_count === 'number' ? res.json.followers_count : null;
   } catch (e) {
     console.error(`[ig:${account}] error:`, e.message);
