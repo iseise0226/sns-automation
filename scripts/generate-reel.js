@@ -134,8 +134,32 @@ async function generateScenario(systemPrompt) {
     points,
     chibiPoses,
     seChoices,
+    layouts: randomizeLayouts(points),
     brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
   };
+}
+
+// 各シーンの要点カードの見せ方(レイアウト)をコード側でランダムに割り当てる(AI任せだと偏る/連続するため)
+// 要点の個数に合わないレイアウトは除外し、直前と同じレイアウトは避ける
+const ALL_LAYOUTS = ['stack', 'panels', 'row', 'compare', 'timeline', 'grid', 'pyramid', 'meter'];
+function compatibleLayouts(pointCount) {
+  return ALL_LAYOUTS.filter((l) => {
+    if (l === 'compare') return pointCount === 2;
+    if (l === 'grid' || l === 'timeline' || l === 'pyramid' || l === 'meter') return pointCount >= 2 && pointCount <= 4;
+    return pointCount >= 1;
+  });
+}
+function randomizeLayouts(pointsPerScene) {
+  let prevLayout = null;
+  return pointsPerScene.map((pts) => {
+    const count = (pts || []).length;
+    if (count === 0) return { layout: 'stack' };
+    const candidates = compatibleLayouts(count).filter((l) => l !== prevLayout);
+    const pool = candidates.length ? candidates : compatibleLayouts(count);
+    const layout = pool[Math.floor(Math.random() * pool.length)];
+    prevLayout = layout;
+    return { layout, separator: layout === 'compare' ? '≠' : layout === 'row' ? '→' : undefined };
+  });
 }
 
 async function fetchPexelsVideo(keyword, usedIds) {
@@ -245,16 +269,19 @@ function getAudioDuration(audioPath) {
   }
 }
 
-function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir, useChibi, chibiPoses, seChoices) {
+function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir, useChibi, chibiPoses, seChoices, layouts) {
   // 手描きスケッチ風カード。B-rollシーンは実写背景の上にカードを重ねる
   const scenes = narrations.map((narration, i) => {
     const scenePoints = points[i] || [];
     // カード3枚を読む時間を確保するため最低尺を延ばす
     const minDuration = scenePoints.length >= 2 ? 4.2 : 2.8;
+    const layoutInfo = (layouts && layouts[i]) || { layout: 'stack' };
     return {
       headline: headlines[i] || '',
       narration: narration || '',
       points: scenePoints,
+      layout: layoutInfo.layout,
+      separator: layoutInfo.separator,
       video: videoBySlot[i] || '',
       audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
       durationInSeconds: Math.max(minDuration, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
@@ -457,7 +484,7 @@ async function main() {
   console.log(`[${account}] broll slots:`, Object.keys(videoBySlot).join(',') || 'none');
 
   const audioPaths = await generateTTS(scenario.narrations, outDir);
-  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses, scenario.seChoices);
+  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses, scenario.seChoices, scenario.layouts);
   console.log(`[${account}] video rendered:`, videoPath);
 
   // マインド系アカウントはキャプション末尾にLINE誘導を固定で追加

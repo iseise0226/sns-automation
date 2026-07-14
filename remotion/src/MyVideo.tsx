@@ -22,6 +22,9 @@ type Scene = {
   headline: string;
   narration: string;
   points?: string[];
+  // 要点カードの見せ方(未指定時は従来通りの縦積み)。generate-reel.js側でシーンごとにランダム割り当てされる
+  layout?: "stack" | "row" | "compare" | "panels" | "timeline" | "grid" | "pyramid" | "meter";
+  separator?: string; // row(→)/compare(≠)の区切り記号
   video?: string;
   audio: string;
   durationInSeconds: number;
@@ -80,6 +83,430 @@ function renderMarked(text: string) {
 const sketchBorder: React.CSSProperties = {
   border: `5px solid ${INK}`,
   borderRadius: "255px 25px 225px 25px / 25px 225px 25px 255px",
+};
+
+// 要点カードの中身(番号バッジ+テキスト)。レイアウトごとにラッパーだけ変える
+const PointCard: React.FC<{ point: string; index: number; accent: string; compact?: boolean }> = ({
+  point,
+  index,
+  accent,
+  compact,
+}) => (
+  <>
+    <div
+      style={{
+        flexShrink: 0,
+        width: compact ? 46 : 58,
+        height: compact ? 46 : 58,
+        borderRadius: "50%",
+        border: `4px solid ${accent}`,
+        color: accent,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        fontSize: compact ? 26 : 32,
+        fontFamily: `'${yuseiMagic}', sans-serif`,
+        background: "#FFFFFF",
+      }}
+    >
+      {index + 1}
+    </div>
+    <div
+      style={{
+        fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+        fontSize: compact ? 34 : 44,
+        color: INK,
+        lineHeight: 1.4,
+        textAlign: "left",
+        flexGrow: 1,
+      }}
+    >
+      {renderMarked(point)}
+    </div>
+  </>
+);
+
+// 縦積み(既定): 1枚ずつ左右交互にポンッと積み上がる
+const StackPoints: React.FC<{ points: string[]; frame: number; fps: number; accent: string }> = ({
+  points,
+  frame,
+  fps,
+  accent,
+}) =>
+  points.map((point, i) => {
+    const cardT = frame - (18 + i * 12);
+    const s = spring({ frame: cardT, fps, config: { damping: 10, stiffness: 170, mass: 0.7 } });
+    const dir = i % 2 === 0 ? -1 : 1;
+    const tilts = [-1.5, 1.2, -1];
+    const cardFloat = cardT > 16 ? Math.sin((frame + i * 21) / 14) * 4 : 0;
+    return (
+      <div
+        key={i}
+        style={{
+          ...sketchBorder,
+          opacity: interpolate(cardT, [0, 5], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+          transform: `translateX(${(1 - s) * dir * 220}px) translateY(${cardFloat}px) rotate(${tilts[i] + (1 - s) * dir * 6}deg) scale(${0.4 + s * 0.6})`,
+          background: "#FFFFFF",
+          width: "94%",
+          padding: "26px 36px",
+          display: "flex",
+          alignItems: "center",
+          gap: 22,
+          boxShadow: "5px 6px 0 rgba(35,42,59,0.12)",
+        }}
+      >
+        <PointCard point={point} index={i} accent={accent} />
+      </div>
+    );
+  });
+
+// 横並び(row)/対比(compare): カードが横に並び、区切り記号(→/≠)で繋がる
+const RowPoints: React.FC<{
+  points: string[];
+  frame: number;
+  fps: number;
+  separator: string;
+  big: boolean;
+}> = ({ points, frame, fps, separator, big }) => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, width: "100%" }}>
+    {points.map((point, i) => {
+      const startAt = 16 + i * 14;
+      const s = spring({ frame: frame - startAt, fps, config: { damping: 12, stiffness: 160, mass: 0.6 } });
+      return (
+        <React.Fragment key={i}>
+          {i > 0 ? (
+            <div
+              style={{
+                fontFamily: `'${yuseiMagic}', sans-serif`,
+                fontSize: big ? 64 : 44,
+                color: INK,
+                opacity: frame >= startAt ? 1 : 0,
+              }}
+            >
+              {separator}
+            </div>
+          ) : null}
+          <div
+            style={{
+              ...sketchBorder,
+              opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+              transform: `translateY(${(1 - s) * 24}px) scale(${0.85 + s * 0.15})`,
+              background: "#FFFFFF",
+              flex: 1,
+              minWidth: 0,
+              padding: big ? "34px 30px" : "22px 22px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              gap: 12,
+              boxShadow: "5px 6px 0 rgba(35,42,59,0.12)",
+              fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+              fontSize: big ? 46 : 34,
+              lineHeight: 1.4,
+              color: INK,
+            }}
+          >
+            {renderMarked(point)}
+          </div>
+        </React.Fragment>
+      );
+    })}
+  </div>
+);
+
+// パネル(panels): ウィンドウ風カードが左から順にポンと現れる
+const PanelsPoints: React.FC<{ points: string[]; frame: number; fps: number; accent: (i: number) => string }> = ({
+  points,
+  frame,
+  fps,
+  accent,
+}) => (
+  <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 20, width: "100%" }}>
+    {points.map((point, i) => {
+      const startAt = 16 + i * 16;
+      const s = spring({ frame: frame - startAt, fps, config: { damping: 12, stiffness: 170, mass: 0.6 } });
+      const a = accent(i);
+      return (
+        <div
+          key={i}
+          style={{
+            opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+            transform: `translateX(${(1 - s) * -50}px) scale(${0.85 + s * 0.15})`,
+            flex: 1,
+            minWidth: 0,
+            background: "#FFFFFF",
+            border: `4px solid ${INK}`,
+            borderRadius: 16,
+            overflow: "hidden",
+            boxShadow: "5px 6px 0 rgba(35,42,59,0.12)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "10px 16px",
+              background: `${a}22`,
+              borderBottom: `3px solid ${INK}`,
+            }}
+          >
+            <div style={{ width: 12, height: 12, borderRadius: "50%", background: a }} />
+            <div style={{ width: 12, height: 12, borderRadius: "50%", background: `${a}88` }} />
+          </div>
+          <div
+            style={{
+              padding: "20px 16px",
+              minHeight: 120,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+              fontSize: 32,
+              lineHeight: 1.4,
+              color: INK,
+              textAlign: "center",
+            }}
+          >
+            {renderMarked(point)}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);
+
+// タイムライン(timeline): 一本の線の上を、上下交互のカードが左から現れる
+const TimelinePoints: React.FC<{ points: string[]; frame: number; fps: number; accent: (i: number) => string }> = ({
+  points,
+  frame,
+  fps,
+  accent,
+}) => (
+  <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>
+    <div
+      style={{
+        position: "absolute",
+        left: "4%",
+        right: "4%",
+        top: "50%",
+        height: 5,
+        background: "#DDD3BE",
+        transform: "translateY(-50%)",
+      }}
+    />
+    {points.map((point, i) => {
+      const startAt = 14 + i * 16;
+      const s = spring({ frame: frame - startAt, fps, config: { damping: 11, stiffness: 180, mass: 0.6 } });
+      const isTop = i % 2 === 0;
+      const a = accent(i);
+      const card = (
+        <div
+          style={{
+            fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+            fontSize: 28,
+            lineHeight: 1.35,
+            color: INK,
+            textAlign: "center",
+            background: "#FFFFFF",
+            border: `3px solid ${a}`,
+            borderRadius: 12,
+            padding: "12px 16px",
+            boxShadow: "4px 5px 0 rgba(35,42,59,0.1)",
+          }}
+        >
+          {renderMarked(point)}
+        </div>
+      );
+      return (
+        <div
+          key={i}
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+          }}
+        >
+          <div style={{ minHeight: 90, display: "flex", alignItems: "flex-end", marginBottom: isTop ? 14 : 0 }}>
+            {isTop ? card : null}
+          </div>
+          <div
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              background: a,
+              border: "4px solid #fff",
+              boxShadow: `0 0 0 3px ${a}`,
+              transform: `scale(${0.6 + s * 0.4})`,
+            }}
+          />
+          <div style={{ minHeight: 90, display: "flex", alignItems: "flex-start", marginTop: isTop ? 0 : 14 }}>
+            {!isTop ? card : null}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);
+
+// マス目(grid): マス目状に1個ずつ埋まっていく
+const GridPoints: React.FC<{ points: string[]; frame: number; fps: number; accent: (i: number) => string }> = ({
+  points,
+  frame,
+  fps,
+  accent,
+}) => (
+  <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 18, width: "100%" }}>
+    {points.map((point, i) => {
+      const startAt = 16 + i * 14;
+      const s = spring({ frame: frame - startAt, fps, config: { damping: 13, stiffness: 160, mass: 0.6 } });
+      const a = accent(i);
+      return (
+        <div
+          key={i}
+          style={{
+            opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+            transform: `scale(${0.8 + s * 0.2})`,
+            width: "44%",
+            minHeight: 120,
+            background: "#FFFFFF",
+            border: `4px solid ${a}`,
+            borderRadius: 16,
+            boxShadow: "5px 6px 0 rgba(35,42,59,0.1)",
+            display: "flex",
+            alignItems: "center",
+            padding: "18px 20px",
+            gap: 14,
+          }}
+        >
+          <PointCard point={point} index={i} accent={a} compact />
+        </div>
+      );
+    })}
+  </div>
+);
+
+// ピラミッド(pyramid): 下から順に土台が積み上がっていく(幅が狭まっていく)
+const PyramidPoints: React.FC<{ points: string[]; frame: number; fps: number; accent: (i: number) => string }> = ({
+  points,
+  frame,
+  fps,
+  accent,
+}) => {
+  const total = points.length;
+  const baseWidth = 88;
+  const shrink = baseWidth / (total + 1.4);
+  return (
+    <div style={{ display: "flex", flexDirection: "column-reverse", alignItems: "center", gap: 10, width: "100%" }}>
+      {points.map((point, i) => {
+        const startAt = 16 + i * 14;
+        const s = spring({ frame: frame - startAt, fps, config: { damping: 12, stiffness: 150, mass: 0.7 } });
+        const a = accent(i);
+        const widthPct = baseWidth - i * shrink;
+        return (
+          <div
+            key={i}
+            style={{
+              opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+              transform: `translateY(${(1 - s) * 22}px) scale(${0.9 + s * 0.1})`,
+              width: `${widthPct}%`,
+              background: "#FFFFFF",
+              border: `4px solid ${a}`,
+              borderRadius: 14,
+              padding: "16px 22px",
+              textAlign: "center",
+              boxShadow: "5px 6px 0 rgba(35,42,59,0.1)",
+              fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+              fontSize: 32,
+              lineHeight: 1.35,
+              color: INK,
+            }}
+          >
+            {renderMarked(point)}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ゲージ(meter): 段階が進むほどゲージが満ちていく
+const MeterPoints: React.FC<{ points: string[]; frame: number; accent: (i: number) => string }> = ({
+  points,
+  frame,
+  accent,
+}) => {
+  const total = points.length;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 22, width: "94%" }}>
+      {points.map((point, i) => {
+        const startAt = 16 + i * 16;
+        const a = accent(i);
+        const targetPct = Math.round(((i + 1) / total) * 100);
+        const fillPct = interpolate(frame, [startAt, startAt + 18], [0, targetPct], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+        const labelOp = interpolate(frame, [startAt, startAt + 8], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+        return (
+          <div key={i} style={{ opacity: labelOp }}>
+            <div
+              style={{
+                fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
+                fontSize: 30,
+                color: INK,
+                marginBottom: 8,
+              }}
+            >
+              {renderMarked(point)}
+            </div>
+            <div style={{ width: "100%", height: 24, borderRadius: 12, background: "#EAE2CE", border: `3px solid ${INK}`, overflow: "hidden" }}>
+              <div style={{ width: `${fillPct}%`, height: "100%", background: a }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// 要点カード群を、シーンのlayoutに応じて出し分ける
+const PointsArea: React.FC<{
+  points: string[];
+  layout?: Scene["layout"];
+  separator?: string;
+  frame: number;
+  fps: number;
+  accentIndex: number;
+}> = ({ points, layout, separator, frame, fps, accentIndex }) => {
+  const accentAt = (i: number) => ACCENTS[(accentIndex + i) % ACCENTS.length];
+  if (!points.length) return null;
+  switch (layout) {
+    case "row":
+      return <RowPoints points={points} frame={frame} fps={fps} separator={separator || "→"} big={false} />;
+    case "compare":
+      return <RowPoints points={points} frame={frame} fps={fps} separator={separator || "≠"} big />;
+    case "panels":
+      return <PanelsPoints points={points} frame={frame} fps={fps} accent={accentAt} />;
+    case "timeline":
+      return <TimelinePoints points={points} frame={frame} fps={fps} accent={accentAt} />;
+    case "grid":
+      return <GridPoints points={points} frame={frame} fps={fps} accent={accentAt} />;
+    case "pyramid":
+      return <PyramidPoints points={points} frame={frame} fps={fps} accent={accentAt} />;
+    case "meter":
+      return <MeterPoints points={points} frame={frame} accent={accentAt} />;
+    case "stack":
+    default:
+      return <StackPoints points={points} frame={frame} fps={fps} accent={accentAt(0)} />;
+  }
 };
 
 const SceneView: React.FC<{
@@ -241,62 +668,15 @@ const SceneView: React.FC<{
           />
         </div>
 
-        {/* ミニカード3枚: 1枚ずつ左右交互にポンッと積み上がる */}
-        {points.map((point, i) => {
-          const cardT = frame - (18 + i * 12);
-          const s = spring({ frame: cardT, fps, config: { damping: 10, stiffness: 170, mass: 0.7 } });
-          const dir = i % 2 === 0 ? -1 : 1;
-          const tilts = [-1.5, 1.2, -1];
-          const cardFloat = cardT > 16 ? Math.sin((frame + i * 21) / 14) * 4 : 0;
-          return (
-            <div
-              key={i}
-              style={{
-                ...sketchBorder,
-                opacity: interpolate(cardT, [0, 5], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
-                transform: `translateX(${(1 - s) * dir * 220}px) translateY(${cardFloat}px) rotate(${tilts[i] + (1 - s) * dir * 6}deg) scale(${0.4 + s * 0.6})`,
-                background: "#FFFFFF",
-                width: "94%",
-                padding: "26px 36px",
-                display: "flex",
-                alignItems: "center",
-                gap: 22,
-                boxShadow: "5px 6px 0 rgba(35,42,59,0.12)",
-              }}
-            >
-              <div
-                style={{
-                  flexShrink: 0,
-                  width: 58,
-                  height: 58,
-                  borderRadius: "50%",
-                  border: `4px solid ${accent}`,
-                  color: accent,
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  fontSize: 32,
-                  fontFamily: `'${yuseiMagic}', sans-serif`,
-                  background: "#FFFFFF",
-                }}
-              >
-                {i + 1}
-              </div>
-              <div
-                style={{
-                  fontFamily: `'${yuseiMagic}', 'Noto Sans CJK JP', sans-serif`,
-                  fontSize: 44,
-                  color: INK,
-                  lineHeight: 1.4,
-                  textAlign: "left",
-                  flexGrow: 1,
-                }}
-              >
-                {renderMarked(point)}
-              </div>
-            </div>
-          );
-        })}
+        {/* 要点カード群: シーンのlayoutに応じて縦積み/横並び/対比/パネル/年表/マス目/ピラミッド/ゲージに出し分ける */}
+        <PointsArea
+          points={points}
+          layout={scene.layout}
+          separator={scene.separator}
+          frame={frame}
+          fps={fps}
+          accentIndex={index}
+        />
       </AbsoluteFill>
 
       {/* 下部字幕（黒帯・ナレーション全文） */}
