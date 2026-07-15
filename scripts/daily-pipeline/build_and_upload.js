@@ -11,6 +11,7 @@ const REMOTION_DIR = path.join(__dirname, '..', '..', 'remotion');
 const BGM_ROOT = path.join(REMOTION_DIR, 'assets', 'bgm');
 const SE_DIR = path.join(REMOTION_DIR, 'assets', 'se');
 const OUT_ROOT = path.join(__dirname, 'out');
+const POST_LOG = path.join(__dirname, '..', '..', 'data', 'post_log.csv');
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
 
@@ -147,6 +148,16 @@ function pickSe() {
   return path.join(SE_DIR, files.find((f) => /transition/i.test(f)) || files[0]);
 }
 
+function logPost(account, title, url) {
+  const date = new Date().toISOString().slice(0, 10);
+  const esc = (s) => `"${String(s).replace(/"/g, '""')}"`;
+  if (!fs.existsSync(POST_LOG)) {
+    fs.mkdirSync(path.dirname(POST_LOG), { recursive: true });
+    fs.writeFileSync(POST_LOG, 'date,account,title,url\n');
+  }
+  fs.appendFileSync(POST_LOG, [date, account, esc(title), url].join(',') + '\n');
+}
+
 async function uploadToYoutube(videoPath, title, description, refreshToken, thumbnailPath) {
   const oauth2Client = new google.auth.OAuth2(process.env.YOUTUBE_CLIENT_ID, process.env.YOUTUBE_CLIENT_SECRET);
   oauth2Client.setCredentials({ refresh_token: refreshToken });
@@ -219,6 +230,7 @@ async function main() {
       audio: `${id}/${audioFile}`,
       video,
       se: i > 0 ? seFile || undefined : undefined,
+      pose: sc.pose,
       durationInSeconds: Math.round((dur + 0.7) * 10) / 10,
     });
   }
@@ -233,7 +245,7 @@ async function main() {
   const outDir = path.join(OUT_ROOT, id);
   fs.mkdirSync(outDir, { recursive: true });
   const propsPath = path.join(outDir, 'props.json');
-  fs.writeFileSync(propsPath, JSON.stringify({ scenes, bgm, footer: script.footer }, null, 2));
+  fs.writeFileSync(propsPath, JSON.stringify({ scenes, bgm, footer: script.footer, showChibi: !!script.useChibi }, null, 2));
 
   const totalSec = scenes.reduce((a, s) => a + s.durationInSeconds, 0);
   console.log(`合計 ${Math.floor(totalSec / 60)}分${Math.round(totalSec % 60)}秒 / ${scenes.length}シーン → レンダリング開始`);
@@ -271,7 +283,9 @@ async function main() {
     const description = script.description + cta;
     try {
       const videoId = await uploadToYoutube(videoPath, script.youtubeTitle, description, acc.refreshToken, thumbnailPath);
-      console.log('アップロード完了: https://youtu.be/' + videoId);
+      const videoUrl = 'https://youtu.be/' + videoId;
+      console.log('アップロード完了: ' + videoUrl);
+      logPost(script.account, script.youtubeTitle, videoUrl);
     } catch (e) {
       console.log('アップロード失敗:', e.message);
       process.exitCode = 1;

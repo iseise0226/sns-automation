@@ -104,6 +104,6 @@ jobs:
         run: |
           git config user.name "wf6-bot"
           git config user.email "wf6-bot@users.noreply.github.com"
-          git add data/daily_state.json
+          git add data/daily_state.json data/post_log.csv
           git diff --cached --quiet || git commit -m "chore: WF6 topic progress - ${{ steps.pick.outputs.account }}"
           git push || echo "push失敗(無視)"

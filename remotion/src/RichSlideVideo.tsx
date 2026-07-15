@@ -12,6 +12,7 @@ import {
 } from "remotion";
 import { loadFont as loadMarker } from "@remotion/google-fonts/YuseiMagic";
 import { loadFont as loadGothic } from "@remotion/google-fonts/ZenKakuGothicNew";
+import { ChibiOverlay, ChibiPose } from "./ChibiOverlay";
 
 const { fontFamily: MARKER } = loadMarker();
 const { fontFamily: GOTHIC } = loadGothic();
@@ -21,11 +22,32 @@ const PAPER = "#fbf8f1";
 const ACCENTS = ["#d9482b", "#e08a1e", "#3a8f4a", "#2e6fb0"]; // 赤・橙・緑・青を順番に使う
 const GREEN = "#3a8f4a";
 
+// ビート単位の効果音。キーは意味カテゴリ、実ファイルはSE_MAPで対応
+export const SE_MAP = {
+  clink: "se/kakan_impact.mp3", // 小さな金属音・注意を引く
+  reveal: "se/pa_switch.mp3", // パッと1つ見せる
+  reveal_multi: "se/papa_quick_switch.mp3", // パパッと連続で見せる(リスト・ステップ向け)
+  spark: "se/kira_sparkle.mp3", // キラッ・気づき/ポジティブな発見
+  sad: "se/chiin_disappointment.mp3", // チーン・残念/失敗/後悔
+  impact: "se/don_impact.mp3", // ドン・強い驚き/衝撃的な事実
+  decide: "se/decide1_button.mp3", // 決定・結論に至った
+  decide2: "se/decide2_button.mp3", // 決定(別音)
+  cash: "se/register_payment.mp3", // レジ・お金/値段の話
+  punch: "se/small_punch.mp3", // 小パンチ・言い切り/断言
+  drum: "se/kotsuzumi_japanese.mp3", // 小鼓・伝統的/算命学など和風の話
+  clapper: "se/hyoshigi1_japanese.mp3", // 拍子木・場面の区切り
+  clapper2: "se/hyoshigi2_japanese.mp3", // 拍子木(別音)
+  bell: "se/suzu1_bell.mp3", // 鈴・穏やか/癒し
+  bell2: "se/suzu2_bell_ring.mp3", // 鈴(別音)
+} as const;
+export type SeKey = keyof typeof SE_MAP;
+
 // 1ビート = 画面に追加される要素1つ + その間のナレーション字幕
 export type Beat = {
   kind: "bubble" | "box" | "big" | "check" | "cross"; // 吹き出し/番号ボックス/中央大文字/✓/×
   text: string; // 画面テキスト（**強調**・\n可）
   sub: string; // 字幕（ナレーションの該当部分）
+  se?: SeKey; // このビートが画面に出る瞬間に鳴らす効果音(任意)
 };
 
 export type Scene = {
@@ -39,6 +61,7 @@ export type Scene = {
   video?: string; // stockシーン用の実写動画(public相対)
   se?: string;
   ctaUrl?: string; // ctaシーン用のURL表示
+  pose?: ChibiPose; // このシーンでのちびキャラのポーズ(showChibi時のみ使用)
   durationInSeconds: number;
 };
 
@@ -46,6 +69,7 @@ export type RichSlideVideoProps = {
   scenes: Scene[];
   bgm?: string;
   footer?: string;
+  showChibi?: boolean; // 右下に聖さんちびキャラのワイプを重ねる
 };
 
 const renderMarked = (text: string, accent: string, keyPrefix: string) =>
@@ -821,6 +845,19 @@ const CtaScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, starts 
   );
 };
 
+// 各ビートが画面に現れる瞬間にse指定があれば短く効果音を鳴らす(レイアウト共通)
+const BeatSeLayer: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => (
+  <>
+    {beats.map((b, i) =>
+      b.se ? (
+        <Sequence key={i} from={starts[i]} durationInFrames={45}>
+          <Audio src={staticFile(SE_MAP[b.se])} volume={0.5} />
+        </Sequence>
+      ) : null
+    )}
+  </>
+);
+
 const SceneView: React.FC<{ scene: Scene; footer: string }> = ({ scene, footer }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
@@ -836,6 +873,7 @@ const SceneView: React.FC<{ scene: Scene; footer: string }> = ({ scene, footer }
       {scene.type === "title" ? <TitleScene scene={scene} /> : null}
       {scene.type === "cta" ? <CtaScene scene={scene} starts={starts} /> : null}
       {scene.type !== "title" ? <SubtitleBand beats={scene.beats} starts={starts} /> : null}
+      <BeatSeLayer beats={scene.beats} starts={starts} />
       <div
         style={{
           position: "absolute",
@@ -857,6 +895,7 @@ export const RichSlideVideo: React.FC<RichSlideVideoProps> = ({
   scenes,
   bgm,
   footer = "伊勢 聖",
+  showChibi = false,
 }) => {
   const { fps } = useVideoConfig();
   let from = 0;
@@ -870,6 +909,7 @@ export const RichSlideVideo: React.FC<RichSlideVideoProps> = ({
             {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
             {scene.se ? <Audio src={staticFile(scene.se)} volume={0.15} /> : null}
             <SceneView scene={scene} footer={footer} />
+            {showChibi && scene.audio ? <ChibiOverlay audioSrc={scene.audio} pose={scene.pose} /> : null}
           </Sequence>
         );
         from += dur;
