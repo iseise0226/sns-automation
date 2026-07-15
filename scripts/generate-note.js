@@ -39,10 +39,13 @@ async function generateChapters(systemPrompt, sourceText) {
     ).trim();
 
     bodyOnly.push(bodyText);
-    chaptersText.push(`${ch.title}\n${EMOJIS[i % EMOJIS.length]}\n${bodyText}`);
+    // 【大見出し】はnoteエディタで見出し(H2)を付ける箇所の目印。投稿時にマーカー文字列自体は消して見出し化する
+    chaptersText.push(`【大見出し】${ch.title}\n${EMOJIS[i % EMOJIS.length]}\n${bodyText}`);
     await new Promise((r) => setTimeout(r, 1500));
   }
-  return chaptersText.join('\n\n');
+  // 冒頭に目次ブロックを置く(note投稿時はそのまま目次として使える)
+  const toc = `目次\n${outline.map((ch) => `・${ch.title}`).join('\n')}`;
+  return `${toc}\n\n${chaptersText.join('\n\n')}`;
 }
 
 async function attachImages(content, outDir) {
