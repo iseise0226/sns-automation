@@ -193,6 +193,20 @@ async function main() {
   const publicDir = path.join(REMOTION_DIR, 'public', id);
   fs.mkdirSync(publicDir, { recursive: true });
 
+  // RichSlideVideoはビート効果音をse/、ちびキャラをsatoshi_chibi/(publicルート直下)で参照するため、assetsからコピーしておく
+  fs.cpSync(path.join(REMOTION_DIR, 'assets', 'se'), path.join(REMOTION_DIR, 'public', 'se'), { recursive: true });
+  if (script.useChibi) {
+    const chibiSrc = path.join(REMOTION_DIR, 'assets', 'satoshi_chibi');
+    const chibiDst = path.join(REMOTION_DIR, 'public', 'satoshi_chibi');
+    fs.mkdirSync(path.join(chibiDst, 'poses'), { recursive: true });
+    for (const f of fs.readdirSync(chibiSrc)) {
+      if (f.startsWith('mouth_')) fs.copyFileSync(path.join(chibiSrc, f), path.join(chibiDst, f));
+    }
+    for (const f of fs.readdirSync(path.join(chibiSrc, 'poses'))) {
+      fs.copyFileSync(path.join(chibiSrc, 'poses', f), path.join(chibiDst, 'poses', f));
+    }
+  }
+
   const seSrc = pickSe();
   let seFile = null;
   if (seSrc) {
