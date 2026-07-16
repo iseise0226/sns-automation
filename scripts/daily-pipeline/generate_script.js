@@ -24,25 +24,38 @@ const FACTS = `
 ・実家は理容師で家にいないことが多く、鍵っ子で寂しかった。
 `;
 
-async function callGroq(system, user) {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      max_tokens: 9000,
-      temperature: 0.85,
-      response_format: { type: 'json_object' },
-    }),
-  });
-  const json = await res.json();
-  const content = json.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Groq応答が空: ' + JSON.stringify(json).slice(0, 300));
-  return JSON.parse(content);
+// 無料枠はTPM(1分あたりトークン)制限があるため、レート制限エラー時は待って再試行する
+async function callGroq(system, user, maxTokens = 3000) {
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.85,
+        response_format: { type: 'json_object' },
+      }),
+    });
+    const json = await res.json();
+    const content = json.choices?.[0]?.message?.content;
+    if (content) return JSON.parse(content);
+
+    const errMsg = JSON.stringify(json).slice(0, 400);
+    if (attempt < 4 && /rate limit|Rate limit|429/i.test(errMsg)) {
+      const m = errMsg.match(/try again in ([0-9.]+)s/i);
+      const waitSec = m ? Math.ceil(parseFloat(m[1])) + 5 : 65;
+      console.log(`Groqレート制限。${waitSec}秒待って再試行(${attempt}/3)...`);
+      await new Promise((r) => setTimeout(r, waitSec * 1000));
+      continue;
+    }
+    throw new Error('Groq応答が空: ' + errMsg);
+  }
+  throw new Error('Groqレート制限のリトライ上限に達しました');
 }
 
 function nextTopic(accountKey) {
