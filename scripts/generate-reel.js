@@ -60,7 +60,7 @@ const SCENE_COUNT = 12;
 // 全シーンを実写B-roll背景にする（2026-07-08 聖さん指示）
 const BROLL_SCENE_INDEXES = Array.from({ length: SCENE_COUNT }, (_, i) => i);
 
-const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン55〜75文字(全体で合計750文字程度・約2分のじっくり語る動画になる)で、以下の流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージだが、短く言い切らず、間や迷いも含めてゆっくり丁寧に語りかけること。
+const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン30〜40文字(全体で合計420文字程度・約1分の動画になる)で、以下の流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージ。短い中でも、間や迷いを感じさせる丁寧な語りかけにすること。
 シーン1〜2（Problem）: 抽象的な「悩み」ではなく、具体的でリアルな一場面（いつ・どこで・何をしていた時か）から始める。毎回違う具体的なシチュエーションを考えること
 シーン3〜4（Affinity）: その場面で感じたことに共感する。自分の体験談を交えてもいい
 シーン5〜7（Solution）: 気づき・考え方の転換を伝える
@@ -235,9 +235,11 @@ async function fetchBrollVideos(keywords, outDir, account) {
   return videoBySlot;
 }
 
-const ELEVENLABS_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
+// 既定は男性声(Adam)。聖さん本人として「僕」で語るため男声にする。
+// 女性ペルソナのアカウントはwf4_accounts.jsonのvoiceIdで上書きする(sessi_life=Sarah)
+const ELEVENLABS_VOICE_ID = 'pNInz6obpgDQGcFmaJgB';
 
-async function generateTTS(narrations, outDir) {
+async function generateTTS(narrations, outDir, voiceId) {
   const key = (process.env.ELEVENLABS_API_KEY || '').trim();
   const audioPaths = [];
   for (let i = 0; i < narrations.length; i++) {
@@ -249,7 +251,7 @@ async function generateTTS(narrations, outDir) {
     const audioPath = path.join(outDir, `audio${i + 1}.mp3`);
     try {
       const audioBuf = await reqBinary(
-        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId || ELEVENLABS_VOICE_ID}`,
         { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' } },
         body
       );
@@ -489,7 +491,7 @@ async function main() {
   const videoBySlot = await fetchBrollVideos(scenario.brollKeywords, outDir, account);
   console.log(`[${account}] broll slots:`, Object.keys(videoBySlot).join(',') || 'none');
 
-  const audioPaths = await generateTTS(scenario.narrations, outDir);
+  const audioPaths = await generateTTS(scenario.narrations, outDir, persona.voiceId);
   const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses, scenario.seChoices, scenario.layouts);
   console.log(`[${account}] video rendered:`, videoPath);
 
