@@ -83,6 +83,7 @@ jobs:
         working-directory: scripts/daily-pipeline
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node generate_script.js "${{ steps.pick.outputs.account }}"
 
       - name: 動画ビルド＆アップロード
