@@ -110,64 +110,138 @@ function randomizeLayouts(scenes) {
   return scenes;
 }
 
-const SYSTEM_PROMPT = `あなたはYouTubeスライド動画の台本作家です。出力は厳密なJSONのみ。説明文や前置きは書かないこと。
+// シーン型・pose・seの共通定義(アウトライン生成と章生成の両方で使う)
+const SCENE_TYPES_DOC = `各sceneは次のいずれかの型:
+- {"type":"points","title":"シーン見出し(12字以内)","layout":"stack"|"panels"|"row"|"compare"|"timeline"|"grid"|"pyramid"|"meter","beats":[3個、各{"kind":"bubble"|"box"|"check"|"cross","text":"短いフレーズ\\n改行可(**強調**可、10〜16文字程度)","sub":"読み上げ文(40〜70文字)"}],"pose":"..."}
+   - layout="compare"のときはbeatsは2個ちょうど
+   - layout="timeline"は時系列・ステップの流れ(例: 過去→現在→未来)。beatsは3〜4個
+   - layout="grid"はまとめ・要点の一気見せ。beatsは4個(2×2)が基本
+   - layout="pyramid"は「まず土台、その上に○○」の積み上げ構造。beats[0]が一番下。beatsは2〜4個
+   - layout="meter"は段階が進むほど到達度が上がる話。beatsは2〜4個
+   - kindは、compareなら両方box、それ以外はbubble中心、良い話ならcheck、NG例ならcross
+- {"type":"stock","stockQuery":"Pexels検索用の英語キーワード(2〜4語)","beats":[2〜3個、{"kind":"big","text":"短い一文\\n改行可","sub":"読み上げ文(50〜90文字)"}],"pose":"..."}
 
-台本の構造:
+poseフィールド(シーンの内容に合わせて1つ選ぶ):
+"default"(基本)|"explaining"(説明)|"arms_crossed"(断言/対比)|"thinking"(問いかけ)|"guts"(励まし)|"thumbs_up"(ポジティブな結論)|"pointing_left"(注意)|"bowing"(挨拶/締め)
+
+seフィールド(beat単位の効果音。要所の3〜5割だけに付ける):
+"clink"|"reveal"|"reveal_multi"|"spark"(気づき)|"sad"(残念)|"impact"(衝撃)|"decide"|"decide2"|"cash"(お金)|"punch"(言い切り)|"drum"(和風)|"clapper"|"clapper2"|"bell"(穏やか)|"bell2"
+
+共通ルール:
+- 数字は必ず全部ひらがな表記(例: 26万円→にじゅうろくまんえん、40歳→よんじゅっさい)
+- 英数字・アルファベット・他言語の文字は本文に使わない(stockQueryだけ英語)
+- 誇張表現・断定しすぎる表現は禁止。癒しと気づきのトーンで
+- 教科書のような一般論で終わらせず、具体的な場面・エピソード・手順まで踏み込む`;
+
+// フェーズ1: 動画全体の設計図(タイトル・サムネ・3章立て・冒頭とCTA)を作る
+async function generateOutline(cfg, topic) {
+  const lpInstruction = cfg.lpUrl
+    ? `\nctaSceneのbeatsは3個: 1個目で今日の話を一言で振り返り、2個目で「今日話しきれなかった部分は、概要欄のリンクから続きを読めます」という趣旨をテーマに絡めて自然に伝え、3個目で名乗り(${cfg.speakerLabel})と「今日も、いい一日にしていきましょう」的な締めの挨拶。`
+    : `\nctaSceneのbeatsは3個構成で、最後のbeatに名乗り(${cfg.speakerLabel})と締めの挨拶を入れる。`;
+  const system = `あなたはYouTube解説動画(5〜6分)の構成作家です。出力は厳密なJSONのみ。
+
+次の構造で動画の設計図を作ってください:
 {
   "youtubeTitle": "興味を引くタイトル(28〜40文字、【】使用可)",
   "description": "概要欄用の説明文(100〜200文字)",
-  "thumbnailKicker": "サムネイル左上の小タグ(4〜8文字、ジャンルが一目でわかる言葉)",
-  "thumbnailText": "サムネイルのメインコピー(改行\\nで2〜3行、合計12〜20文字、文法的に完結した一文にする。一番刺さる語だけ**強調**で1箇所囲む。例: 頑張っても、\\n**報われない**理由 / 焦らなくて\\n**いい**理由)",
-  "scenes": [ ...13〜16個... ]
+  "thumbnailKicker": "サムネイル左上の小タグ(4〜8文字)",
+  "thumbnailText": "サムネイルのメインコピー(改行\\nで2〜3行、合計12〜20文字、一番刺さる語だけ**強調**で1箇所囲む)",
+  "titleScene": {"type":"title","kicker":"見出し英字ラベル","beats":[{"kind":"big","text":"印象的な一文(改行\\n可、**強調**可)","sub":"導入の読み上げ文(80〜130文字。テーマの悩みに共感し、この動画で何がわかるかを予告する)"}],"pose":"explaining"},
+  "chapters": [3個ちょうど、各{"title":"章タイトル(12字以内)","summary":"この章で話す内容(50文字程度。主張+使う具体例のメモ)","hookSub":"冒頭フックでこの章を予告する読み上げ文(30〜50文字)","keyPoint":"まとめ画面用の要点(12字以内)","keySub":"まとめでこの要点を振り返る読み上げ文(40〜60文字)"}],
+  "ctaScene": {"type":"cta","beats":[3個、{"kind":"big","text":"...","sub":"読み上げ文(40〜80文字)"}],"pose":"bowing"}
 }
 
-各sceneは次のいずれかの型:
-1. {"type":"title","kicker":"見出し英字ラベル","beats":[{"kind":"big","text":"改行\\nを含む短い印象的な一文(**強調**可)","sub":"読み上げ文(80〜130文字)"}],"pose":"..."}
-2. {"type":"points","title":"シーン見出し(12字以内)","layout":"stack"|"panels"|"row"|"compare"|"timeline"|"grid"|"pyramid"|"meter","beats":[3個、各{"kind":"bubble"|"box"|"check"|"cross","text":"短いフレーズ\\n改行可(**強調**可、10〜16文字程度)","sub":"読み上げ文(40〜70文字)"}],"pose":"..."}
-   - layout="compare"のときはbeatsは2個ちょうど
-   - layout="timeline"は時系列・ステップの流れを見せたいときに使う(例: 過去→現在→未来、1年目→3年目→今)。beatsは3〜4個
-   - layout="grid"はまとめ・要点を一気に並べたいときに使う。beatsは4個(2×2)が基本
-   - layout="pyramid"は「まず土台、その上に○○」という積み上げ構造の話に使う。beats[0]が一番下の土台、最後が頂点。beatsは2〜4個
-   - layout="meter"は、段階が進むほど到達度・レベルが上がっていく話に使う(ゲージが左から満ちていく)。beatsは2〜4個
-   - kindは、layout="compare"なら1個目box/2個目box、"stack"/"grid"/"pyramid"/"meter"ではbubble中心、良い話ならcheck、NG例ならcrossを使う
-3. {"type":"stock","stockQuery":"Pexels検索用の英語キーワード(2〜4語、風景・人物・物のイメージ)","beats":[2〜3個、{"kind":"big","text":"短い一文\\n改行可","sub":"読み上げ文(50〜90文字)"}],"pose":"..."}
-4. {"type":"cta","beats":[3個、{"kind":"big","text":"...","sub":"..."}],"pose":"bowing"} ※最後のシーンのみ。poseは必ず"bowing"
-
-poseフィールド(全シーン共通・キャラのポーズをシーン内容に合わせて選ぶ):
-"default"(指差いて話す基本ポーズ)|"explaining"(両手を開いて説明)|"arms_crossed"(腕組み・断言/対比)|"thinking"(考え中・問いかけ)|"guts"(ガッツポーズ・成功/嬉しい話)|"thumbs_up"(サムズアップ・おすすめ/ポジティブな結論)|"pointing_left"(左指差し・注意を促す)|"bowing"(お辞儀・挨拶/締め/感謝)
-- 各シーンのbeatsの内容に一番合うものを1つ選ぶ。同じポーズを3シーン以上連続させない
-- cta型(最後のシーン)は必ず"bowing"
-- title型(最初のシーン)は"default"か"explaining"
-
-seフィールド(各beat単位、その一文が画面に出る瞬間に鳴る効果音。付けたい時だけbeatに"se":"..."を追加。全beatに付けない、要所の3〜5割程度に留める):
-"clink"(小さな金属音・注目させたい一言)|"reveal"(パッ・1つの答え/ポイントを見せる)|"reveal_multi"(パパッ・リストやステップを連続で見せる)|"spark"(キラッ・気づき/前向きな発見)|"sad"(チーン・残念/失敗/後悔の話)|"impact"(ドン・強い驚き/衝撃的な事実)|"decide"(決定音・結論/断言)|"decide2"(決定音・別バージョン)|"cash"(レジ音・お金/値段の話)|"punch"(パンチ・言い切り/強調)|"drum"(和太鼓・算命学など和風/伝統の話)|"clapper"(拍子木・場面の区切り)|"clapper2"(拍子木・別バージョン)|"bell"(鈴・穏やか/癒しの一言)|"bell2"(鈴・別バージョン)
-- 内容に合わないなら無理に付けない。同じseを1シーン内で連続させない
-
-ルール:
-- 数字は必ず全部ひらがな表記にする(例: 26万円→にじゅうろくまんえん、40歳→よんじゅっさい、2020年→にせんにじゅうねん、1年→いちねん)
-- 英数字・アルファベット・他言語の文字は本文に使わない(stockQueryだけ英語でよい)
-- 全体で13〜16シーン(合計5〜6分のしっかりした解説動画)。次の構成に従う:
-  1. title型(1個目): テーマ提示
-  2. フック(2個目): points型で「この動画でわかること」を3つ提示し、最後まで見る理由を作る
-  3. 本編(3個目〜): テーマを3つの章に分けて深掘りする。各章は「主張→具体例やエピソード→今日からできる行動」の2〜3シーンで構成し、points/stockを混ぜて飽きさせない
-  4. まとめ(最後から2個目): points型(grid推奨)で動画全体の要点を振り返る
-  5. cta型(最後)
-- 本編は一般論で終わらせず、具体的な場面・数字・手順まで踏み込む。1シーン1メッセージを守り、詰め込みすぎない
-- layoutは同じものを連続させない。stack/panels/row/compare/timeline/grid/pyramid/meterを散らす
-- 締めのcta型では、最後のbeatに「今日も、いい一日にしていきましょう」的な結びを入れる（名乗りの指定があれば使う）
-- 誇張表現・断定しすぎる表現は禁止。癒しと気づきのトーンで
-- thumbnailTextは「悲報」「警告」「絶対に」のような煽り・断定語は使わない。好奇心を引く短い言葉で`;
-
-async function generate(cfg, topic) {
-  const lpInstruction = cfg.lpUrl
-    ? `\n【重要】cta型シーンのbeatsは3個構成にし、2個目のbeatで「この続きの話は、概要欄のリンクからご覧いただけます」という趣旨を、今日のテーマの内容に絡めて自然な一文で入れること（例: 今日話しきれなかった部分は、概要欄のリンクから続きを読めます、など）。3個目のbeatで締めの挨拶をする。`
-    : '';
-  const userPrompt = `話者設定: ${cfg.persona}
-名乗り(cta最後で使う): ${cfg.speakerLabel}
+共通ルール:
+- 数字は必ず全部ひらがな表記
+- 英数字・他言語の文字は本文に使わない
+- 誇張・煽り表現は禁止(thumbnailTextにも「悲報」「警告」「絶対に」等は使わない)
+- 3つの章は重複せず、順に聞くと理解が深まる流れにする`;
+  const user = `話者設定: ${cfg.persona}
 今日のテーマ: ${topic}
-${cfg.persona.includes('聖') || cfg.persona.includes('僕') ? FACTS : ''}${lpInstruction}
-このテーマで、上記の構造に従った台本JSONを1つ作成してください。`;
-  return callGroq(SYSTEM_PROMPT, userPrompt);
+${cfg.persona.includes('聖') || cfg.persona.includes('僕') ? FACTS : ''}${lpInstruction}`;
+  return callGroq(system, user);
+}
+
+// フェーズ2: 1つの章を2〜3シーンに深掘りする
+async function generateChapterScenes(cfg, topic, outline, chapterIdx, previousRecap) {
+  const ch = outline.chapters[chapterIdx];
+  const system = `あなたはYouTube解説動画の台本作家です。出力は厳密なJSONのみ: {"scenes":[2〜3個のscene]}
+
+${SCENE_TYPES_DOC}
+
+この章のルール:
+- シーンは2〜3個。「主張→具体例やエピソード→今日からできる行動」の流れで深掘りする
+- 1個はstock型(実写映像)を使ってもよい(使わなくてもよい)
+- 前の章と同じエピソード・同じ言い回しを繰り返さない
+- 語り口は、一人の人間が自分の言葉で友達に打ち明けるように。必要なら語り手自身の失敗談・本音を一人称で入れる`;
+  const user = `話者設定: ${cfg.persona}
+動画全体のテーマ: ${topic}
+この動画の3章構成: ${outline.chapters.map((c, i) => `${i + 1}. ${c.title}`).join(' / ')}
+${cfg.persona.includes('聖') || cfg.persona.includes('僕') ? FACTS : ''}
+【すでに話した内容(繰り返し禁止)】
+${previousRecap || '(まだ無し)'}
+
+今回書くのは第${chapterIdx + 1}章「${ch.title}」です。内容: ${ch.summary}
+この章の台本(scenes 2〜3個)を作ってください。`;
+  return callGroq(system, user);
+}
+
+// 2段階生成: アウトライン→各章→コード側で組み立て(構成とシーン数をコードで保証する)
+async function generate(cfg, topic) {
+  const outline = await generateOutline(cfg, topic);
+  if (!Array.isArray(outline.chapters) || outline.chapters.length < 3) {
+    throw new Error('アウトライン生成に失敗(chaptersが3個未満)');
+  }
+  outline.chapters = outline.chapters.slice(0, 3);
+
+  // 冒頭フック: 3章の予告をチェックリストで見せる
+  const hookScene = {
+    type: 'points',
+    title: 'この動画でわかること',
+    layout: 'stack',
+    beats: outline.chapters.map((c, i) => ({
+      kind: 'check',
+      text: c.title,
+      sub: c.hookSub || `${i + 1}つ目は、${c.title}についてです。`,
+      se: i === 0 ? 'reveal_multi' : undefined,
+    })),
+    pose: 'pointing_left',
+  };
+
+  // 各章を順番に生成(直前までの内容を要約として渡して重複を防ぐ)
+  const bodyScenes = [];
+  let recap = '';
+  for (let i = 0; i < outline.chapters.length; i++) {
+    const res = await generateChapterScenes(cfg, topic, outline, i, recap.slice(0, 1500));
+    const scenes = (Array.isArray(res.scenes) ? res.scenes : []).slice(0, 3).filter((sc) => Array.isArray(sc.beats) && sc.beats.length);
+    if (!scenes.length) throw new Error(`第${i + 1}章の生成に失敗`);
+    // 章の始まりがわかるよう、各章の先頭シーンの見出しは章タイトルに揃える
+    if (scenes[0].type === 'points') scenes[0].title = outline.chapters[i].title;
+    bodyScenes.push(...scenes);
+    recap += scenes.map((sc) => sc.beats.map((b) => b.sub).join('')).join('') + '\n';
+  }
+
+  // まとめ: 3章の要点をグリッドで振り返る
+  const summaryScene = {
+    type: 'points',
+    title: 'きょうのまとめ',
+    layout: 'grid',
+    beats: outline.chapters.map((c) => ({
+      kind: 'check',
+      text: c.keyPoint || c.title,
+      sub: c.keySub || `${c.title}、これが今日の要点です。`,
+    })),
+    pose: 'thumbs_up',
+  };
+
+  const scenes = [outline.titleScene, hookScene, ...bodyScenes, summaryScene, outline.ctaScene].filter(Boolean);
+  return {
+    youtubeTitle: outline.youtubeTitle,
+    description: outline.description,
+    thumbnailKicker: outline.thumbnailKicker,
+    thumbnailText: outline.thumbnailText,
+    scenes,
+  };
 }
 
 async function main() {
