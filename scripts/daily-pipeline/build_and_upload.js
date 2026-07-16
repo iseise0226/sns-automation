@@ -148,6 +148,28 @@ function pickSe() {
   return path.join(SE_DIR, files.find((f) => /transition/i.test(f)) || files[0]);
 }
 
+// 概要欄用のチャプター文字列を組み立てる(0:00 はじめに / m:ss 見出し ...)
+// YouTubeの仕様: 0:00開始・3個以上・各10秒以上でチャプターとして認識される
+function buildChapters(renderScenes, scriptScenes) {
+  const lines = [];
+  let t = 0;
+  for (let i = 0; i < renderScenes.length; i++) {
+    const src = scriptScenes[i] || {};
+    let label = null;
+    if (i === 0) label = 'はじめに';
+    else if (src.type === 'cta') label = 'まとめ・お知らせ';
+    else if (src.title) label = src.title;
+    if (label) {
+      const m = Math.floor(t / 60);
+      const sec = Math.floor(t % 60);
+      lines.push(`${m}:${String(sec).padStart(2, '0')} ${label}`);
+    }
+    t += renderScenes[i].durationInSeconds;
+  }
+  if (lines.length < 3) return '';
+  return '\n\n⏱ チャプター\n' + lines.join('\n');
+}
+
 function logPost(account, title, url) {
   const date = new Date().toISOString().slice(0, 10);
   const esc = (s) => `"${String(s).replace(/"/g, '""')}"`;
@@ -294,7 +316,8 @@ async function main() {
     const acc = accounts[script.account];
     if (!acc?.refreshToken) { console.log(`アカウント${script.account}のrefreshTokenがありません`); return; }
     const cta = script.cta || '';
-    const description = script.description + cta;
+    const chapters = buildChapters(scenes, script.scenes);
+    const description = script.description + chapters + cta;
     try {
       const videoId = await uploadToYoutube(videoPath, script.youtubeTitle, description, acc.refreshToken, thumbnailPath);
       const videoUrl = 'https://youtu.be/' + videoId;

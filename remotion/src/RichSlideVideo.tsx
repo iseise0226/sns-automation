@@ -915,6 +915,38 @@ export const RichSlideVideo: React.FC<RichSlideVideoProps> = ({
         from += dur;
         return seq;
       })}
+      <SubscribeBadge />
     </AbsoluteFill>
+  );
+};
+
+// 画面右下に常時表示するチャンネル登録バッジ(ゆっくり脈打つ)
+const SubscribeBadge: React.FC = () => {
+  const frame = useCurrentFrame();
+  const pulse = 1 + Math.sin(frame / 22) * 0.03;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 26,
+        bottom: 152,
+        transform: `scale(${pulse})`,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        background: "#cc0000",
+        color: "#fff",
+        fontFamily: GOTHIC,
+        fontWeight: 700,
+        fontSize: 26,
+        letterSpacing: "0.06em",
+        padding: "12px 24px",
+        borderRadius: 10,
+        boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+      }}
+    >
+      <span style={{ fontSize: 22 }}>▶</span>
+      チャンネル登録
+    </div>
   );
 };

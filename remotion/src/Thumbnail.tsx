@@ -25,7 +25,7 @@ const renderMarked = (text: string, accent: string, keyPrefix: string) =>
         style={{
           color: accent,
           background: `${accent}20`,
-          borderBottom: `10px solid ${accent}`,
+          borderBottom: `16px solid ${accent}`,
           padding: "0 6px",
         }}
       >
@@ -46,8 +46,8 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({
   const lines = text.split("\n");
   return (
     <AbsoluteFill style={{ backgroundColor: PAPER }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 16, background: INK }} />
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 16, background: INK }} />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 26, background: INK }} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 26, background: INK }} />
 
       {kicker ? (
         <div
@@ -57,11 +57,11 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({
             left: 60,
             fontFamily: GOTHIC,
             fontWeight: 700,
-            fontSize: 34,
+            fontSize: 44,
             color: "#fff",
             background: accent,
-            borderRadius: 10,
-            padding: "10px 26px",
+            borderRadius: 12,
+            padding: "12px 34px",
             letterSpacing: "0.08em",
           }}
         >
@@ -80,10 +80,11 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({
           style={{
             fontFamily: MARKER,
             fontWeight: 800,
-            fontSize: lines.length >= 3 ? 92 : 116,
-            lineHeight: 1.32,
+            fontSize: lines.length >= 3 ? 118 : 148,
+            lineHeight: 1.28,
             color: INK,
             textAlign: "center",
+            textShadow: "3px 3px 0 #fff, -3px 3px 0 #fff, 3px -3px 0 #fff, -3px -3px 0 #fff",
           }}
         >
           {lines.map((line, i) => (
