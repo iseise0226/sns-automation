@@ -1,9 +1,9 @@
-name: WF5 YouTube (weekly, 1 video)
+name: WF5 YouTube (停止中・WF6に統合済み)
 
 on:
-  schedule:
-    # 毎週水曜 JST 19:00 = UTC 10:00
-    - cron: "0 10 * * 3"
+  # 2026-07-16 停止: 旧SlideVideo(文字だけの簡素なスライド)の品質が低く、
+  # 同じチャンネルにWF6が毎日高品質版(RichSlideVideo)を投稿しているため役目を終えた。
+  # 必要になったら手動実行のみ可能。
   workflow_dispatch:
 
 permissions:

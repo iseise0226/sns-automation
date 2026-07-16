@@ -122,7 +122,7 @@ const SubtitleBand: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, st
         left: 0,
         right: 0,
         bottom: 0,
-        height: 110,
+        height: 130,
         background: "rgba(0,0,0,0.78)",
         display: "flex",
         alignItems: "center",
@@ -133,7 +133,7 @@ const SubtitleBand: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, st
       <span
         style={{
           fontFamily: GOTHIC,
-          fontSize: 42,
+          fontSize: 50,
           fontWeight: 700,
           color: "#fff",
           letterSpacing: "0.04em",
@@ -154,13 +154,13 @@ const Marker: React.FC<{ beat: Beat; index: number; accent: string }> = ({ beat,
   return (
     <div
       style={{
-        minWidth: 64,
-        height: 64,
+        minWidth: 78,
+        height: 78,
         borderRadius: "50%",
-        border: `4px solid ${color}`,
+        border: `5px solid ${color}`,
         color,
         fontFamily: MARKER,
-        fontSize: 40,
+        fontSize: 48,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -189,13 +189,13 @@ const StackItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({
       <div
         style={{
           fontFamily: MARKER,
-          fontSize: 76,
+          fontSize: 92,
           color: INK,
           textAlign: "center",
-          lineHeight: 1.6,
+          lineHeight: 1.55,
           margin: "30px 0",
           opacity: Math.min(1, s * 1.3),
-          transform: `scale(${0.9 + s * 0.1})`,
+          transform: `scale(${0.75 + s * 0.25})`,
         }}
       >
         <MultiLine text={beat.text} accent={accent} keyPrefix={`big${index}`} />
@@ -212,20 +212,20 @@ const StackItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({
         gap: 26,
         margin: "20px 0",
         opacity: Math.min(1, s * 1.3),
-        transform: `translateY(${(1 - s) * 30}px) scale(${0.94 + s * 0.06})`,
+        transform: `translateY(${(1 - s) * 70}px) translateX(${(1 - s) * (index % 2 === 0 ? -40 : 40)}px) scale(${0.8 + s * 0.2}) rotate(${(1 - s) * (index % 2 === 0 ? -2 : 2)}deg)`,
       }}
     >
       <Marker beat={beat} index={index} accent={accent} />
       <div
         style={{
           fontFamily: MARKER,
-          fontSize: 50,
+          fontSize: 62,
           lineHeight: 1.5,
           color: INK,
           background: "#fff",
           border: `4px solid ${INK}`,
           borderRadius: isBubble ? 42 : 18,
-          padding: "24px 42px",
+          padding: "26px 46px",
           boxShadow: "6px 8px 0 rgba(0,0,0,0.08)",
         }}
       >
@@ -250,18 +250,18 @@ const RowItem: React.FC<{ beat: Beat; index: number; startAt: number; compact: b
     <div
       style={{
         opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
-        transform: `translateY(${(1 - s) * 30}px) scale(${0.94 + s * 0.06})`,
+        transform: `translateY(${(1 - s) * 70}px) scale(${0.7 + s * 0.3})`,
         fontFamily: MARKER,
-        fontSize: compact ? 42 : 54,
-        lineHeight: 1.55,
+        fontSize: compact ? 52 : 66,
+        lineHeight: 1.5,
         color: INK,
         background: "#fff",
         border: `5px solid ${accent}`,
         borderRadius: 24,
-        padding: compact ? "30px 36px" : "44px 52px",
+        padding: compact ? "34px 40px" : "50px 58px",
         boxShadow: "6px 8px 0 rgba(0,0,0,0.08)",
         textAlign: "center",
-        maxWidth: compact ? 460 : 620,
+        maxWidth: compact ? 540 : 720,
       }}
     >
       <MultiLine text={beat.text} accent={accent} keyPrefix={`r${index}`} />
@@ -280,12 +280,12 @@ const PanelItem: React.FC<{ beat: Beat; index: number; startAt: number; total: n
   const { fps } = useVideoConfig();
   const accent = ACCENTS[index % ACCENTS.length];
   const s = spring({ frame: frame - startAt, fps, config: { damping: 12, stiffness: 170, mass: 0.6 } });
-  const width = total >= 4 ? 340 : total === 3 ? 420 : 520;
+  const width = total >= 4 ? 400 : total === 3 ? 510 : 640;
   return (
     <div
       style={{
         opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
-        transform: `translateX(${(1 - s) * -60}px) scale(${0.85 + s * 0.15})`,
+        transform: `translateX(${(1 - s) * -140}px) scale(${0.7 + s * 0.3}) rotate(${(1 - s) * -3}deg)`,
         width,
         background: "#fff",
         border: `4px solid ${INK}`,
@@ -310,13 +310,13 @@ const PanelItem: React.FC<{ beat: Beat; index: number; startAt: number; total: n
       </div>
       <div
         style={{
-          padding: "36px 26px",
-          minHeight: 180,
+          padding: "40px 28px",
+          minHeight: 220,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontFamily: MARKER,
-          fontSize: total >= 4 ? 32 : 38,
+          fontSize: total >= 4 ? 42 : 50,
           lineHeight: 1.5,
           color: INK,
           textAlign: "center",
@@ -339,7 +339,7 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
   const { fps } = useVideoConfig();
   const accent = ACCENTS[index % ACCENTS.length];
   const s = spring({ frame: frame - startAt, fps, config: { damping: 11, stiffness: 180, mass: 0.6 } });
-  const width = total >= 4 ? 300 : 380;
+  const width = total >= 4 ? 370 : 460;
   const isTop = index % 2 === 0;
   return (
     <div
@@ -353,7 +353,7 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
     >
       <div
         style={{
-          minHeight: 96,
+          minHeight: 130,
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "center",
@@ -366,14 +366,14 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
           <div
             style={{
               fontFamily: MARKER,
-              fontSize: 32,
+              fontSize: 42,
               lineHeight: 1.4,
               color: INK,
               textAlign: "center",
               background: "#fff",
               border: `3px solid ${accent}`,
               borderRadius: 14,
-              padding: "14px 18px",
+              padding: "18px 24px",
               boxShadow: "4px 5px 0 rgba(0,0,0,0.08)",
             }}
           >
@@ -384,8 +384,8 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
       <div
         style={{
           order: 1,
-          width: 30,
-          height: 30,
+          width: 38,
+          height: 38,
           borderRadius: "50%",
           background: accent,
           border: "4px solid #fff",
@@ -395,7 +395,7 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
       />
       <div
         style={{
-          minHeight: 96,
+          minHeight: 130,
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "center",
@@ -408,14 +408,14 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
           <div
             style={{
               fontFamily: MARKER,
-              fontSize: 32,
+              fontSize: 42,
               lineHeight: 1.4,
               color: INK,
               textAlign: "center",
               background: "#fff",
               border: `3px solid ${accent}`,
               borderRadius: 14,
-              padding: "14px 18px",
+              padding: "18px 24px",
               boxShadow: "4px 5px 0 rgba(0,0,0,0.08)",
             }}
           >
@@ -466,9 +466,9 @@ const GridItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({ be
     <div
       style={{
         opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
-        transform: `scale(${0.8 + s * 0.2})`,
-        width: 460,
-        minHeight: 150,
+        transform: `scale(${0.55 + s * 0.45}) rotate(${(1 - s) * (index % 2 === 0 ? -4 : 4)}deg)`,
+        width: 560,
+        minHeight: 190,
         background: "#fff",
         border: `4px solid ${accent}`,
         borderRadius: 20,
@@ -484,7 +484,7 @@ const GridItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({ be
       <div
         style={{
           fontFamily: MARKER,
-          fontSize: 34,
+          fontSize: 44,
           lineHeight: 1.45,
           color: INK,
           textAlign: "left",
@@ -501,7 +501,7 @@ const PyramidRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, star
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const total = beats.length;
-  const baseWidth = 760;
+  const baseWidth = 950;
   const shrink = baseWidth / (total + 1.6);
   return (
     <div style={{ display: "flex", flexDirection: "column-reverse", alignItems: "center" }}>
@@ -515,17 +515,17 @@ const PyramidRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, star
             key={i}
             style={{
               opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
-              transform: `translateY(${(1 - s) * 26}px) scale(${0.9 + s * 0.1})`,
+              transform: `translateY(${(1 - s) * -60}px) scale(${0.8 + s * 0.2})`,
               width,
-              marginTop: i === 0 ? 0 : 10,
+              marginTop: i === 0 ? 0 : 12,
               background: "#fff",
               border: `4px solid ${accent}`,
               borderRadius: 14,
-              padding: "20px 30px",
+              padding: "24px 34px",
               textAlign: "center",
               boxShadow: "5px 6px 0 rgba(0,0,0,0.08)",
               fontFamily: MARKER,
-              fontSize: total >= 4 ? 32 : 38,
+              fontSize: total >= 4 ? 42 : 50,
               lineHeight: 1.4,
               color: INK,
             }}
@@ -543,7 +543,7 @@ const MeterRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts
   const frame = useCurrentFrame();
   const total = beats.length;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 34, width: 900 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 40, width: 1200 }}>
       {beats.map((b, i) => {
         const accent = ACCENTS[i % ACCENTS.length];
         const startAt = starts[i];
@@ -561,9 +561,9 @@ const MeterRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts
             <div
               style={{
                 fontFamily: MARKER,
-                fontSize: 34,
+                fontSize: 46,
                 color: INK,
-                marginBottom: 10,
+                marginBottom: 12,
               }}
             >
               <MultiLine text={b.text} accent={accent} keyPrefix={`m${i}`} />
@@ -571,8 +571,8 @@ const MeterRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts
             <div
               style={{
                 width: "100%",
-                height: 30,
-                borderRadius: 15,
+                height: 40,
+                borderRadius: 20,
                 background: "#e8e0cf",
                 border: `3px solid ${INK}`,
                 overflow: "hidden",
@@ -604,7 +604,7 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
           <div
             style={{
               fontFamily: MARKER,
-              fontSize: 60,
+              fontSize: 72,
               color: INK,
               opacity: titleOp,
               borderBottom: `6px solid ${ACCENTS[0]}55`,
@@ -678,7 +678,7 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
                   <div
                     style={{
                       fontFamily: MARKER,
-                      fontSize: layout === "compare" ? 110 : 72,
+                      fontSize: layout === "compare" ? 130 : 88,
                       color: ACCENTS[1],
                       opacity: frame >= starts[i] ? 1 : 0,
                     }}
@@ -721,7 +721,7 @@ const StockScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, start
               key={i}
               style={{
                 fontFamily: MARKER,
-                fontSize: 72,
+                fontSize: 82,
                 color: "#fff",
                 textAlign: "center",
                 lineHeight: 1.7,
@@ -763,7 +763,7 @@ const TitleScene: React.FC<{ scene: Scene }> = ({ scene }) => {
       <div
         style={{
           fontFamily: MARKER,
-          fontSize: 104,
+          fontSize: 116,
           color: INK,
           textAlign: "center",
           lineHeight: 1.6,
@@ -797,7 +797,7 @@ const CtaScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, starts 
               key={i}
               style={{
                 fontFamily: MARKER,
-                fontSize: 68,
+                fontSize: 78,
                 color: INK,
                 textAlign: "center",
                 lineHeight: 1.7,
