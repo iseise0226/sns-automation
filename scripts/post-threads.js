@@ -85,26 +85,31 @@ async function getBraveTrends() {
 async function generateText(account, trends) {
   const a = ACCOUNTS[account];
   const userContent = a.userTemplate.replace('{{TRENDS}}', trends);
-  const body = JSON.stringify({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      { role: 'system', content: a.system },
-      { role: 'user', content: userContent },
-    ],
-    max_tokens: 500,
-  });
+  const messages = [
+    { role: 'system', content: a.system },
+    { role: 'user', content: userContent },
+  ];
+
+  const groqBody = JSON.stringify({ model: 'llama-3.3-70b-versatile', messages, max_tokens: 500 });
   const res = await req(
     'https://api.groq.com/openai/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-    },
-    body
+    { method: 'POST', headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } },
+    groqBody
   );
-  return res.json?.choices?.[0]?.message?.content;
+  const text = res.json?.choices?.[0]?.message?.content;
+  if (text) return text;
+
+  console.error(`[${account}] Groq応答が空: ${JSON.stringify(res.json).slice(0, 300)}`);
+  const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
+  if (!openaiKey) return null;
+  console.error(`[${account}] OpenAI(gpt-4o-mini)にフォールバックします`);
+  const openaiBody = JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: 500 });
+  const res2 = await req(
+    'https://api.openai.com/v1/chat/completions',
+    { method: 'POST', headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' } },
+    openaiBody
+  );
+  return res2.json?.choices?.[0]?.message?.content;
 }
 
 async function postToThreads(account, text) {

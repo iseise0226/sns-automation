@@ -22,6 +22,7 @@ jobs:
         env:
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           THREADS_TOKEN_ISE_SATOSHI: ${{ secrets.THREADS_TOKEN_ISE_SATOSHI }}
           THREADS_TOKEN_SATOSHI_MINDSET: ${{ secrets.THREADS_TOKEN_SATOSHI_MINDSET }}
           THREADS_TOKEN_SATOSHI_MIND_COACHING: ${{ secrets.THREADS_TOKEN_SATOSHI_MIND_COACHING }}
