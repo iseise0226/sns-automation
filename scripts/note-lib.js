@@ -56,7 +56,7 @@ async function groqChat(messages, maxTokens, jsonMode) {
   const body = { model: 'llama-3.3-70b-versatile', messages, max_tokens: maxTokens };
   if (jsonMode) body.response_format = { type: 'json_object' };
   const key = (process.env.GROQ_API_KEY_NOTE || process.env.GROQ_API_KEY || '').trim();
-  for (let attempt = 0; attempt < 15; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     const res = await req(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -66,11 +66,26 @@ async function groqChat(messages, maxTokens, jsonMode) {
       JSON.stringify(body)
     );
     if (res.json?.choices) return res.json.choices[0].message.content;
+    // 1日枠(TPD)切れは待っても無駄なので即フォールバックへ
+    const errMsg = JSON.stringify(res.json || {});
+    if (/tokens per day|TPD/i.test(errMsg)) break;
     // レート制限(429/TPM超過)の場合は長めに待つ。それ以外は短い待機でリトライ。
     const isRateLimit = res.status === 429 || res.json?.error?.code === 'rate_limit_exceeded';
     await new Promise((r) => setTimeout(r, isRateLimit ? 30000 : 3000));
   }
-  throw new Error('Groq API呼び出し失敗（リトライ上限）');
+
+  const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
+  if (!openaiKey) throw new Error('Groq API呼び出し失敗（リトライ上限、OPENAI_API_KEY未設定のためフォールバック不可）');
+  console.error('GroqからOpenAI(gpt-4o-mini)にフォールバックします');
+  const openaiBody = { model: 'gpt-4o-mini', messages, max_tokens: maxTokens };
+  if (jsonMode) openaiBody.response_format = { type: 'json_object' };
+  const res2 = await req(
+    'https://api.openai.com/v1/chat/completions',
+    { method: 'POST', headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' } },
+    JSON.stringify(openaiBody)
+  );
+  if (res2.json?.choices) return res2.json.choices[0].message.content;
+  throw new Error('Groq/OpenAIともに呼び出し失敗: ' + JSON.stringify(res2.json || {}).slice(0, 300));
 }
 
 async function fetchPexelsImage(query) {

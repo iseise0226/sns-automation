@@ -20,6 +20,7 @@ jobs:
       - name: Generate note drafts
         env:
           GROQ_API_KEY_NOTE: ${{ secrets.GROQ_API_KEY_NOTE }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
           UNSPLASH_API_KEY: ${{ secrets.UNSPLASH_API_KEY }}
         run: node scripts/run-wf1.js
