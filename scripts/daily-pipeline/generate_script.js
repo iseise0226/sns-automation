@@ -155,13 +155,14 @@ function randomizeLayouts(scenes) {
 
 // シーン型・pose・seの共通定義(アウトライン生成と章生成の両方で使う)
 const SCENE_TYPES_DOC = `各sceneは次のいずれかの型:
-- {"type":"points","title":"シーン見出し(12字以内)","layout":"stack"|"panels"|"row"|"compare"|"timeline"|"grid"|"pyramid"|"meter","beats":[3個、各{"kind":"bubble"|"box"|"check"|"cross","text":"短いフレーズ\\n改行可(**強調**可、10〜16文字程度)","sub":"読み上げ文(40〜70文字)"}],"pose":"..."}
+- {"type":"points","title":"シーン見出し(12字以内)","layout":"stack"|"panels"|"row"|"compare"|"timeline"|"grid"|"pyramid"|"meter","beats":[3個、各{"kind":"bubble"|"box"|"check"|"cross"|"big","text":"短いフレーズ\\n改行可(**強調**可、10〜16文字程度)","sub":"読み上げ文(40〜70文字)"}],"pose":"..."}
    - layout="compare"のときはbeatsは2個ちょうど
    - layout="timeline"は時系列・ステップの流れ(例: 過去→現在→未来)。beatsは3〜4個
    - layout="grid"はまとめ・要点の一気見せ。beatsは4個(2×2)が基本
    - layout="pyramid"は「まず土台、その上に○○」の積み上げ構造。beats[0]が一番下。beatsは2〜4個
    - layout="meter"は段階が進むほど到達度が上がる話。beatsは2〜4個
    - kindは、compareなら両方box、それ以外はbubble中心、良い話ならcheck、NG例ならcross
+   - layout="stack"の話に、金額・年数・回数など印象的な数字が出るビートが1個ある場合だけ、そのビートのkindを"big"にしてよい(文字が画面中央に大きく表示される。1シーンに最大1個、無理に入れなくてよい)
 - {"type":"stock","stockQuery":"Pexels検索用の英語キーワード(2〜4語)","beats":[2〜3個、{"kind":"big","text":"短い一文\\n改行可","sub":"読み上げ文(50〜90文字)"}],"pose":"..."}
 
 poseフィールド(シーンの内容に合わせて1つ選ぶ):
