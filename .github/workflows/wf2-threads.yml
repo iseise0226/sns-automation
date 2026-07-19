@@ -9,6 +9,9 @@ on:
       account:
         description: "テスト実行する1アカウントのキー（空なら全8アカウント）"
         required: false
+      mode:
+        description: "「cta」を指定するとCTA投稿(セッション告知等)を強制"
+        required: false
 
 jobs:
   post:
@@ -31,4 +34,4 @@ jobs:
           THREADS_TOKEN_ISE_KENKOU_OTAKU: ${{ secrets.THREADS_TOKEN_ISE_KENKOU_OTAKU }}
           THREADS_TOKEN_TABI_LIFE_DESIGN40: ${{ secrets.THREADS_TOKEN_TABI_LIFE_DESIGN40 }}
           THREADS_TOKEN_KO_GI_OMOTI: ${{ secrets.THREADS_TOKEN_KO_GI_OMOTI }}
-        run: node scripts/post-threads.js ${{ github.event.inputs.account }}
+        run: node scripts/post-threads.js ${{ github.event.inputs.account }} ${{ github.event.inputs.mode }}

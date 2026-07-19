@@ -45,18 +45,35 @@ const THREADS_USER_IDS = {
 // persona本文（system/userTemplate）はpersonas.jsonから読み込む（リポジトリ内に同梱、トークン等は含まない）
 const personas = require('./personas.json');
 
-// マインド系2アカウントは、通常投稿の代わりに週数回の頻度でLINE誘導投稿を混ぜる
-const LINE_CTA_ACCOUNTS = new Set(['satoshi_mindset', 'satoshi_mind_coaching']);
-// 1日3回配信・週21回中 約3回(1/7)の確率でCTA投稿にする
-const LINE_CTA_CHANCE = 1 / 7;
-const LINE_CTA_TEXTS = [
+// テーマが合う3アカウントのみ、通常投稿の代わりにCTA投稿を混ぜる（ジャンル違いのアカウントには入れない）
+// 現在はセッションモニター募集期間: 1/5の高頻度。先着3名が埋まったらCTA_CHANCEを1/7に戻し、LINE_CTA_TEXTS_ARCHIVEに差し替える
+const CTA_CHANCE = 1 / 5;
+const CTA_TEXTS = {
+  ise_satoshi: [
+    'ちょっとお知らせです。\n\n生年月日から自分の「型」と今の流れを読む、90分の個人セッションを始めました。\n\n通常20,000円のところ、最初の3名さんだけモニター価格5,000円でやってます。\n感想を聞かせてもらえる方限定です。\n\n気になる方は、プロフィールのLINEから「セッション」と送ってください。',
+    '算命学の個人セッション、モニターさんを先着3名だけ募集してます。\n\n90分かけて、あなたの型と今の時期を一緒に整理する時間です。\n通常20,000円のところ、モニター価格5,000円。\n\nプロフィールのLINEから「セッション」とどうぞ。',
+  ],
+  satoshi_mindset: [
+    '頑張ってるのに、なぜか苦しい。\n\nその原因は努力不足じゃなくて、自分の型に合わない頑張り方をしているだけかもしれません。\n\n生年月日から型と今の時期を読み解く90分の個人セッション、先着3名限定のモニター価格5,000円(通常20,000円)で募集しています。\n\nプロフィールのLINEから「セッション」とどうぞ。',
+    '成功者の真似をしても、うまくいかない。\nそれは才能の差ではなく、型が違うだけです。\n\nあなたの型と今の運気の流れを90分で整理する個人セッション、モニターを先着3名(5,000円・通常20,000円)で募集中です。\n\nプロフィールのLINEから「セッション」と送ってください。',
+  ],
+  satoshi_mind_coaching: [
+    '美容の現場で25年以上働きながら、300人以上を鑑定してきました。\n\nあなたがどんな場面で力を出せる人か。\n今が攻める時期か、土台を作る時期か。\n\nそれを一緒に整理する90分セッションのモニターを、先着3名(5,000円・通常20,000円)で募集します。\n\nプロフィールのLINEから「セッション」と送ってください。',
+    'ひとりで背負い続けて、そろそろ誰かと整理したい。\nそんな方のための90分個人セッションです。\n\n生年月日からあなたの型と今の流れを読み解いて、「どこで頑張って、どこで力を抜いていいか」まで持ち帰ってもらいます。\n\n先着3名モニター価格5,000円(通常20,000円)。\nプロフィールのLINEから「セッション」とどうぞ。',
+  ],
+};
+
+// モニター募集終了後に戻す用（LINE7日間配信への誘導）
+const LINE_CTA_TEXTS_ARCHIVE = [
   '頑張ってるのに、なぜか苦しい。\n\nそう感じている経営者の方へ。\n心が軽くなる考え方を、7日間に分けてLINEで届けています。\n\n登録は無料、売り込みもありません。\nプロフィールのリンクから読んでみてください。',
   '経営をしていれば、壁は必ず来ます。\n大事なのは、その壁をどう捉えるか。\n\n25年間、現場で学んできた「心が軽くなる考え方」を、LINEで7日間お届けしています。\n\n気になる方はプロフィールのリンクからどうぞ。',
   '「もっと頑張らなきゃ」と思っているあなたへ。\n\n足りないのは努力じゃなく、考え方の土台かもしれません。\n無料の7日間LINE配信で、その土台の整え方をお伝えしています。\n\nプロフィールのリンクから、登録は無料です。',
 ];
+void LINE_CTA_TEXTS_ARCHIVE;
 
-function pickCtaText() {
-  return LINE_CTA_TEXTS[Math.floor(Math.random() * LINE_CTA_TEXTS.length)];
+function pickCtaText(account) {
+  const texts = CTA_TEXTS[account];
+  return texts[Math.floor(Math.random() * texts.length)];
 }
 const ACCOUNTS = {};
 for (const key of Object.keys(THREADS_USER_IDS)) {
@@ -143,15 +160,18 @@ async function main() {
   const trends = await getBraveTrends();
   console.log('trends:', trends);
 
+  // 第2引数に "cta" を渡すとCTA投稿を強制する（テスト・手動告知用）
+  const forceCta = process.argv[3] === 'cta';
+
   for (const acc of accountsToRun) {
     try {
-      const useCta = LINE_CTA_ACCOUNTS.has(acc) && Math.random() < LINE_CTA_CHANCE;
-      const text = useCta ? pickCtaText() : await generateText(acc, trends);
+      const useCta = !!CTA_TEXTS[acc] && (forceCta || Math.random() < CTA_CHANCE);
+      const text = useCta ? pickCtaText(acc) : await generateText(acc, trends);
       if (!text) {
         console.error(`[${acc}] text generation failed, skipping`);
         continue;
       }
-      if (useCta) console.log(`[${acc}] LINE誘導投稿を使用`);
+      if (useCta) console.log(`[${acc}] CTA投稿を使用`);
       const result = await postToThreads(acc, text);
       console.log(`[${acc}] posted:`, result?.id || result);
     } catch (e) {
