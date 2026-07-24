@@ -153,9 +153,10 @@ async function postToThreads(account, text) {
 async function main() {
   const targetAccount = process.argv[2];
   // ko_gi_omotiは画像付き投稿(post-corgi.js)専用のため、通常実行(全件)からは除外
+  // ise_satoshiは投稿内容の質に納得いくまで自動投稿を一時停止中(2026-07-24)
   const accountsToRun = targetAccount
     ? [targetAccount]
-    : Object.keys(ACCOUNTS).filter((a) => a !== 'ko_gi_omoti');
+    : Object.keys(ACCOUNTS).filter((a) => a !== 'ko_gi_omoti' && a !== 'ise_satoshi');
 
   const trends = await getBraveTrends();
   console.log('trends:', trends);
