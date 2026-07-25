@@ -17,7 +17,15 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       defaultProps={{
         scenes: [
-          { image: "", audio: "", narration: "", durationInSeconds: 5 },
+          {
+            type: "diagram" as const,
+            layout: "iconsteps" as const,
+            title: "サンプル",
+            points: [{ text: "サンプル", icon: "check_circle" }],
+            audio: "",
+            narration: "サンプル",
+            durationInSeconds: 5,
+          },
         ],
       }}
       calculateMetadata={({ props }) => {

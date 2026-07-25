@@ -1,5 +1,5 @@
-// WF4: 指定アカウントのInstagramリール(手描きスケッチ解説スタイル・約1分)を生成・投稿
-// 全12シーン実写B-roll背景の上に手描き風カードを重ねる。カード装飾はRemotionで全描画（@ClaudeCode-videoチャンネル風）
+// WF4: 指定アカウントのInstagramリール(約50秒)を生成・投稿
+// YouTube(WF6)と同じデザイン: 白背景の線画アイコン図解(diagram)と4秒の実写ハイライト(cut)を交互に並べる(2026-07-25統一)
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -56,19 +56,70 @@ function reqBinary(url, options, body) {
   });
 }
 
-const SCENE_COUNT = 12;
-// 全シーンを実写B-roll背景にする（2026-07-08 聖さん指示）
-const BROLL_SCENE_INDEXES = Array.from({ length: SCENE_COUNT }, (_, i) => i);
+// 9シーン固定: diagram(白背景の図解)とcut(4秒の実写)を交互に並べる。0,2,4,6,8がdiagram / 1,3,5,7がcut
+const SCENE_COUNT = 9;
+const DIAGRAM_SLOTS = [0, 2, 4, 6, 8];
+const CUT_SLOTS = [1, 3, 5, 7];
 
-const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分。各シーン30〜40文字(全体で合計420文字程度・約1分の動画になる)で、以下の流れに沿って一つのストーリーとして繋がるように書いてください。1シーン1メッセージ。短い中でも、間や迷いを感じさせる丁寧な語りかけにすること。
-シーン1〜2（Problem）: 抽象的な「悩み」ではなく、具体的でリアルな一場面（いつ・どこで・何をしていた時か）から始める。毎回違う具体的なシチュエーションを考えること
-シーン3〜4（Affinity）: その場面で感じたことに共感する。自分の体験談を交えてもいい
-シーン5〜7（Solution）: 気づき・考え方の転換を伝える
-シーン8〜10（Offer）: 具体的な提案・今日からできる行動のヒントを伝える
-シーン11（Narrowing down）: 気負わなくていいと伝えて絞り込み、全体をまとめる。ただし「特別なことじゃなくていい」という定型文をそのまま使わず、毎回違う言い回しで表現すること
-シーン12（Action）: 保存・フォローをやさしく促す。ただし「フォローしてね」という定型文をそのまま使わず、毎回違う言い回しで表現すること
+// 線画アイコン一覧(remotion/src/LineIcons.tsxと同じ並び)
+const ICON_NAMES = ['person_worried', 'person_calm', 'clock', 'wallet', 'coin', 'yen', 'chart_up', 'chart_bar', 'document', 'document_check', 'pencil', 'book', 'wall', 'flag', 'smartphone', 'cart', 'calendar', 'envelope', 'safe', 'gear', 'check_circle', 'cross_circle', 'piggy', 'lightbulb', 'target', 'hourglass'];
+const ICON_DOC = 'person_worried(悩む人)/person_calm(穏やかな人)/clock(時計)/wallet(財布)/coin(コイン)/yen(お金)/chart_up(右肩上がり)/chart_bar(棒グラフ)/document(書類)/document_check(チェック済み書類)/pencil(鉛筆)/book(本)/wall(壁)/flag(旗)/smartphone(スマホ)/cart(買い物カゴ)/calendar(カレンダー)/envelope(封筒・給料)/safe(金庫・貯金)/gear(歯車・自動)/check_circle(チェック)/cross_circle(バツ)/piggy(貯金箱)/lightbulb(気づき)/target(目標)/hourglass(砂時計)';
 
-【シーン11・12の締めの一言について】「今日も一歩ずつ進んでいこう」「一歩ずつ進んでいきましょう」のような当たり障りのない一般論の締めは絶対に使わないこと。このテーマ・このエピソードだからこそ言える具体的な一言で締めること（例: そのエピソードで出てきた物・場所・感覚に戻って着地する等）。毎回、前のシーン群の内容と結びついた違う締め方にすること
+// diagramスロットのlayoutと必要ポイント数を、5枠に偏りなく事前に割り当てる(直前と同じlayoutは避ける)
+function assignDiagramLayouts() {
+  const options = [
+    { layout: 'iconsteps', pointCount: 4 },
+    { layout: 'flow3', pointCount: 3 },
+    { layout: 'reject', pointCount: 2 },
+    { layout: 'iconsteps', pointCount: 3 },
+    { layout: 'flow3', pointCount: 2 },
+  ];
+  const result = [];
+  let prev = null;
+  const pool = [...options];
+  for (let i = 0; i < DIAGRAM_SLOTS.length; i++) {
+    const candidates = pool.filter((o) => o.layout !== prev);
+    const list = candidates.length ? candidates : pool;
+    const idx = Math.floor(Math.random() * list.length);
+    const chosen = list[idx];
+    pool.splice(pool.indexOf(chosen), 1);
+    result.push(chosen);
+    prev = chosen.layout;
+  }
+  return result;
+}
+
+function buildStructureDoc(diagramLayouts) {
+  // 「フェーズ名」のような名詞ラベルを渡すとAIがそれをそのままtitleにコピーしてしまうため、
+  // 必ず具体的な指示文(動詞で終わる文)にする
+  const directives = [
+    '今日のテーマに関する、具体的でリアルな悩みの一場面(いつ・どこで・何をしていた時か)を提示する内容にする',
+    'その悩みは自分だけじゃないと気づかせる、共感できる具体的な視点を書く',
+    '考え方が変わった瞬間・気づきのきっかけを具体的に書く',
+    '今日から実践できる具体的な手順・行動を書く',
+    '内容全体を踏まえた前向きな一言と、保存・フォローへの自然な誘いを書く',
+  ];
+  const diagramDocs = diagramLayouts
+    .map((d, i) => {
+      const slot = DIAGRAM_SLOTS[i];
+      const directive = directives[i];
+      if (d.layout === 'reject') {
+        return `- diagramシーン(scenes[${slot}]): ${directive}。points2個。1個目は「これは○○の話ではありません」という否定+icon+note、2個目は本当に伝えたいこと(**強調**1箇所)+icon`;
+      }
+      return `- diagramシーン(scenes[${slot}]): ${directive}。points${d.pointCount}個。各pointは{text(2行以内・具体的な一言), icon}${d.layout === 'flow3' ? '、note(補足1行、最後のpointは**強調**可)' : ''}`;
+    })
+    .join('\n');
+  const cutDocs = CUT_SLOTS.map((slot) => `- cutシーン(scenes[${slot}]): 直前のdiagramの内容を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+実写検索キーワード(stockQuery、英語2〜4語)`).join('\n');
+  return `${diagramDocs}\n${cutDocs}\n\n各diagramのtitleは、上の指示内容そのもの・カテゴリ名(「導入」「まとめ」等)ではなく、そのシーンで実際に話す具体的な内容を表す8〜16字の見出し(体言止めや短い断言)にすること。`;
+}
+
+const PASONA_STRUCTURE = `台本はscenes[0]〜scenes[8]の9シーン構成で、1つのストーリーとして繋がるように書いてください。
+diagramシーンは白背景に線画アイコンを置いた図解、cutシーンは実写に一言だけ乗せる4秒のハイライトです。
+アイコンに使える名前: ${ICON_DOC}
+
+【重要】各diagramの構成リストにある「フェーズ:○○」は台本作成上の役割メモであり、そのままtitleに使ってはいけない。「導入」「共感と気づき」のようなフェーズ名そのものを見出しにするのは禁止。titleは必ず、そのシーンで話す具体的な内容を表す8〜16字の見出し(体言止めや短い断言)にすること。例: フェーズが「共感・気づき」でも、titleは「実は誰でも同じ」「気づけば手遅れに」のような内容そのものの見出しにする。
+
+各シーンのnarration(読み上げ)は30〜45文字(diagram)/15〜25文字(cut)。全体で「悩みの一場面→共感→気づき→具体的な手順→まとめ」の流れにすること。
 
 文章のトーン：AIが書いた説明文ではなく、一人の人間が自分の言葉で友達に打ち明けるように書いてください。急がず、ゆっくり、聴いている人の隣に座って話すような優しい語り口で。「〜なんですよね」「〜だったんです」「…って思うんです」のような、心の内をそっと明かす柔らかい語尾を多めに使ってください。
 - 必ずどこかで語り手自身の体験・失敗談・本音を一人称で入れる（「僕も昔、〜で失敗しました」「正直、今でも〜が苦手です」のような自己開示）
@@ -76,6 +127,7 @@ const PASONA_STRUCTURE = `台本はナレーション${SCENE_COUNT}シーン分�
 - 完璧な人として語らない。「偉そうに言ってますが、僕もできない日があります」のような弱さを見せてよい
 - 【禁止するAIっぽい定型表現】「〜してみませんか」「いかがでしょうか」「大切です」「おすすめです」「〜する方法をご紹介します」「〜と言われています」。これらは使わず、自分の実感として言い切るか、正直に迷いを見せる
 - 教科書のような一般論だけのシーンを作らない。必ず具体的な場面・数字・固有の細部（時間帯、場所、誰の一言か等）を入れる
+- 最後のdiagramシーン(scenes[8])で、保存・フォローをやさしく促す一言を添える。「フォローしてね」という定型文をそのまま使わず、毎回違う言い回しで表現すること
 - テンプレート的な決まり文句の繰り返しを避け、毎回具体的で新鮮な表現を心がけること`;
 
 async function callGroqWithFallback(messages, maxTokens) {
@@ -101,37 +153,62 @@ async function callGroqWithFallback(messages, maxTokens) {
 }
 
 async function generateScenario(systemPrompt) {
+  const diagramLayouts = assignDiagramLayouts();
+  const structureDoc = buildStructureDoc(diagramLayouts);
+
   const messages = [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content:
-          `テーマを1つ選び、${PASONA_STRUCTURE}\n\nさらに各シーンの「見出し」と「要点リスト」を作ってください。` +
-          `見出しはそのシーンのナレーションの要点を6〜12文字で言い切る短いフレーズ（体言止めや短い断言。例:「旅費が高い問題」「1日3000円でOK」）。` +
-          `要点リストは各シーンに必ず3個、1個5〜14文字の具体的な補足（例:「宿は素泊まりでいい」「移動は鈍行が安い」「予約は3週間前まで」）。ナレーションと同じ文の繰り返しではなく、画面を読んだ人が得する追加情報にすること。シーン11の要点は動画全体の要点まとめ3つにすること。` +
-          `さらに各シーンの実写映像検索キーワード（そのシーンの内容に合う映像を表す英語2〜4語。例: "rainy window city night"）も作ってください。` +
-          `さらに各シーンで画面に映る解説キャラクターのポーズを次の候補から1つずつ選んでください: "default"(口パクで喋る・基本), "arms_crossed"(腕組み・問題提起), "thinking"(考える・悩み), "explaining"(説明), "pointing_left"(指差し・注目), "guts"(ガッツポーズ・励まし), "thumbs_up"(いいね・肯定), "bowing"(お辞儀・挨拶)。半分以上のシーンは"default"にして、内容に特に合う場面だけ他のポーズを使うこと。` +
-          `さらに、ナレーションの内容に効果音がハマるシーンだけ、次の候補から1つ選んでください（合う場面が無いシーンはnullのままでよい。無理に全シーンに入れないこと。目安は12シーン中2〜4個程度）: "kakan_impact"(コツンと軽い衝撃・失敗や気づき), "cancel"(否定・やめる・キャンセル), "kira_sparkle"(キラッと閃き・良いこと), "chiin_disappointment"(チーン・がっかり・落ち込み), "don_impact"(ドンと強い決意・インパクト), "pa_switch"(パッと場面転換・切り替え), "papa_quick_switch"(テンポよく2段階の切り替え), "register_payment"(お金・購入・レジ), "small_punch"(軽いツッコミ), "kotsuzumi_japanese"(和風の間・情緒), "hyoshigi1_japanese"(拍子木・和風の場面転換1), "hyoshigi2_japanese"(拍子木・和風の場面転換2), "decide1_button"(決定・確定1), "decide2_button"(決定・確定2), "suzu1_bell"(鈴・キラキラした気づき), "suzu2_bell_ring"(鈴・お知らせ・合図)。` +
-          `この台本・見出し・要点リスト・検索キーワード・ポーズ・効果音とInstagramキャプション（150文字以内）をJSONで返してください。` +
-          `{"caption":"投稿文","narrations":[${SCENE_COUNT}個の文字列],"headlines":[${SCENE_COUNT}個の文字列],"points":[${SCENE_COUNT}個の「文字列2〜3個の配列」],"broll_keywords":[${SCENE_COUNT}個の英語キーワード文字列],"chibi_poses":[${SCENE_COUNT}個の文字列],"se":[${SCENE_COUNT}個の「文字列またはnull」]}`,
-      },
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content:
+        `テーマを1つ選び、${PASONA_STRUCTURE}\n\n各シーンの構成(必ずこの通りに埋めること):\n${structureDoc}\n\n` +
+        `さらに各シーンで画面に映る解説キャラクターのポーズを次の候補から1つずつ選んでください: "default"(口パクで喋る・基本), "arms_crossed"(腕組み・問題提起), "thinking"(考える・悩み), "explaining"(説明), "pointing_left"(指差し・注目), "guts"(ガッツポーズ・励まし), "thumbs_up"(いいね・肯定), "bowing"(お辞儀・挨拶)。半分以上のシーンは"default"にして、内容に特に合う場面だけ他のポーズを使うこと。` +
+        `さらに、ナレーションの内容に効果音がハマるシーンだけ、次の候補から1つ選んでください（合う場面が無いシーンはnullのままでよい。目安は9シーン中2〜3個程度）: "kakan_impact"(コツンと軽い衝撃・失敗や気づき), "cancel"(否定・やめる・キャンセル), "kira_sparkle"(キラッと閃き・良いこと), "chiin_disappointment"(チーン・がっかり・落ち込み), "don_impact"(ドンと強い決意・インパクト), "pa_switch"(パッと場面転換・切り替え), "papa_quick_switch"(テンポよく2段階の切り替え), "register_payment"(お金・購入・レジ), "small_punch"(軽いツッコミ), "kotsuzumi_japanese"(和風の間・情緒), "hyoshigi1_japanese"(拍子木・和風の場面転換1), "hyoshigi2_japanese"(拍子木・和風の場面転換2), "decide1_button"(決定・確定1), "decide2_button"(決定・確定2), "suzu1_bell"(鈴・キラキラした気づき), "suzu2_bell_ring"(鈴・お知らせ・合図)。` +
+        `このscenes(diagramはtitle/narration/points、cutはheadline/narration/stockQuery)・ポーズ・効果音とInstagramキャプション（150文字以内）をJSONで返してください。` +
+        `{"caption":"投稿文","scenes":[9個。diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}]}、cutは{"headline":"...","narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`,
+    },
   ];
-  const content = await callGroqWithFallback(messages, 2800);
-  const data = JSON.parse(content || '{}');
-  const fallback = Array.from({ length: SCENE_COUNT }, (_, i) => `今日も一歩ずつ、進んでいこう。(${i + 1})`);
-  const narrations =
-    Array.isArray(data.narrations) && data.narrations.length === SCENE_COUNT ? data.narrations : fallback;
-  // 見出しが欠けたシーンはナレーション先頭を切り出して代用する
-  const headlines = Array.from({ length: SCENE_COUNT }, (_, i) => {
-    const h = Array.isArray(data.headlines) ? String(data.headlines[i] || '').trim() : '';
-    return h || String(narrations[i]).replace(/[。、！？!?]/g, '').slice(0, 12);
+  // 9シーン分(各最大4ポイント×text/icon/note)の詳細なJSONを出力させるため、切れないよう余裕を持たせる
+  const content = await callGroqWithFallback(messages, 5000);
+  let data = {};
+  try {
+    data = JSON.parse(content || '{}');
+  } catch (e) {
+    console.error('シナリオJSONのパースに失敗:', e.message, '| raw:', String(content).slice(0, 500));
+  }
+  const rawScenes = Array.isArray(data.scenes) && data.scenes.length === SCENE_COUNT ? data.scenes : [];
+  if (!rawScenes.length) {
+    console.error(`scenesが期待の${SCENE_COUNT}個ではありません(実際:${Array.isArray(data.scenes) ? data.scenes.length : 'なし'})。全シーンが既定文言にフォールバックします。raw:`, String(content).slice(0, 800));
+  }
+
+  const scenes = Array.from({ length: SCENE_COUNT }, (_, i) => {
+    const raw = rawScenes[i] || {};
+    if (DIAGRAM_SLOTS.includes(i)) {
+      const layoutInfo = diagramLayouts[DIAGRAM_SLOTS.indexOf(i)];
+      const points = (Array.isArray(raw.points) ? raw.points : [])
+        .map((p) => ({
+          text: String((p && p.text) || '').trim(),
+          icon: ICON_NAMES.includes(p && p.icon) ? p.icon : 'check_circle',
+          note: p && p.note ? String(p.note).trim() : undefined,
+        }))
+        .filter((p) => p.text)
+        .slice(0, layoutInfo.layout === 'iconsteps' ? 4 : layoutInfo.pointCount);
+      return {
+        type: 'diagram',
+        layout: layoutInfo.layout,
+        title: String(raw.title || '').trim() || 'きょうの話',
+        points,
+        narration: String(raw.narration || '').trim() || '今日はこんな話をします。',
+      };
+    }
+    return {
+      type: 'cut',
+      headline: String(raw.headline || '').trim() || 'きょうのポイント',
+      narration: String(raw.narration || '').trim() || 'きょうのポイントです。',
+      stockQuery: String(raw.stockQuery || '').trim() || 'japan lifestyle',
+    };
   });
-  // 要点リスト（欠けたシーンは空配列＝見出しだけのカードになる）
-  const points = Array.from({ length: SCENE_COUNT }, (_, i) => {
-    const p = Array.isArray(data.points) ? data.points[i] : null;
-    if (!Array.isArray(p)) return [];
-    return p.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 3);
-  });
+
   // ちびキャラのポーズ(不正値はdefault=口パクに落とす)
   const VALID_POSES = ['default', 'arms_crossed', 'bowing', 'explaining', 'guts', 'pointing_left', 'thinking', 'thumbs_up'];
   const chibiPoses = Array.from({ length: SCENE_COUNT }, (_, i) => {
@@ -148,39 +225,13 @@ async function generateScenario(systemPrompt) {
     const s = Array.isArray(data.se) ? String(data.se[i] || '').trim() : '';
     return VALID_SE.includes(s) ? s : null;
   });
+
   return {
     caption: data.caption || systemPrompt,
-    narrations,
-    headlines,
-    points,
+    scenes,
     chibiPoses,
     seChoices,
-    layouts: randomizeLayouts(points),
-    brollKeywords: Array.isArray(data.broll_keywords) ? data.broll_keywords.map((k) => String(k || '').trim()) : [],
   };
-}
-
-// 各シーンの要点カードの見せ方(レイアウト)をコード側でランダムに割り当てる(AI任せだと偏る/連続するため)
-// 要点の個数に合わないレイアウトは除外し、直前と同じレイアウトは避ける
-const ALL_LAYOUTS = ['stack', 'panels', 'row', 'compare', 'timeline', 'grid', 'pyramid', 'meter'];
-function compatibleLayouts(pointCount) {
-  return ALL_LAYOUTS.filter((l) => {
-    if (l === 'compare') return pointCount === 2;
-    if (l === 'grid' || l === 'timeline' || l === 'pyramid' || l === 'meter') return pointCount >= 2 && pointCount <= 4;
-    return pointCount >= 1;
-  });
-}
-function randomizeLayouts(pointsPerScene) {
-  let prevLayout = null;
-  return pointsPerScene.map((pts) => {
-    const count = (pts || []).length;
-    if (count === 0) return { layout: 'stack' };
-    const candidates = compatibleLayouts(count).filter((l) => l !== prevLayout);
-    const pool = candidates.length ? candidates : compatibleLayouts(count);
-    const layout = pool[Math.floor(Math.random() * pool.length)];
-    prevLayout = layout;
-    return { layout, separator: layout === 'compare' ? '≠' : layout === 'row' ? '→' : undefined };
-  });
 }
 
 async function fetchPexelsVideo(keyword, usedIds) {
@@ -207,7 +258,8 @@ async function fetchPixabayVideo(keyword, usedIds) {
 }
 
 // 各シーン用の実写動画を取得する（かぶり除外は全アカウント台帳を統合）
-async function fetchBrollVideos(keywords, outDir, account) {
+// cutシーン(CUT_SLOTS)分だけ実写を取得する。diagramシーンは白背景のため実写不要
+async function fetchBrollVideos(scenes, outDir, account) {
   const ledgerDir = path.join(__dirname, '..', 'data', 'wf4_used_ids');
   const usedIdsPath = path.join(ledgerDir, `${account}.json`);
   fs.mkdirSync(ledgerDir, { recursive: true });
@@ -225,22 +277,21 @@ async function fetchBrollVideos(keywords, outDir, account) {
 
   const fallbackPool = ['japan lifestyle', 'calm nature', 'daily life moment'];
   const videoBySlot = {};
-  for (let slot = 0; slot < BROLL_SCENE_INDEXES.length; slot++) {
-    const sceneIdx = BROLL_SCENE_INDEXES[slot];
-    const keywordChain = [keywords[sceneIdx], ...fallbackPool].filter(Boolean);
+  for (const sceneIdx of CUT_SLOTS) {
+    const keywordChain = [scenes[sceneIdx].stockQuery, ...fallbackPool].filter(Boolean);
     let found = null;
     for (const kw of keywordChain) {
       found = (await fetchPexelsVideo(kw, excludeIds)) || (await fetchPixabayVideo(kw, excludeIds));
       if (found) break;
     }
     if (!found) {
-      // 空振り枠は取得済みの映像を再利用（それも無ければ紙背景カードにフォールバック）
+      // 空振り枠は取得済みの映像を再利用
       const have = Object.values(videoBySlot);
       if (have.length > 0) videoBySlot[sceneIdx] = have[Math.floor(Math.random() * have.length)];
       continue;
     }
     const buf = await reqBinary(found.url, {});
-    const p = path.join(outDir, `video${slot + 1}.mp4`);
+    const p = path.join(outDir, `video${sceneIdx + 1}.mp4`);
     fs.writeFileSync(p, buf);
     videoBySlot[sceneIdx] = path.basename(p);
     usedIds.push(found.id);
@@ -292,22 +343,24 @@ function getAudioDuration(audioPath) {
   }
 }
 
-function renderVideo(narrations, headlines, points, videoBySlot, audioPaths, outDir, useChibi, chibiPoses, seChoices, layouts) {
-  // 手描きスケッチ風カード。B-rollシーンは実写背景の上にカードを重ねる
-  const scenes = narrations.map((narration, i) => {
-    const scenePoints = points[i] || [];
-    // カード3枚を読む時間を確保するため最低尺を延ばす
-    const minDuration = scenePoints.length >= 2 ? 4.2 : 2.8;
-    const layoutInfo = (layouts && layouts[i]) || { layout: 'stack' };
+// scenario.scenes(diagram/cut混在) + 実写 + 音声から、MyVideo.tsxのScene配列を組み立てる
+function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, chibiPoses, seChoices) {
+  const scenes = scenarioScenes.map((sc, i) => {
+    const audio = audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '';
+    const audioDur = audio ? getAudioDuration(audioPaths[i]) : null;
+    const isCut = sc.type === 'cut';
+    // cutは4秒固定に寄せる(短い一言なので音声もそれに収まる長さで生成させている)。diagramは音声長+図解を読む余白
+    const minDuration = isCut ? 4.0 : (sc.points || []).length >= 3 ? 7.0 : 5.5;
     return {
-      headline: headlines[i] || '',
-      narration: narration || '',
-      points: scenePoints,
-      layout: layoutInfo.layout,
-      separator: layoutInfo.separator,
-      video: videoBySlot[i] || '',
-      audio: audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '',
-      durationInSeconds: Math.max(minDuration, audioPaths[i] && fs.existsSync(audioPaths[i]) ? getAudioDuration(audioPaths[i]) : 3.0),
+      type: sc.type,
+      layout: sc.layout,
+      title: sc.title,
+      points: sc.points,
+      headline: sc.headline,
+      narration: sc.narration || '',
+      video: isCut ? videoBySlot[i] || '' : undefined,
+      audio,
+      durationInSeconds: Math.max(minDuration, audioDur || minDuration),
       pose: (chibiPoses && chibiPoses[i]) || 'default',
       se: (seChoices && seChoices[i]) || null,
     };
@@ -501,13 +554,17 @@ async function main() {
 
   const scenario = await generateScenario(persona.system);
   console.log(`[${account}] caption:`, scenario.caption);
-  console.log(`[${account}] headlines:`, scenario.headlines.join(' / '));
+  console.log(
+    `[${account}] scenes:`,
+    scenario.scenes.map((s) => (s.type === 'cut' ? `cut:${s.headline}` : `diagram:${s.layout}:${s.title}`)).join(' / ')
+  );
 
-  const videoBySlot = await fetchBrollVideos(scenario.brollKeywords, outDir, account);
+  const videoBySlot = await fetchBrollVideos(scenario.scenes, outDir, account);
   console.log(`[${account}] broll slots:`, Object.keys(videoBySlot).join(',') || 'none');
 
-  const audioPaths = await generateTTS(scenario.narrations, outDir, persona.voiceId);
-  const videoPath = renderVideo(scenario.narrations, scenario.headlines, scenario.points, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses, scenario.seChoices, scenario.layouts);
+  const narrations = scenario.scenes.map((s) => s.narration);
+  const audioPaths = await generateTTS(narrations, outDir, persona.voiceId);
+  const videoPath = renderVideo(scenario.scenes, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses, scenario.seChoices);
   console.log(`[${account}] video rendered:`, videoPath);
 
   // マインド系アカウントはキャプション末尾にLINE誘導を固定で追加
