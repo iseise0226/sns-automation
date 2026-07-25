@@ -248,7 +248,7 @@ async function main() {
     const dur = audioDuration(audioFull);
 
     let video;
-    if (sc.type === 'stock') {
+    if (sc.type === 'stock' || sc.type === 'cut') {
       const vFile = `stock${i + 1}.mp4`;
       const vFull = path.join(publicDir, vFile);
       const ok = await fetchStockVideo(sc.stockQuery || 'nature', vFull, usedIds);

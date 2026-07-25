@@ -10,17 +10,27 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { loadFont as loadMarker } from "@remotion/google-fonts/YuseiMagic";
-import { loadFont as loadGothic } from "@remotion/google-fonts/ZenKakuGothicNew";
+import { loadFont as loadMaru } from "@remotion/google-fonts/ZenMaruGothic";
 import { ChibiOverlay, ChibiPose } from "./ChibiOverlay";
+import { LineIcon } from "./LineIcons";
 
-const { fontFamily: MARKER } = loadMarker();
-const { fontFamily: GOTHIC } = loadGothic();
+// 全体を丸ゴシック1書体で統一する(HyperFramesで確定したデザイン)
+const { fontFamily: MARU } = loadMaru();
+const MARKER = MARU;
+const GOTHIC = MARU;
 
-const INK = "#2b2b2b";
-const PAPER = "#fbf8f1";
-const ACCENTS = ["#d9482b", "#e08a1e", "#3a8f4a", "#2e6fb0"]; // 赤・橙・緑・青を順番に使う
-const GREEN = "#3a8f4a";
+const INK = "#1a1a1a";
+const PAPER = "#ffffff";
+const DARK = "#2b2b2b"; // 番号丸・ピル見出しの地色
+const RED = "#d92b2b"; // 図版・強調の赤
+const RED_TEXT = "#c62222"; // 本文中の強調赤
+const NAVY = "#16202e"; // 字幕バー
+const YELLOW_MARK = "#ffe94d"; // 白背景用の蛍光マーカー
+const YELLOW_SOLID = "#ffe500"; // 実写など暗い背景用のベタ塗り
+const GRAY_BAR = "#8f8f8f";
+// 既存レイアウトが色を順番に使う前提のため、赤と黒だけの落ち着いた並びにする
+const ACCENTS = [RED, DARK, RED, DARK];
+const GREEN = NAVY;
 
 // ビート単位の効果音。キーは意味カテゴリ、実ファイルはSE_MAPで対応
 export const SE_MAP = {
@@ -47,12 +57,28 @@ export type Beat = {
   kind: "bubble" | "box" | "big" | "check" | "cross"; // 吹き出し/番号ボックス/中央大文字/✓/×
   text: string; // 画面テキスト（**強調**・\n可）
   sub: string; // 字幕（ナレーションの該当部分）
+  icon?: string; // 図解レイアウトで使う線画アイコン名(LineIconsのIconName)
+  note?: string; // アイコンの下に置く小さな補足（赤字・\n可）
   se?: SeKey; // このビートが画面に出る瞬間に鳴らす効果音(任意)
 };
 
 export type Scene = {
-  type: "points" | "stock" | "title" | "cta";
-  layout?: "stack" | "row" | "compare" | "panels" | "timeline" | "grid" | "pyramid" | "meter"; // pointsの並べ方: 縦積み / 横並び(→) / 対比(≠) / パネルが左から順に増える / 一直線に並ぶ年表 / マス目に埋まる / 下から積み上がる土台 / ゲージが満ちていく
+  type: "points" | "stock" | "title" | "cta" | "cut";
+  layout?:
+    | "stack"
+    | "row"
+    | "compare"
+    | "panels"
+    | "timeline"
+    | "grid"
+    | "pyramid"
+    | "meter"
+    | "split2"
+    | "stairs"
+    | "chart4step"
+    | "flow3"
+    | "iconsteps"
+    | "reject"; // pointsの並べ方: 縦積み / 横並び(→) / 対比(≠) / パネルが左から順に増える / 一直線に並ぶ年表 / マス目に埋まる / 下から積み上がる土台 / ゲージが満ちていく / 左に否定・右に解決策の2分割 / 階段状に積み上がり最後で壁を突破 / 番号付き4ステップ
   separator?: string; // row/compareの区切り記号（既定: row=→ compare=≠）
   title?: string;
   kicker?: string;
@@ -72,16 +98,150 @@ export type RichSlideVideoProps = {
   showChibi?: boolean; // 右下に聖さんちびキャラのワイプを重ねる
 };
 
-const renderMarked = (text: string, accent: string, keyPrefix: string) =>
+// カード・小さめの文字での**強調**は赤の太字にする
+const renderMarked = (text: string, _accent: string, keyPrefix: string) =>
   text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
     p.startsWith("**") && p.endsWith("**") ? (
-      <span key={`${keyPrefix}-${i}`} style={{ color: accent, fontWeight: 700 }}>
+      <span key={`${keyPrefix}-${i}`} style={{ color: RED_TEXT, fontWeight: 900 }}>
         {p.slice(2, -2)}
       </span>
     ) : (
       <span key={`${keyPrefix}-${i}`}>{p}</span>
     )
   );
+
+// 見出し・大きい文字での**強調**は黄色の蛍光マーカーが左から引かれる
+const renderMarkedHL = (text: string, keyPrefix: string, grow: number) =>
+  text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
+    p.startsWith("**") && p.endsWith("**") ? (
+      <span key={`${keyPrefix}-${i}`} style={{ position: "relative", display: "inline-block" }}>
+        <span
+          style={{
+            position: "absolute",
+            left: "-0.04em",
+            right: "-0.04em",
+            bottom: "0.16em",
+            height: "0.42em",
+            background: YELLOW_MARK,
+            transformOrigin: "left center",
+            transform: `scaleX(${grow})`,
+          }}
+        />
+        <span style={{ position: "relative" }}>{p.slice(2, -2)}</span>
+      </span>
+    ) : (
+      <span key={`${keyPrefix}-${i}`}>{p}</span>
+    )
+  );
+
+const MultiLineHL: React.FC<{ text: string; keyPrefix: string; grow: number }> = ({
+  text,
+  keyPrefix,
+  grow,
+}) => (
+  <>
+    {text.split("\n").map((line, i) => (
+      <div key={i}>{renderMarkedHL(line, `${keyPrefix}-l${i}`, grow)}</div>
+    ))}
+  </>
+);
+
+// 白背景シーンの大見出し。**強調**の裏に黄色のベタ塗りが左から伸びる
+const renderHeadline = (text: string, keyPrefix: string, grow: number) =>
+  text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
+    p.startsWith("**") && p.endsWith("**") ? (
+      <span key={`${keyPrefix}-${i}`} style={{ position: "relative", display: "inline-block" }}>
+        <span
+          style={{
+            position: "absolute",
+            left: "-0.09em",
+            right: "-0.09em",
+            top: "0.06em",
+            bottom: "0.04em",
+            background: YELLOW_SOLID,
+            transformOrigin: "left center",
+            transform: `scaleX(${grow})`,
+          }}
+        />
+        <span style={{ position: "relative" }}>{p.slice(2, -2)}</span>
+      </span>
+    ) : (
+      <span key={`${keyPrefix}-${i}`}>{p}</span>
+    )
+  );
+
+// 図解シーン共通の大見出し(画面上部・センター)
+const Headline: React.FC<{ text: string; opacity: number; grow: number }> = ({
+  text,
+  opacity,
+  grow,
+}) => (
+  <div
+    style={{
+      fontFamily: MARU,
+      fontWeight: 900,
+      fontSize: 74,
+      lineHeight: 1.35,
+      color: INK,
+      textAlign: "center",
+      opacity,
+      transform: `translateY(${(1 - opacity) * -16}px)`,
+      marginBottom: 54,
+    }}
+  >
+    {text.split("\n").map((line, i) => (
+      <div key={i}>{renderHeadline(line, `hd-l${i}`, grow)}</div>
+    ))}
+  </div>
+);
+
+// 細いグレーの矢印(図解の列と列をつなぐ)
+const FlowArrow: React.FC<{ opacity: number; size?: number }> = ({ opacity, size = 90 }) => (
+  <svg width={size} height={40} viewBox="0 0 90 40" fill="none" style={{ opacity, flexShrink: 0 }}>
+    <path
+      d="M8 20h64M60 9l14 11-14 11"
+      stroke="#8a8a8a"
+      strokeWidth="4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// 実写など暗い背景での**強調**は黄色のベタ塗り＋黒文字(マーカーだと沈むため)
+const renderMarkedSolid = (text: string, keyPrefix: string, pop: number) =>
+  text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
+    p.startsWith("**") && p.endsWith("**") ? (
+      <span
+        key={`${keyPrefix}-${i}`}
+        style={{
+          display: "inline-block",
+          background: YELLOW_SOLID,
+          color: "#1a1a1a",
+          textShadow: "none",
+          padding: "0 0.12em",
+          borderRadius: 10,
+          transform: `scale(${pop})`,
+        }}
+      >
+        {p.slice(2, -2)}
+      </span>
+    ) : (
+      <span key={`${keyPrefix}-${i}`}>{p}</span>
+    )
+  );
+
+const MultiLineSolid: React.FC<{ text: string; keyPrefix: string; pop?: number }> = ({
+  text,
+  keyPrefix,
+  pop = 1,
+}) => (
+  <>
+    {text.split("\n").map((line, i) => (
+      <div key={i}>{renderMarkedSolid(line, `${keyPrefix}-l${i}`, pop)}</div>
+    ))}
+  </>
+);
 
 const MultiLine: React.FC<{ text: string; accent: string; keyPrefix: string }> = ({
   text,
@@ -119,24 +279,25 @@ const SubtitleBand: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, st
     <div
       style={{
         position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
+        left: 60,
+        bottom: 60,
+        width: 1800,
         height: 130,
-        background: "rgba(0,0,0,0.78)",
+        background: NAVY,
+        borderRadius: 8,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "0 60px",
+        padding: "20px 60px",
       }}
     >
       <span
         style={{
           fontFamily: GOTHIC,
-          fontSize: 50,
+          fontSize: 48,
           fontWeight: 700,
           color: "#fff",
-          letterSpacing: "0.04em",
+          lineHeight: 1.4,
           opacity,
           textAlign: "center",
         }}
@@ -148,23 +309,26 @@ const SubtitleBand: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, st
 };
 
 // マーカー（番号・✓・×）
-const Marker: React.FC<{ beat: Beat; index: number; accent: string }> = ({ beat, index, accent }) => {
+// 番号は黒丸に白抜き、×は赤の輪郭、✓はネイビーの輪郭
+const Marker: React.FC<{ beat: Beat; index: number; accent: string }> = ({ beat, index }) => {
   const symbol = beat.kind === "check" ? "✓" : beat.kind === "cross" ? "×" : `${index + 1}`;
-  const color = beat.kind === "check" ? GREEN : beat.kind === "cross" ? ACCENTS[0] : accent;
+  const outlined = beat.kind === "check" || beat.kind === "cross";
+  const color = beat.kind === "check" ? NAVY : beat.kind === "cross" ? RED : DARK;
   return (
     <div
       style={{
-        minWidth: 78,
-        height: 78,
+        minWidth: 72,
+        height: 72,
         borderRadius: "50%",
-        border: `5px solid ${color}`,
-        color,
+        border: outlined ? `5px solid ${color}` : "none",
+        background: outlined ? "#fff" : DARK,
+        color: outlined ? color : "#fff",
         fontFamily: MARKER,
-        fontSize: 48,
+        fontWeight: 700,
+        fontSize: 40,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#fff",
       }}
     >
       {symbol}
@@ -189,6 +353,7 @@ const StackItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({
       <div
         style={{
           fontFamily: MARKER,
+          fontWeight: 700,
           fontSize: 92,
           color: INK,
           textAlign: "center",
@@ -219,14 +384,15 @@ const StackItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({
       <div
         style={{
           fontFamily: MARKER,
+          fontWeight: 700,
           fontSize: 62,
           lineHeight: 1.5,
           color: INK,
           background: "#fff",
-          border: `4px solid ${INK}`,
-          borderRadius: isBubble ? 42 : 18,
+          border: `3px solid ${DARK}`,
+          borderRadius: 16,
           padding: "26px 46px",
-          boxShadow: "6px 8px 0 rgba(0,0,0,0.08)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
         }}
       >
         <MultiLine text={beat.text} accent={accent} keyPrefix={`b${index}`} />
@@ -252,14 +418,15 @@ const RowItem: React.FC<{ beat: Beat; index: number; startAt: number; compact: b
         opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
         transform: `translateY(${(1 - s) * 70}px) scale(${0.7 + s * 0.3})`,
         fontFamily: MARKER,
+        fontWeight: 700,
         fontSize: compact ? 52 : 66,
         lineHeight: 1.5,
         color: INK,
         background: "#fff",
-        border: `5px solid ${accent}`,
-        borderRadius: 24,
+        border: `3px solid ${DARK}`,
+        borderRadius: 16,
         padding: compact ? "34px 40px" : "50px 58px",
-        boxShadow: "6px 8px 0 rgba(0,0,0,0.08)",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
         textAlign: "center",
         maxWidth: compact ? 540 : 720,
       }}
@@ -288,10 +455,10 @@ const PanelItem: React.FC<{ beat: Beat; index: number; startAt: number; total: n
         transform: `translateX(${(1 - s) * -140}px) scale(${0.7 + s * 0.3}) rotate(${(1 - s) * -3}deg)`,
         width,
         background: "#fff",
-        border: `4px solid ${INK}`,
+        border: `3px solid ${DARK}`,
         borderRadius: 16,
         overflow: "hidden",
-        boxShadow: "6px 8px 0 rgba(0,0,0,0.08)",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
       }}
     >
       <div
@@ -301,7 +468,7 @@ const PanelItem: React.FC<{ beat: Beat; index: number; startAt: number; total: n
           gap: 8,
           padding: "12px 18px",
           background: `${accent}22`,
-          borderBottom: `3px solid ${INK}`,
+          borderBottom: `3px solid ${DARK}`,
         }}
       >
         <div style={{ width: 14, height: 14, borderRadius: "50%", background: accent }} />
@@ -316,6 +483,7 @@ const PanelItem: React.FC<{ beat: Beat; index: number; startAt: number; total: n
           alignItems: "center",
           justifyContent: "center",
           fontFamily: MARKER,
+          fontWeight: 700,
           fontSize: total >= 4 ? 42 : 50,
           lineHeight: 1.5,
           color: INK,
@@ -366,15 +534,16 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
           <div
             style={{
               fontFamily: MARKER,
+              fontWeight: 700,
               fontSize: 42,
               lineHeight: 1.4,
               color: INK,
               textAlign: "center",
               background: "#fff",
-              border: `3px solid ${accent}`,
+              border: `3px solid ${DARK}`,
               borderRadius: 14,
               padding: "18px 24px",
-              boxShadow: "4px 5px 0 rgba(0,0,0,0.08)",
+              boxShadow: "0 3px 12px rgba(0,0,0,0.10)",
             }}
           >
             <MultiLine text={beat.text} accent={accent} keyPrefix={`tl${index}`} />
@@ -408,15 +577,16 @@ const TimelineItem: React.FC<{ beat: Beat; index: number; startAt: number; total
           <div
             style={{
               fontFamily: MARKER,
+              fontWeight: 700,
               fontSize: 42,
               lineHeight: 1.4,
               color: INK,
               textAlign: "center",
               background: "#fff",
-              border: `3px solid ${accent}`,
+              border: `3px solid ${DARK}`,
               borderRadius: 14,
               padding: "18px 24px",
-              boxShadow: "4px 5px 0 rgba(0,0,0,0.08)",
+              boxShadow: "0 3px 12px rgba(0,0,0,0.10)",
             }}
           >
             <MultiLine text={beat.text} accent={accent} keyPrefix={`tl${index}`} />
@@ -470,9 +640,9 @@ const GridItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({ be
         width: 560,
         minHeight: 190,
         background: "#fff",
-        border: `4px solid ${accent}`,
-        borderRadius: 20,
-        boxShadow: "5px 6px 0 rgba(0,0,0,0.08)",
+        border: `3px solid ${DARK}`,
+        borderRadius: 16,
+        boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -484,6 +654,7 @@ const GridItem: React.FC<{ beat: Beat; index: number; startAt: number }> = ({ be
       <div
         style={{
           fontFamily: MARKER,
+          fontWeight: 700,
           fontSize: 44,
           lineHeight: 1.45,
           color: INK,
@@ -519,12 +690,13 @@ const PyramidRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, star
               width,
               marginTop: i === 0 ? 0 : 12,
               background: "#fff",
-              border: `4px solid ${accent}`,
-              borderRadius: 14,
+              border: `3px solid ${DARK}`,
+              borderRadius: 16,
               padding: "24px 34px",
               textAlign: "center",
-              boxShadow: "5px 6px 0 rgba(0,0,0,0.08)",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
               fontFamily: MARKER,
+              fontWeight: 700,
               fontSize: total >= 4 ? 42 : 50,
               lineHeight: 1.4,
               color: INK,
@@ -561,6 +733,7 @@ const MeterRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts
             <div
               style={{
                 fontFamily: MARKER,
+                fontWeight: 700,
                 fontSize: 46,
                 color: INK,
                 marginBottom: 12,
@@ -573,8 +746,8 @@ const MeterRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts
                 width: "100%",
                 height: 40,
                 borderRadius: 20,
-                background: "#e8e0cf",
-                border: `3px solid ${INK}`,
+                background: "#eeeeee",
+                border: `3px solid ${DARK}`,
                 overflow: "hidden",
               }}
             >
@@ -583,6 +756,499 @@ const MeterRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts
           </div>
         );
       })}
+    </div>
+  );
+};
+
+// 図解①(flow3): 上に見出しラベル / 中央に線画アイコン / 下に補足、を横に並べて矢印でつなぐ
+const FlowRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const colW = beats.length >= 4 ? 340 : 400;
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 0 }}>
+      {beats.map((b, i) => {
+        const startAt = starts[i];
+        const s = spring({ frame: frame - startAt, fps, config: { damping: 14, stiffness: 150, mass: 0.6 } });
+        const op = frame < startAt ? 0 : Math.min(1, s * 1.3);
+        return (
+          <React.Fragment key={i}>
+            {i > 0 ? (
+              <div style={{ paddingTop: 250 }}>
+                <FlowArrow opacity={frame >= startAt ? 1 : 0} />
+              </div>
+            ) : null}
+            <div
+              style={{
+                width: colW,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                opacity: op,
+                transform: `translateY(${(1 - s) * 26}px)`,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: MARU,
+                  fontWeight: 700,
+                  fontSize: 40,
+                  lineHeight: 1.5,
+                  color: INK,
+                  textAlign: "center",
+                  minHeight: 190,
+                }}
+              >
+                <MultiLine text={b.text} accent={RED_TEXT} keyPrefix={`fl${i}`} />
+              </div>
+              <div style={{ margin: "10px 0 26px" }}>
+                <LineIcon name={b.icon} size={132} />
+              </div>
+              {b.note ? (
+                <div
+                  style={{
+                    fontFamily: MARU,
+                    fontWeight: 700,
+                    fontSize: 34,
+                    lineHeight: 1.5,
+                    color: INK,
+                    textAlign: "center",
+                  }}
+                >
+                  <MultiLine text={b.note} accent={RED_TEXT} keyPrefix={`fn${i}`} />
+                </div>
+              ) : null}
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
+// 図解②(iconsteps): 丸で囲んだ線画アイコンを矢印でつなぎ、下にラベルを置く
+const IconStepsRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const r = beats.length >= 4 ? 84 : 96;
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
+      {beats.map((b, i) => {
+        const startAt = starts[i];
+        const s = spring({ frame: frame - startAt, fps, config: { damping: 13, stiffness: 165, mass: 0.6 } });
+        const op = frame < startAt ? 0 : Math.min(1, s * 1.3);
+        return (
+          <React.Fragment key={i}>
+            {i > 0 ? (
+              <div style={{ paddingTop: r - 20 }}>
+                <FlowArrow opacity={frame >= startAt ? 1 : 0} size={64} />
+              </div>
+            ) : null}
+            <div
+              style={{
+                width: r * 2 + 40,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                opacity: op,
+                transform: `scale(${0.75 + s * 0.25})`,
+              }}
+            >
+              <div
+                style={{
+                  width: r * 2,
+                  height: r * 2,
+                  borderRadius: "50%",
+                  border: `3px solid ${DARK}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <LineIcon name={b.icon} size={r} />
+              </div>
+              <div
+                style={{
+                  marginTop: 22,
+                  fontFamily: MARU,
+                  fontWeight: 700,
+                  fontSize: 34,
+                  lineHeight: 1.45,
+                  color: INK,
+                  textAlign: "center",
+                }}
+              >
+                <MultiLine text={b.text} accent={RED_TEXT} keyPrefix={`is${i}`} />
+              </div>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
+// 図解③(reject): 左に「これではない」もの(大きな赤い×)、右に本当に伝えたいこと
+const RejectRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const left = beats[0];
+  const right = beats.slice(1);
+  const sL = spring({ frame: frame - starts[0], fps, config: { damping: 14, stiffness: 150, mass: 0.6 } });
+  // ×は左のブロックが出たあと少し遅れて引かれる
+  const xDraw = interpolate(frame - starts[0], [12, 30], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", width: 1620 }}>
+      <div
+        style={{
+          width: 620,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          opacity: frame < starts[0] ? 0 : Math.min(1, sL * 1.3),
+          transform: `translateX(${(1 - sL) * -40}px)`,
+        }}
+      >
+        {left ? (
+          <>
+            <div
+              style={{
+                border: `3px solid ${DARK}`,
+                borderRadius: 16,
+                padding: "26px 34px",
+                fontFamily: MARU,
+                fontWeight: 700,
+                fontSize: 40,
+                lineHeight: 1.5,
+                color: INK,
+                textAlign: "center",
+              }}
+            >
+              <MultiLine text={left.text} accent={RED_TEXT} keyPrefix="rjt" />
+            </div>
+            <div style={{ position: "relative", margin: "44px 0 22px" }}>
+              <LineIcon name={left.icon} size={190} />
+              <svg
+                width="230"
+                height="230"
+                viewBox="0 0 230 230"
+                fill="none"
+                style={{ position: "absolute", left: -20, top: -20 }}
+              >
+                <path
+                  d="M28 28L202 202M202 28L28 202"
+                  stroke={RED}
+                  strokeWidth="13"
+                  strokeLinecap="round"
+                  strokeDasharray="246"
+                  strokeDashoffset={246 * (1 - xDraw)}
+                />
+              </svg>
+            </div>
+            {left.note ? (
+              <div
+                style={{
+                  fontFamily: MARU,
+                  fontWeight: 700,
+                  fontSize: 34,
+                  color: INK,
+                  textAlign: "center",
+                }}
+              >
+                <MultiLine text={left.note} accent={RED_TEXT} keyPrefix="rjn" />
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+
+      <div style={{ width: 3, background: "#c9c9c9", margin: "0 50px" }} />
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 28 }}>
+        {right.map((b, i) => {
+          const startAt = starts[i + 1];
+          const s = spring({ frame: frame - startAt, fps, config: { damping: 14, stiffness: 150, mass: 0.6 } });
+          const grow = interpolate(frame - startAt, [6, 24], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
+          return (
+            <div
+              key={i}
+              style={{
+                opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+                transform: `translateX(${(1 - s) * 40}px)`,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 16,
+              }}
+            >
+              {b.icon ? <LineIcon name={b.icon} size={112} /> : null}
+              <div
+                style={{
+                  fontFamily: MARU,
+                  fontWeight: 900,
+                  fontSize: 48,
+                  lineHeight: 1.45,
+                  color: INK,
+                  textAlign: "center",
+                }}
+              >
+                {b.text.split("\n").map((line, j) => (
+                  <div key={j}>{renderHeadline(line, `rr${i}-${j}`, grow)}</div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// 2分割(split2)用: 左に否定材料(×)、右に解決の手順(番号)を並べる
+const Split2Row: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const mid = Math.ceil(beats.length / 2);
+  const left = beats.slice(0, mid);
+  const right = beats.slice(mid);
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", width: 1500, gap: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 22, paddingRight: 40 }}>
+        {left.map((b, i) => {
+          const startAt = starts[i];
+          const s = spring({ frame: frame - startAt, fps, config: { damping: 13, stiffness: 150, mass: 0.6 } });
+          return (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 20,
+                opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+                transform: `translateX(${(1 - s) * -50}px)`,
+              }}
+            >
+              <div
+                style={{
+                  minWidth: 62,
+                  height: 62,
+                  borderRadius: "50%",
+                  border: `5px solid ${ACCENTS[0]}`,
+                  color: ACCENTS[0],
+                  fontFamily: MARKER,
+                  fontWeight: 700,
+                  fontSize: 38,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "#fff",
+                }}
+              >
+                ×
+              </div>
+              <div style={{ fontFamily: MARKER, fontWeight: 700, fontSize: 40, lineHeight: 1.45, color: INK }}>
+                <MultiLine text={b.text} accent={ACCENTS[0]} keyPrefix={`sl${i}`} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ width: 5, background: `${INK}33`, margin: "0 20px" }} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 20, paddingLeft: 40 }}>
+        {right.map((b, i) => {
+          const startAt = starts[mid + i];
+          const accent = ACCENTS[(i + 2) % ACCENTS.length];
+          const s = spring({ frame: frame - startAt, fps, config: { damping: 13, stiffness: 150, mass: 0.6 } });
+          return (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 18,
+                opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+                transform: `translateX(${(1 - s) * 50}px)`,
+                background: "#fff",
+                border: `3px solid ${DARK}`,
+                borderRadius: 16,
+                padding: "18px 26px",
+                boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
+              }}
+            >
+              <div
+                style={{
+                  minWidth: 54,
+                  height: 54,
+                  borderRadius: "50%",
+                  background: accent,
+                  color: "#fff",
+                  fontFamily: MARKER,
+                  fontWeight: 700,
+                  fontSize: 30,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {i + 1}
+              </div>
+              <div style={{ fontFamily: MARKER, fontWeight: 700, fontSize: 36, lineHeight: 1.4, color: INK }}>
+                <MultiLine text={b.text} accent={accent} keyPrefix={`sr${i}`} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// 階段(stairs)用: 段が右上に積み上がり、最後の段だけ壁を突破する演出
+const StairsRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const total = beats.length;
+  return (
+    <div style={{ position: "relative", width: 1300, height: 460, display: "flex", alignItems: "flex-end" }}>
+      {beats.map((b, i) => {
+        const startAt = starts[i];
+        const isLast = i === total - 1;
+        const accent = isLast ? RED : DARK;
+        const s = spring({ frame: frame - startAt, fps, config: { damping: 13, stiffness: 140, mass: 0.65 } });
+        const stepH = 150 + i * 100;
+        return (
+          <div
+            key={i}
+            style={{
+              position: "relative",
+              width: 1300 / total,
+              height: stepH,
+              marginLeft: i === 0 ? 0 : -4,
+              background: isLast ? "#fff" : "#eeeeee",
+              border: `3px solid ${accent}`,
+              borderBottom: "none",
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "center",
+              paddingTop: 24,
+              opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+              transform: `translateY(${(1 - s) * 60}px)`,
+              boxShadow: isLast ? "0 -6px 22px rgba(217,72,43,0.25)" : "none",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: MARKER,
+                fontWeight: 700,
+                fontSize: isLast ? 46 : 34,
+                lineHeight: 1.4,
+                color: isLast ? ACCENTS[0] : INK,
+                textAlign: "center",
+                padding: "0 20px",
+              }}
+            >
+              <MultiLine text={b.text} accent={accent} keyPrefix={`st${i}`} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// データ+4ステップ(chart4step)用: 上に伸び率バッジ、下に番号付きステップを並べる
+const Chart4StepRow: React.FC<{ beats: Beat[]; starts: number[] }> = ({ beats, starts }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const badgeStart = 0;
+  const bs = spring({ frame: frame - badgeStart, fps, config: { damping: 11, stiffness: 160, mass: 0.6 } });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 40 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 30,
+          opacity: Math.min(1, bs * 1.3),
+          transform: `scale(${0.8 + bs * 0.2})`,
+        }}
+      >
+        <div style={{ width: 60, height: 90, background: GRAY_BAR, borderRadius: "6px 6px 0 0" }} />
+        <div style={{ width: 60, height: 210, background: ACCENTS[0], borderRadius: "6px 6px 0 0" }} />
+        <div
+          style={{
+            marginLeft: 24,
+            background: "#ffe500",
+            border: `3px solid ${DARK}`,
+            borderRadius: "50%",
+            width: 200,
+            height: 150,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: MARKER,
+            fontWeight: 700,
+            fontSize: 30,
+            color: INK,
+            textAlign: "center",
+            lineHeight: 1.3,
+            transform: "rotate(-6deg)",
+          }}
+        >
+          増えている
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 24 }}>
+        {beats.map((b, i) => {
+          const startAt = starts[i];
+          const accent = ACCENTS[i % ACCENTS.length];
+          const s = spring({ frame: frame - startAt, fps, config: { damping: 13, stiffness: 160, mass: 0.6 } });
+          return (
+            <div
+              key={i}
+              style={{
+                width: 300,
+                opacity: frame < startAt ? 0 : Math.min(1, s * 1.3),
+                transform: `translateY(${(1 - s) * 40}px)`,
+                background: "#fff",
+                border: `3px solid ${DARK}`,
+                borderRadius: 16,
+                padding: "20px 20px",
+                textAlign: "center",
+                boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
+              }}
+            >
+              <div
+                style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: "50%",
+                  background: accent,
+                  color: "#fff",
+                  fontFamily: MARKER,
+                  fontWeight: 700,
+                  fontSize: 28,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 12px",
+                }}
+              >
+                {i + 1}
+              </div>
+              <div style={{ fontFamily: MARKER, fontWeight: 700, fontSize: 30, lineHeight: 1.4, color: INK }}>
+                <MultiLine text={b.text} accent={accent} keyPrefix={`c4${i}`} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -598,24 +1264,31 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
   return (
     <AbsoluteFill style={{ backgroundColor: PAPER }}>
       <AbsoluteFill
-        style={{ transform: `scale(${drift})`, padding: "70px 130px 130px", alignItems: "center" }}
+        style={{ transform: `scale(${drift})`, padding: "56px 130px 230px", alignItems: "center" }}
       >
         {scene.title ? (
-          <div
-            style={{
-              fontFamily: MARKER,
-              fontSize: 72,
-              color: INK,
-              opacity: titleOp,
-              borderBottom: `6px solid ${ACCENTS[0]}55`,
-              paddingBottom: 8,
-              marginBottom: 24,
-            }}
-          >
-            {renderMarked(scene.title, ACCENTS[0], "t")}
-          </div>
+          <Headline
+            text={scene.title}
+            opacity={titleOp}
+            grow={interpolate(frame, [10, 28], [0, 1], {
+              extrapolateLeft: "clamp",
+              extrapolateRight: "clamp",
+            })}
+          />
         ) : null}
-        {layout === "stack" ? (
+        {layout === "flow3" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <FlowRow beats={scene.beats} starts={starts} />
+          </div>
+        ) : layout === "iconsteps" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <IconStepsRow beats={scene.beats} starts={starts} />
+          </div>
+        ) : layout === "reject" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <RejectRow beats={scene.beats} starts={starts} />
+          </div>
+        ) : layout === "stack" ? (
           <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", flex: 1 }}>
             {scene.beats.map((b, i) => (
               <StackItem key={i} beat={b} index={i} startAt={starts[i]} />
@@ -662,6 +1335,18 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
             <MeterRow beats={scene.beats} starts={starts} />
           </div>
+        ) : layout === "split2" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <Split2Row beats={scene.beats} starts={starts} />
+          </div>
+        ) : layout === "stairs" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <StairsRow beats={scene.beats} starts={starts} />
+          </div>
+        ) : layout === "chart4step" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+            <Chart4StepRow beats={scene.beats} starts={starts} />
+          </div>
         ) : (
           <div
             style={{
@@ -678,6 +1363,7 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
                   <div
                     style={{
                       fontFamily: MARKER,
+                      fontWeight: 700,
                       fontSize: layout === "compare" ? 130 : 88,
                       color: ACCENTS[1],
                       opacity: frame >= starts[i] ? 1 : 0,
@@ -708,7 +1394,13 @@ const StockScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, start
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       ) : null}
-      <AbsoluteFill style={{ background: "rgba(0,0,0,0.45)" }} />
+      {/* 上下を落として文字を読ませ、中央は素材を活かす(cutシーンと同じ処理) */}
+      <AbsoluteFill
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(10,14,20,0.86) 0%, rgba(10,14,20,0.5) 30%, rgba(10,14,20,0.5) 62%, rgba(10,14,20,0.92) 100%)",
+        }}
+      />
       <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 160px 110px" }}>
         {scene.beats.map((b, i) => {
           if (frame < starts[i]) return null;
@@ -721,19 +1413,78 @@ const StockScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, start
               key={i}
               style={{
                 fontFamily: MARKER,
-                fontSize: 82,
+                fontWeight: 700,
+                fontSize: 78,
+                fontWeight: 900,
                 color: "#fff",
                 textAlign: "center",
-                lineHeight: 1.7,
-                textShadow: "0 4px 24px rgba(0,0,0,0.8)",
+                lineHeight: 1.55,
+                textShadow: "0 6px 26px rgba(0,0,0,0.8)",
                 opacity: op,
                 margin: "14px 0",
               }}
             >
-              <MultiLine text={b.text} accent="#ffd75e" keyPrefix={`s${i}`} />
+              <MultiLineSolid text={b.text} keyPrefix={`s${i}`} />
             </div>
           );
         })}
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+// 実写ハイライトカット(cut)用: 短尺の実写に大きな一文＋黄色ベタ塗りの強調を重ねる
+const CutScene: React.FC<{ scene: Scene }> = ({ scene }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const zoom = interpolate(frame, [0, 999], [1, 1.08], { extrapolateRight: "clamp" });
+  const textS = spring({ frame: frame - 4, fps, config: { damping: 14, stiffness: 150, mass: 0.6 } });
+  // 強調ワードは本文より少し遅れて黄色い箱がポンと出る
+  const popScale = spring({ frame: frame - 14, fps, config: { damping: 10, stiffness: 200, mass: 0.5 } });
+  const beat = scene.beats[0];
+  const lines = (beat?.text || "").split("\n");
+  return (
+    <AbsoluteFill style={{ backgroundColor: "#000" }}>
+      {scene.video ? (
+        <div style={{ position: "absolute", inset: 0, overflow: "hidden", transform: `scale(${zoom})` }}>
+          <OffthreadVideo
+            src={staticFile(scene.video)}
+            muted
+            loop
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </div>
+      ) : null}
+      <AbsoluteFill
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(10,14,20,0.86) 0%, rgba(10,14,20,0.58) 30%, rgba(10,14,20,0.58) 62%, rgba(10,14,20,0.92) 100%)",
+        }}
+      />
+      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 160px 110px" }}>
+        <div
+          style={{
+            opacity: Math.min(1, textS * 1.3),
+            transform: `translateY(${(1 - textS) * 24}px)`,
+            textAlign: "center",
+          }}
+        >
+          {lines.map((line, i) => (
+            <div
+              key={i}
+              style={{
+                fontFamily: GOTHIC,
+                fontWeight: 900,
+                fontSize: 82,
+                lineHeight: 1.5,
+                color: "#fff",
+                textShadow: "0 6px 26px rgba(0,0,0,0.8)",
+              }}
+            >
+              {renderMarkedSolid(line, `cut${i}`, popScale)}
+            </div>
+          ))}
+        </div>
       </AbsoluteFill>
     </AbsoluteFill>
   );
@@ -749,12 +1500,16 @@ const TitleScene: React.FC<{ scene: Scene }> = ({ scene }) => {
         <div
           style={{
             fontFamily: GOTHIC,
-            fontSize: 32,
-            letterSpacing: "0.35em",
-            color: ACCENTS[1],
+            fontSize: 34,
+            letterSpacing: "0.24em",
+            color: "#ffffff",
+            background: DARK,
+            borderRadius: 12,
+            padding: "12px 40px",
             fontWeight: 700,
-            marginBottom: 36,
+            marginBottom: 46,
             opacity: s,
+            transform: `translateY(${(1 - s) * -20}px)`,
           }}
         >
           {scene.kicker}
@@ -763,15 +1518,21 @@ const TitleScene: React.FC<{ scene: Scene }> = ({ scene }) => {
       <div
         style={{
           fontFamily: MARKER,
-          fontSize: 116,
+          fontWeight: 700,
+          fontSize: 112,
+          fontWeight: 900,
           color: INK,
           textAlign: "center",
-          lineHeight: 1.6,
+          lineHeight: 1.5,
           opacity: s,
           transform: `translateY(${(1 - s) * 40}px)`,
         }}
       >
-        <MultiLine text={scene.beats[0]?.text || scene.title || ""} accent={ACCENTS[0]} keyPrefix="ti" />
+        <MultiLineHL
+          text={scene.beats[0]?.text || scene.title || ""}
+          keyPrefix="ti"
+          grow={interpolate(frame, [14, 30], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })}
+        />
       </div>
     </AbsoluteFill>
   );
@@ -797,15 +1558,24 @@ const CtaScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, starts 
               key={i}
               style={{
                 fontFamily: MARKER,
-                fontSize: 78,
+                fontWeight: 700,
+                fontSize: 76,
+                fontWeight: 900,
                 color: INK,
                 textAlign: "center",
-                lineHeight: 1.7,
+                lineHeight: 1.55,
                 opacity: op,
                 margin: "14px 0",
               }}
             >
-              <MultiLine text={b.text} accent={ACCENTS[0]} keyPrefix={`c${i}`} />
+              <MultiLineHL
+                text={b.text}
+                keyPrefix={`c${i}`}
+                grow={interpolate(frame - starts[i], [8, 24], [0, 1], {
+                  extrapolateLeft: "clamp",
+                  extrapolateRight: "clamp",
+                })}
+              />
             </div>
           );
         })}
@@ -830,7 +1600,7 @@ const CtaScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, starts 
                 background: GREEN,
                 borderRadius: 60,
                 padding: "26px 70px",
-                boxShadow: "6px 8px 0 rgba(0,0,0,0.12)",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.14)",
               }}
             >
               ▼ 概要欄のリンクから
@@ -870,6 +1640,7 @@ const SceneView: React.FC<{ scene: Scene; footer: string }> = ({ scene, footer }
     <AbsoluteFill style={{ opacity: fadeIn * fadeOut }}>
       {scene.type === "points" ? <PointsScene scene={scene} starts={starts} /> : null}
       {scene.type === "stock" ? <StockScene scene={scene} starts={starts} /> : null}
+      {scene.type === "cut" ? <CutScene scene={scene} /> : null}
       {scene.type === "title" ? <TitleScene scene={scene} /> : null}
       {scene.type === "cta" ? <CtaScene scene={scene} starts={starts} /> : null}
       {scene.type !== "title" ? <SubtitleBand beats={scene.beats} starts={starts} /> : null}
@@ -881,7 +1652,7 @@ const SceneView: React.FC<{ scene: Scene; footer: string }> = ({ scene, footer }
           top: 28,
           fontFamily: GOTHIC,
           fontSize: 26,
-          color: scene.type === "stock" ? "rgba(255,255,255,0.75)" : "rgba(43,43,43,0.55)",
+          color: scene.type === "stock" || scene.type === "cut" ? "rgba(255,255,255,0.75)" : "rgba(43,43,43,0.55)",
           letterSpacing: "0.1em",
         }}
       >
@@ -928,13 +1699,13 @@ const SubscribeBadge: React.FC = () => {
     <div
       style={{
         position: "absolute",
-        right: 26,
-        bottom: 152,
+        right: 60,
+        bottom: 212,
         transform: `scale(${pulse})`,
         display: "flex",
         alignItems: "center",
         gap: 10,
-        background: "#cc0000",
+        background: RED,
         color: "#fff",
         fontFamily: GOTHIC,
         fontWeight: 700,
@@ -942,7 +1713,7 @@ const SubscribeBadge: React.FC = () => {
         letterSpacing: "0.06em",
         padding: "12px 24px",
         borderRadius: 10,
-        boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+        boxShadow: "0 4px 14px rgba(0,0,0,0.20)",
       }}
     >
       <span style={{ fontSize: 22 }}>▶</span>

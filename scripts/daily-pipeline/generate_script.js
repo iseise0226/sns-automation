@@ -111,6 +111,8 @@ function stripForeignChars(text) {
     .trim();
 }
 
+// LineIcons.tsx のIconNameと同じ並び
+const ICON_NAMES = ['person_worried', 'person_calm', 'clock', 'wallet', 'coin', 'yen', 'chart_up', 'chart_bar', 'document', 'document_check', 'pencil', 'book', 'wall', 'flag', 'smartphone', 'cart', 'calendar', 'envelope', 'safe', 'gear', 'check_circle', 'cross_circle', 'piggy', 'lightbulb', 'target', 'hourglass'];
 const CHIBI_POSES = ['default', 'arms_crossed', 'bowing', 'explaining', 'guts', 'pointing_left', 'thinking', 'thumbs_up'];
 const BEAT_SE_KEYS = ['clink', 'reveal', 'reveal_multi', 'spark', 'sad', 'impact', 'decide', 'decide2', 'cash', 'punch', 'drum', 'clapper', 'clapper2', 'bell', 'bell2'];
 function sanitizeScenes(scenes) {
@@ -119,6 +121,9 @@ function sanitizeScenes(scenes) {
     for (const b of sc.beats || []) {
       b.text = stripForeignChars(b.text);
       b.sub = stripForeignChars(b.sub);
+      if (b.note) b.note = stripForeignChars(b.note);
+      // iconはアイコン名なので英字を残す。未知の名前はRemotion側の既定にフォールバックさせる
+      if (b.icon && !ICON_NAMES.includes(b.icon)) delete b.icon;
       if (!BEAT_SE_KEYS.includes(b.se)) delete b.se;
     }
     sc.pose = CHIBI_POSES.includes(sc.pose) ? sc.pose : 'default';
@@ -129,13 +134,13 @@ function sanitizeScenes(scenes) {
 }
 
 // pointsシーンのlayoutをコード側で確実にランダム化する(AI任せだと偏る/連続するため)
-// ビート数に合わないレイアウトは候補から除外し、直前と同じレイアウトは避ける
-const ALL_LAYOUTS = ['stack', 'panels', 'row', 'compare', 'timeline', 'grid', 'pyramid', 'meter'];
+// 白背景シーンは線画アイコンの図解3種のみ(枠付きカードの旧レイアウトは廃止)
+const ALL_LAYOUTS = ['flow3', 'iconsteps', 'reject'];
 function compatibleLayouts(beatCount) {
   return ALL_LAYOUTS.filter((l) => {
-    if (l === 'compare') return beatCount === 2;
-    if (l === 'grid') return beatCount >= 2 && beatCount <= 4;
-    if (l === 'timeline' || l === 'pyramid' || l === 'meter') return beatCount >= 2 && beatCount <= 4;
+    if (l === 'flow3') return beatCount >= 2 && beatCount <= 3;
+    if (l === 'iconsteps') return beatCount >= 3 && beatCount <= 4;
+    if (l === 'reject') return beatCount === 2;
     return true;
   });
 }
@@ -146,24 +151,51 @@ function randomizeLayouts(scenes) {
     const candidates = compatibleLayouts((sc.beats || []).length).filter((l) => l !== prevLayout);
     const pool = candidates.length ? candidates : compatibleLayouts((sc.beats || []).length);
     sc.layout = pool[Math.floor(Math.random() * pool.length)];
-    if (sc.layout === 'compare' || sc.layout === 'row') sc.separator = sc.layout === 'compare' ? '≠' : '→';
-    else delete sc.separator;
     prevLayout = sc.layout;
   }
   return scenes;
 }
 
+// 実写(cut)と白背景(points)を必ず交互に近い形で並べる。AIが固まって出しても強制的に整列する。
+// 少ない方(通常cut)を多い方(points)の間に均等に差し込むことで、
+// 「cutのあとpointsが2連続」のような偏りを避ける。
+function alternateCutAndPoints(scenes) {
+  const cuts = scenes.filter((s) => s.type === 'cut');
+  const others = scenes.filter((s) => s.type !== 'cut');
+  if (!cuts.length || !others.length) return scenes;
+
+  const minority = cuts.length <= others.length ? cuts : others;
+  const majority = cuts.length <= others.length ? others : cuts;
+
+  const woven = [];
+  let mi = 0;
+  // majorityをminorityの数+1個のブロックに分け、ブロックの間にminorityを1個ずつ挟む
+  const blockCount = minority.length + 1;
+  const baseSize = Math.floor(majority.length / blockCount);
+  let extra = majority.length % blockCount;
+  let idx = 0;
+  for (let b = 0; b < blockCount; b++) {
+    const size = baseSize + (extra > 0 ? 1 : 0);
+    if (extra > 0) extra--;
+    for (let k = 0; k < size; k++) woven.push(majority[idx++]);
+    if (mi < minority.length) woven.push(minority[mi++]);
+  }
+  return woven;
+}
+
 // シーン型・pose・seの共通定義(アウトライン生成と章生成の両方で使う)
 const SCENE_TYPES_DOC = `各sceneは次のいずれかの型:
-- {"type":"points","title":"シーン見出し(12字以内)","layout":"stack"|"panels"|"row"|"compare"|"timeline"|"grid"|"pyramid"|"meter","beats":[3個、各{"kind":"bubble"|"box"|"check"|"cross"|"big","text":"短いフレーズ\\n改行可(**強調**可、10〜16文字程度)","sub":"読み上げ文(40〜70文字)"}],"pose":"..."}
-   - layout="compare"のときはbeatsは2個ちょうど
-   - layout="timeline"は時系列・ステップの流れ(例: 過去→現在→未来)。beatsは3〜4個
-   - layout="grid"はまとめ・要点の一気見せ。beatsは4個(2×2)が基本
-   - layout="pyramid"は「まず土台、その上に○○」の積み上げ構造。beats[0]が一番下。beatsは2〜4個
-   - layout="meter"は段階が進むほど到達度が上がる話。beatsは2〜4個
-   - kindは、compareなら両方box、それ以外はbubble中心、良い話ならcheck、NG例ならcross
-   - layout="stack"の話に、金額・年数・回数など印象的な数字が出るビートが1個ある場合だけ、そのビートのkindを"big"にしてよい(文字が画面中央に大きく表示される。1シーンに最大1個、無理に入れなくてよい)
-- {"type":"stock","stockQuery":"Pexels検索用の英語キーワード(2〜4語)","beats":[2〜3個、{"kind":"big","text":"短い一文\\n改行可","sub":"読み上げ文(50〜90文字)"}],"pose":"..."}
+- {"type":"points","title":"大見出し(18字以内。一番刺さる語だけ**強調**で1箇所囲む)","layout":"flow3"|"iconsteps"|"reject","beats":[...],"pose":"..."}
+   すべて白背景に線画アイコンを置いた図解。各beatに必ず"icon"を付ける。
+   - layout="flow3": 3つの場面を矢印でつないで見せる(出発点→うまくいかない→だからこうする)。beatsは2〜3個。
+     各beat: {"kind":"bubble","text":"アイコンの上に置く見出し(3行以内・1行8字程度)","icon":"アイコン名","note":"アイコンの下の補足(2行以内・**強調**可)","sub":"読み上げ文(40〜70文字)"}
+   - layout="iconsteps": 丸で囲んだアイコンを矢印でつなぐ手順・流れ。beatsは3〜4個。
+     各beat: {"kind":"box","text":"アイコンの下のラベル(2行以内・1行5字程度)","icon":"アイコン名","sub":"読み上げ文(40〜70文字)"}
+   - layout="reject": 左に「これではない」もの(大きな赤い×が引かれる)、右に本当に伝えたいこと。beatsは2個ちょうど。
+     beats[0]: {"kind":"cross","text":"否定する内容(2行・**強調**可)","icon":"アイコン名","note":"下の一言","sub":"..."}
+     beats[1]: {"kind":"big","text":"本当に伝えたいこと(3行以内。一番大事な語を**強調**で囲む)","icon":"アイコン名","sub":"..."}
+   iconに使える名前: person_worried(悩む人)/person_calm(穏やかな人)/clock(時計)/wallet(財布)/coin(コイン)/yen(お金)/chart_up(右肩上がり)/chart_bar(棒グラフ)/document(書類)/document_check(チェック済み書類)/pencil(鉛筆)/book(本)/wall(壁)/flag(旗)/smartphone(スマホ)/cart(買い物カゴ)/calendar(カレンダー)/envelope(封筒・給料)/safe(金庫・貯金)/gear(歯車・自動)/check_circle(チェック)/cross_circle(バツ)/piggy(貯金箱)/lightbulb(気づき)/target(目標)/hourglass(砂時計)
+- {"type":"cut","stockQuery":"Pexels検索用の英語キーワード(2〜4語、実写で見せたい具体的な場面)","beats":[1個ちょうど、{"kind":"big","text":"短い一文\\n改行可(一番刺さる語だけ**強調**で1箇所囲む)","sub":"読み上げ文(20〜40文字)"}],"pose":"..."} ※実写の上に一言だけ出す4秒の短いカット
 
 poseフィールド(シーンの内容に合わせて1つ選ぶ):
 "default"(基本)|"explaining"(説明)|"arms_crossed"(断言/対比)|"thinking"(問いかけ)|"guts"(励まし)|"thumbs_up"(ポジティブな結論)|"pointing_left"(注意)|"bowing"(挨拶/締め)
@@ -215,8 +247,8 @@ ${SCENE_TYPES_DOC}
 
 この章のルール:
 - シーンは2〜3個。「主張→具体例やエピソード→今日からできる行動」の流れで深掘りする
-- 1個はstock型(実写映像)を使ってもよい(使わなくてもよい)
-- 前の章と同じエピソード・同じ言い回しを繰り返さない
+- 【必須】このうち1個は必ずcut型(実写4秒)にする。残りはpoints型(白背景の図解)。cut型は章の中で一番強く言い切りたい一言を短く出す場所として使う
+- 前の章と同じエピソード・同じ言い回しを繰り返さない。cut型のstockQueryも章ごとに違う場面にする
 - 語り口は、一人の人間が自分の言葉で友達に打ち明けるように。必要なら語り手自身の失敗談・本音を一人称で入れる`;
   const user = `話者設定: ${cfg.persona}
 動画全体のテーマ: ${topic}
@@ -238,14 +270,15 @@ async function generate(cfg, topic) {
   }
   outline.chapters = outline.chapters.slice(0, 3);
 
-  // 冒頭フック: 3章の予告をチェックリストで見せる
+  // 冒頭フック: 3章の予告を丸アイコンの手順風に見せる
   const hookScene = {
     type: 'points',
     title: 'この動画でわかること',
-    layout: 'stack',
+    layout: 'iconsteps',
     beats: outline.chapters.map((c, i) => ({
-      kind: 'check',
+      kind: 'box',
       text: c.title,
+      icon: 'check_circle',
       sub: c.hookSub || `${i + 1}つ目は、${c.title}についてです。`,
       se: i === 0 ? 'reveal_multi' : undefined,
     })),
@@ -259,25 +292,29 @@ async function generate(cfg, topic) {
     const res = await generateChapterScenes(cfg, topic, outline, i, recap.slice(0, 1500));
     const scenes = (Array.isArray(res.scenes) ? res.scenes : []).slice(0, 3).filter((sc) => Array.isArray(sc.beats) && sc.beats.length);
     if (!scenes.length) throw new Error(`第${i + 1}章の生成に失敗`);
-    // 章の始まりがわかるよう、各章の先頭シーンの見出しは章タイトルに揃える
-    if (scenes[0].type === 'points') scenes[0].title = outline.chapters[i].title;
-    bodyScenes.push(...scenes);
+    // 章の始まりがわかるよう、各章の先頭のpoints型シーンの見出しは章タイトルに揃える
+    const firstPoints = scenes.find((sc) => sc.type === 'points');
+    if (firstPoints) firstPoints.title = outline.chapters[i].title;
+    // 実写と白背景が必ず交互になるよう、章の中でも並べ替えておく
+    bodyScenes.push(...alternateCutAndPoints(scenes));
     recap += scenes.map((sc) => sc.beats.map((b) => b.sub).join('')).join('') + '\n';
   }
 
-  // まとめ: 3章の要点をグリッドで振り返る
+  // まとめ: 3章の要点を矢印でつないで振り返る
   const summaryScene = {
     type: 'points',
     title: 'きょうのまとめ',
-    layout: 'grid',
+    layout: 'flow3',
     beats: outline.chapters.map((c) => ({
-      kind: 'check',
+      kind: 'bubble',
       text: c.keyPoint || c.title,
+      icon: 'check_circle',
       sub: c.keySub || `${c.title}、これが今日の要点です。`,
     })),
     pose: 'thumbs_up',
   };
 
+  // bodyScenesはすでに章単位でcut/points交互に整列済み(章の順序はそのまま保つ)
   const scenes = [outline.titleScene, hookScene, ...bodyScenes, summaryScene, outline.ctaScene].filter(Boolean);
   return {
     youtubeTitle: outline.youtubeTitle,
