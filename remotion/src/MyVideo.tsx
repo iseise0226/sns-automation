@@ -100,7 +100,7 @@ const Headline: React.FC<{ text: string; opacity: number; grow: number }> = ({ t
     style={{
       fontFamily: MARU,
       fontWeight: 900,
-      fontSize: 72,
+      fontSize: 82,
       lineHeight: 1.35,
       color: INK,
       textAlign: "center",
@@ -188,7 +188,7 @@ const FlowColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = ({
               style={{
                 fontFamily: MARU,
                 fontWeight: 700,
-                fontSize: 46,
+                fontSize: 53,
                 lineHeight: 1.4,
                 color: INK,
                 textAlign: "center",
@@ -205,7 +205,7 @@ const FlowColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = ({
                 style={{
                   fontFamily: MARU,
                   fontWeight: 700,
-                  fontSize: 38,
+                  fontSize: 44,
                   lineHeight: 1.4,
                   color: INK,
                   textAlign: "center",
@@ -266,7 +266,7 @@ const IconStepsRow: React.FC<{ points: Point[]; frame: number; fps: number }> = 
                   marginTop: 18,
                   fontFamily: MARU,
                   fontWeight: 700,
-                  fontSize: 36,
+                  fontSize: 42,
                   lineHeight: 1.4,
                   color: INK,
                   textAlign: "center",
@@ -311,7 +311,7 @@ const RejectColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = 
               padding: "22px 30px",
               fontFamily: MARU,
               fontWeight: 700,
-              fontSize: 44,
+              fontSize: 51,
               lineHeight: 1.45,
               color: INK,
               textAlign: "center",
@@ -334,7 +334,7 @@ const RejectColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = 
             </svg>
           </div>
           {top.note ? (
-            <div style={{ fontFamily: MARU, fontWeight: 700, fontSize: 36, color: INK, textAlign: "center" }}>
+            <div style={{ fontFamily: MARU, fontWeight: 700, fontSize: 42, color: INK, textAlign: "center" }}>
               <MultiLine text={top.note} keyPrefix="rjn" />
             </div>
           ) : null}
@@ -359,7 +359,7 @@ const RejectColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = 
             style={{
               fontFamily: MARU,
               fontWeight: 900,
-              fontSize: 54,
+              fontSize: 62,
               lineHeight: 1.45,
               color: INK,
               textAlign: "center",
@@ -398,7 +398,7 @@ const CaptionBar: React.FC<{ text: string; opacity: number }> = ({ text, opacity
     <span
       style={{
         fontFamily: MARU,
-        fontSize: 42,
+        fontSize: 48,
         fontWeight: 700,
         color: "#ffffff",
         lineHeight: 1.4,
