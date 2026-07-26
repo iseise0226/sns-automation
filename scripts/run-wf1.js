@@ -5,23 +5,10 @@ const { execFileSync, execFileSync: run } = require('child_process');
 const { req, getBraveTrends } = require('./note-lib');
 
 const MAIN_ACCOUNT = 'ise_satoshi';
-const WEEKLY_ACCOUNTS = [
-  'satoshi_mindset',
-  'satoshi_mind_coaching',
-  'ise_sato_kosodate',
-  'sessi_life',
-  'ise_kenkou_otaku',
-  'tabi_life_design40',
-];
-// 週1(月曜)にまとめて生成。手動コピペの負担を毎日7件→1件+週1件にするため。
-const WEEKLY_DAY = 1; // 0=日,1=月,...
+// ise_satoshi以外・マガジンは一時停止中(2026-07-25)
+const WEEKLY_ACCOUNTS = [];
 
-function isWeeklyDay() {
-  const jstDay = new Date(Date.now() + 9 * 60 * 60 * 1000).getUTCDay();
-  return jstDay === WEEKLY_DAY;
-}
-
-const ACCOUNTS = [MAIN_ACCOUNT, ...(isWeeklyDay() ? WEEKLY_ACCOUNTS : [])];
+const ACCOUNTS = [MAIN_ACCOUNT];
 
 const TRANSCRIPT_CACHE = path.join(__dirname, '..', 'data', 'last_transcript.txt');
 const TRANSCRIPT_DOC_URL =
@@ -55,12 +42,6 @@ async function main() {
       console.error(`[${account}] failed:`, e.message);
     }
     await new Promise((r) => setTimeout(r, 10000));
-  }
-
-  try {
-    run('node', [path.join(__dirname, 'generate-magazine.js'), sourceText], { stdio: 'inherit' });
-  } catch (e) {
-    console.error('[magazine] failed:', e.message);
   }
 
   execFileSync('git', ['config', 'user.name', 'note-bot']);
