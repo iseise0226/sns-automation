@@ -1261,8 +1261,26 @@ const PointsScene: React.FC<{ scene: Scene; starts: number[] }> = ({ scene, star
   const layout = scene.layout || "stack";
   const separator = scene.separator || (layout === "compare" ? "≠" : "→");
 
+  // 実写をゆっくり寄せながら流す(白ベールの下で動きだけが伝わる)
+  // ぼかしの端が透けて白フチにならないよう、最初から画面より少し大きく敷いてゆっくり寄せる
+  const zoom = interpolate(frame, [0, 999], [1.08, 1.18], { extrapolateRight: "clamp" });
+
   return (
     <AbsoluteFill style={{ backgroundColor: PAPER }}>
+      {scene.video ? (
+        <>
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden", transform: `scale(${zoom})` }}>
+            <OffthreadVideo
+              src={staticFile(scene.video)}
+              muted
+              loop
+              style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(3px)" }}
+            />
+          </div>
+          {/* 線画アイコンと黒文字を読ませるための白ベール。実写は「動く紙」くらいの存在感にする */}
+          <AbsoluteFill style={{ backgroundColor: "rgba(255,255,255,0.7)" }} />
+        </>
+      ) : null}
       <AbsoluteFill
         style={{ transform: `scale(${drift})`, padding: "56px 130px 230px", alignItems: "center" }}
       >

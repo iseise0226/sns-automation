@@ -100,7 +100,7 @@ const Headline: React.FC<{ text: string; opacity: number; grow: number }> = ({ t
     style={{
       fontFamily: MARU,
       fontWeight: 900,
-      fontSize: 62,
+      fontSize: 72,
       lineHeight: 1.35,
       color: INK,
       textAlign: "center",
@@ -188,11 +188,11 @@ const FlowColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = ({
               style={{
                 fontFamily: MARU,
                 fontWeight: 700,
-                fontSize: 38,
+                fontSize: 46,
                 lineHeight: 1.4,
                 color: INK,
                 textAlign: "center",
-                maxWidth: 820,
+                maxWidth: 860,
               }}
             >
               <MultiLine text={p.text} keyPrefix={`fl${i}`} />
@@ -205,11 +205,11 @@ const FlowColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = ({
                 style={{
                   fontFamily: MARU,
                   fontWeight: 700,
-                  fontSize: 32,
+                  fontSize: 38,
                   lineHeight: 1.4,
                   color: INK,
                   textAlign: "center",
-                  maxWidth: 780,
+                  maxWidth: 820,
                 }}
               >
                 <MultiLine text={p.note} keyPrefix={`fn${i}`} />
@@ -266,7 +266,7 @@ const IconStepsRow: React.FC<{ points: Point[]; frame: number; fps: number }> = 
                   marginTop: 18,
                   fontFamily: MARU,
                   fontWeight: 700,
-                  fontSize: 30,
+                  fontSize: 36,
                   lineHeight: 1.4,
                   color: INK,
                   textAlign: "center",
@@ -311,11 +311,11 @@ const RejectColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = 
               padding: "22px 30px",
               fontFamily: MARU,
               fontWeight: 700,
-              fontSize: 36,
+              fontSize: 44,
               lineHeight: 1.45,
               color: INK,
               textAlign: "center",
-              maxWidth: 860,
+              maxWidth: 900,
             }}
           >
             <MultiLine text={top.text} keyPrefix="rjt" />
@@ -334,7 +334,7 @@ const RejectColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = 
             </svg>
           </div>
           {top.note ? (
-            <div style={{ fontFamily: MARU, fontWeight: 700, fontSize: 30, color: INK, textAlign: "center" }}>
+            <div style={{ fontFamily: MARU, fontWeight: 700, fontSize: 36, color: INK, textAlign: "center" }}>
               <MultiLine text={top.note} keyPrefix="rjn" />
             </div>
           ) : null}
@@ -359,7 +359,7 @@ const RejectColumn: React.FC<{ points: Point[]; frame: number; fps: number }> = 
             style={{
               fontFamily: MARU,
               fontWeight: 900,
-              fontSize: 46,
+              fontSize: 54,
               lineHeight: 1.45,
               color: INK,
               textAlign: "center",
@@ -398,7 +398,7 @@ const CaptionBar: React.FC<{ text: string; opacity: number }> = ({ text, opacity
     <span
       style={{
         fontFamily: MARU,
-        fontSize: 38,
+        fontSize: 42,
         fontWeight: 700,
         color: "#ffffff",
         lineHeight: 1.4,
@@ -481,9 +481,26 @@ const DiagramSceneView: React.FC<{ scene: Scene; frame: number; fps: number; sub
   const points = (scene.points || []).slice(0, 4);
   const titleOp = interpolate(frame, [0, 12], [0, 1], { extrapolateRight: "clamp" });
   const grow = interpolate(frame, [10, 28], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  // 実写をゆっくり寄せながら流す(白ベールの下で動きだけが伝わる)
+  // ぼかしの端が透けて白フチにならないよう、最初から画面より少し大きく敷いてゆっくり寄せる
+  const zoom = interpolate(frame, [0, 999], [1.08, 1.18], { extrapolateRight: "clamp" });
   return (
     <>
       <AbsoluteFill style={{ backgroundColor: PAPER }} />
+      {scene.video ? (
+        <>
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden", transform: `scale(${zoom})` }}>
+            <OffthreadVideo
+              src={staticFile(scene.video)}
+              muted
+              loop
+              style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(3px)" }}
+            />
+          </div>
+          {/* 線画アイコンと黒文字を読ませるための白ベール。実写は「動く紙」くらいの存在感にする */}
+          <AbsoluteFill style={{ backgroundColor: "rgba(255,255,255,0.7)" }} />
+        </>
+      ) : null}
       <AbsoluteFill style={{ flexDirection: "column", alignItems: "center", padding: "120px 70px 280px", justifyContent: "center" }}>
         {scene.title ? <Headline text={scene.title} opacity={titleOp} grow={grow} /> : null}
         {scene.layout === "iconsteps" ? (

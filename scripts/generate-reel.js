@@ -104,12 +104,12 @@ function buildStructureDoc(diagramLayouts) {
       const slot = DIAGRAM_SLOTS[i];
       const directive = directives[i];
       if (d.layout === 'reject') {
-        return `- diagramシーン(scenes[${slot}]): ${directive}。points2個。1個目は「これは○○の話ではありません」という否定+icon+note、2個目は本当に伝えたいこと(**強調**1箇所)+icon`;
+        return `- diagramシーン(scenes[${slot}]): ${directive}。points2個。1個目は「これは○○の話ではありません」という否定+icon+note、2個目は本当に伝えたいこと(**強調**1箇所)+icon。ナレーション(narration)は必ず35〜50文字。背景にうっすら流す実写のstockQuery(英語2〜4語)も付ける`;
       }
-      return `- diagramシーン(scenes[${slot}]): ${directive}。points${d.pointCount}個。各pointは{text(2行以内・具体的な一言), icon}${d.layout === 'flow3' ? '、note(補足1行、最後のpointは**強調**可)' : ''}`;
+      return `- diagramシーン(scenes[${slot}]): ${directive}。points${d.pointCount}個。各pointは{text(2行以内・具体的な一言), icon}${d.layout === 'flow3' ? '、note(補足1行、最後のpointは**強調**可)' : ''}。ナレーション(narration)は必ず35〜50文字、単語だけの短い一言にしない。背景にうっすら流す実写のstockQuery(英語2〜4語)も付ける`;
     })
     .join('\n');
-  const cutDocs = CUT_SLOTS.map((slot) => `- cutシーン(scenes[${slot}]): 直前のdiagramの内容を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+実写検索キーワード(stockQuery、英語2〜4語)`).join('\n');
+  const cutDocs = CUT_SLOTS.map((slot) => `- cutシーン(scenes[${slot}]): 直前のdiagramの内容を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+ナレーション(narration、必ず20〜30文字。単語だけの短い一言にしない)+実写検索キーワード(stockQuery、英語2〜4語)`).join('\n');
   return `${diagramDocs}\n${cutDocs}\n\n各diagramのtitleは、上の指示内容そのもの・カテゴリ名(「導入」「まとめ」等)ではなく、そのシーンで実際に話す具体的な内容を表す8〜16字の見出し(体言止めや短い断言)にすること。`;
 }
 
@@ -130,26 +130,47 @@ diagramシーンは白背景に線画アイコンを置いた図解、cutシー�
 - 最後のdiagramシーン(scenes[8])で、保存・フォローをやさしく促す一言を添える。「フォローしてね」という定型文をそのまま使わず、毎回違う言い回しで表現すること
 - テンプレート的な決まり文句の繰り返しを避け、毎回具体的で新鮮な表現を心がけること`;
 
+// Groqは1分あたりのトークン上限(TPM)が厳しく、1リクエストで約8千トークン使うため
+// 連続実行すると簡単に429になる。待って再試行し、それでもダメならOpenAIに逃がす。
+// 最終的に台本が取れなかった場合は例外を投げる(既定文言だけの動画を投稿してしまわないため)。
 async function callGroqWithFallback(messages, maxTokens) {
   const body = JSON.stringify({ model: 'llama-3.3-70b-versatile', messages, max_tokens: maxTokens, response_format: { type: 'json_object' } });
-  const res = await req(
-    'https://api.groq.com/openai/v1/chat/completions',
-    { method: 'POST', headers: { Authorization: `Bearer ${(process.env.GROQ_API_KEY || '').trim()}`, 'Content-Type': 'application/json' } },
-    body
-  );
-  const content = res.json?.choices?.[0]?.message?.content;
-  if (content) return content;
+  let lastErr = '';
 
-  console.error(`Groq応答が空: ${JSON.stringify(res.json || {}).slice(0, 300)}`);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await req(
+      'https://api.groq.com/openai/v1/chat/completions',
+      { method: 'POST', headers: { Authorization: `Bearer ${(process.env.GROQ_API_KEY || '').trim()}`, 'Content-Type': 'application/json' } },
+      body
+    );
+    const content = res.json?.choices?.[0]?.message?.content;
+    if (content) return content;
+
+    lastErr = JSON.stringify(res.json || {}).slice(0, 400);
+    // 1日枠(TPD)切れは待っても復帰しないので即フォールバックへ
+    if (/tokens per day|TPD/i.test(lastErr)) break;
+    if (attempt < 3 && /rate limit|Rate limit|429/i.test(lastErr)) {
+      const m = lastErr.match(/try again in ([0-9.]+)s/i);
+      const waitSec = m ? Math.ceil(parseFloat(m[1])) + 5 : 65;
+      console.error(`Groqレート制限。${waitSec}秒待って再試行(${attempt}/2)...`);
+      await new Promise((r) => setTimeout(r, waitSec * 1000));
+      continue;
+    }
+    break;
+  }
+
+  console.error(`Groq応答が空: ${lastErr}`);
   const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
-  if (!openaiKey) return '{}';
+  if (!openaiKey) throw new Error('Groqで台本を生成できず、OPENAI_API_KEYも未設定のため中止します');
   console.error('GroqからOpenAI(gpt-4o-mini)にフォールバックします');
   const res2 = await req(
     'https://api.openai.com/v1/chat/completions',
     { method: 'POST', headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' } },
     JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: maxTokens, response_format: { type: 'json_object' } })
   );
-  return res2.json?.choices?.[0]?.message?.content || '{}';
+  const content2 = res2.json?.choices?.[0]?.message?.content;
+  if (!content2) throw new Error('OpenAIフォールバックも失敗: ' + JSON.stringify(res2.json || {}).slice(0, 300));
+  return content2;
 }
 
 async function generateScenario(systemPrompt) {
@@ -164,8 +185,8 @@ async function generateScenario(systemPrompt) {
         `テーマを1つ選び、${PASONA_STRUCTURE}\n\n各シーンの構成(必ずこの通りに埋めること):\n${structureDoc}\n\n` +
         `さらに各シーンで画面に映る解説キャラクターのポーズを次の候補から1つずつ選んでください: "default"(口パクで喋る・基本), "arms_crossed"(腕組み・問題提起), "thinking"(考える・悩み), "explaining"(説明), "pointing_left"(指差し・注目), "guts"(ガッツポーズ・励まし), "thumbs_up"(いいね・肯定), "bowing"(お辞儀・挨拶)。半分以上のシーンは"default"にして、内容に特に合う場面だけ他のポーズを使うこと。` +
         `さらに、ナレーションの内容に効果音がハマるシーンだけ、次の候補から1つ選んでください（合う場面が無いシーンはnullのままでよい。目安は9シーン中2〜3個程度）: "kakan_impact"(コツンと軽い衝撃・失敗や気づき), "cancel"(否定・やめる・キャンセル), "kira_sparkle"(キラッと閃き・良いこと), "chiin_disappointment"(チーン・がっかり・落ち込み), "don_impact"(ドンと強い決意・インパクト), "pa_switch"(パッと場面転換・切り替え), "papa_quick_switch"(テンポよく2段階の切り替え), "register_payment"(お金・購入・レジ), "small_punch"(軽いツッコミ), "kotsuzumi_japanese"(和風の間・情緒), "hyoshigi1_japanese"(拍子木・和風の場面転換1), "hyoshigi2_japanese"(拍子木・和風の場面転換2), "decide1_button"(決定・確定1), "decide2_button"(決定・確定2), "suzu1_bell"(鈴・キラキラした気づき), "suzu2_bell_ring"(鈴・お知らせ・合図)。` +
-        `このscenes(diagramはtitle/narration/points、cutはheadline/narration/stockQuery)・ポーズ・効果音とInstagramキャプション（150文字以内）をJSONで返してください。` +
-        `{"caption":"投稿文","scenes":[9個。diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}]}、cutは{"headline":"...","narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`,
+        `このscenes(diagramはtitle/narration/points/stockQuery、cutはheadline/narration/stockQuery)・ポーズ・効果音とInstagramキャプション（150文字以内）をJSONで返してください。` +
+        `{"caption":"投稿文","scenes":[9個。diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"..."}、cutは{"headline":"...","narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`,
     },
   ];
   // 9シーン分(各最大4ポイント×text/icon/note)の詳細なJSONを出力させるため、切れないよう余裕を持たせる
@@ -176,9 +197,12 @@ async function generateScenario(systemPrompt) {
   } catch (e) {
     console.error('シナリオJSONのパースに失敗:', e.message, '| raw:', String(content).slice(0, 500));
   }
+  // シーン数が足りない場合、既定文言だけの中身のない動画を投稿してしまわないよう中止する
   const rawScenes = Array.isArray(data.scenes) && data.scenes.length === SCENE_COUNT ? data.scenes : [];
   if (!rawScenes.length) {
-    console.error(`scenesが期待の${SCENE_COUNT}個ではありません(実際:${Array.isArray(data.scenes) ? data.scenes.length : 'なし'})。全シーンが既定文言にフォールバックします。raw:`, String(content).slice(0, 800));
+    throw new Error(
+      `台本のscenesが期待の${SCENE_COUNT}個ではありません(実際:${Array.isArray(data.scenes) ? data.scenes.length : 'なし'})。投稿を中止します。raw: ${String(content).slice(0, 500)}`
+    );
   }
 
   const scenes = Array.from({ length: SCENE_COUNT }, (_, i) => {
@@ -199,6 +223,7 @@ async function generateScenario(systemPrompt) {
         title: String(raw.title || '').trim() || 'きょうの話',
         points,
         narration: String(raw.narration || '').trim() || '今日はこんな話をします。',
+        stockQuery: String(raw.stockQuery || '').trim() || 'japan lifestyle',
       };
     }
     return {
@@ -258,7 +283,7 @@ async function fetchPixabayVideo(keyword, usedIds) {
 }
 
 // 各シーン用の実写動画を取得する（かぶり除外は全アカウント台帳を統合）
-// cutシーン(CUT_SLOTS)分だけ実写を取得する。diagramシーンは白背景のため実写不要
+// 9シーン全部ぶんの実写を取得する。diagramは白ベール70%をかけてうっすら流す背景として使う
 async function fetchBrollVideos(scenes, outDir, account) {
   const ledgerDir = path.join(__dirname, '..', 'data', 'wf4_used_ids');
   const usedIdsPath = path.join(ledgerDir, `${account}.json`);
@@ -277,7 +302,7 @@ async function fetchBrollVideos(scenes, outDir, account) {
 
   const fallbackPool = ['japan lifestyle', 'calm nature', 'daily life moment'];
   const videoBySlot = {};
-  for (const sceneIdx of CUT_SLOTS) {
+  for (let sceneIdx = 0; sceneIdx < SCENE_COUNT; sceneIdx++) {
     const keywordChain = [scenes[sceneIdx].stockQuery, ...fallbackPool].filter(Boolean);
     let found = null;
     for (const kw of keywordChain) {
@@ -358,7 +383,7 @@ function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, 
       points: sc.points,
       headline: sc.headline,
       narration: sc.narration || '',
-      video: isCut ? videoBySlot[i] || '' : undefined,
+      video: videoBySlot[i] || undefined,
       audio,
       durationInSeconds: Math.max(minDuration, audioDur || minDuration),
       pose: (chibiPoses && chibiPoses[i]) || 'default',
