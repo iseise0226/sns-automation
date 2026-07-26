@@ -1,13 +1,13 @@
-name: WF4 Reels (6 accounts, every 2 days)
+name: WF4 Reels (6 accounts, daily)
 
 on:
   schedule:
-    # 毎日チェック、JST 4:40 = UTC 19:40(前日)。各アカウントは内部で2日おき判定してスキップ（他ワークフローと時間が被らないよう40分ずらし）
+    # JST 4:40 = UTC 19:40(前日)。毎日6アカウント全部実行(2026-07-26に毎日化)
     - cron: "40 19 * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: "trueなら2日おき判定を無視して強制実行"
+        description: "trueなら間隔判定を無視して強制実行"
         required: false
       account:
         description: "指定した1アカウントだけ実行（例: tabi_life_design）"
@@ -26,6 +26,21 @@ jobs:
           node-version: "20"
       - name: Install ffmpeg and Japanese fonts
         run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - name: VOICEVOXエンジンをキャッシュ
+        id: cache-voicevox
+        uses: actions/cache@v4
+        with:
+          path: scripts/daily-pipeline/voicevox_engine
+          key: voicevox-engine-linux-cpu-x64-0.25.2
+      - name: VOICEVOXエンジン取得
+        if: steps.cache-voicevox.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p scripts/daily-pipeline/voicevox_engine
+          cd scripts/daily-pipeline/voicevox_engine
+          curl -sL -o engine.7z https://github.com/VOICEVOX/voicevox_engine/releases/download/0.25.2/voicevox_engine-linux-cpu-x64-0.25.2.7z.001
+          sudo apt-get install -y p7zip-full
+          7z x engine.7z
+          chmod +x linux-cpu-x64/run || chmod +x run || true
       - name: Install Remotion dependencies
         working-directory: remotion
         run: npm install
@@ -38,7 +53,7 @@ jobs:
           WF4_ONLY: ${{ github.event.inputs.account }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ENGINE_DIR: ${{ github.workspace }}/scripts/daily-pipeline/voicevox_engine
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           IG_TOKEN_SATOSHI_MINDSET: ${{ secrets.IG_TOKEN_SATOSHI_MINDSET }}

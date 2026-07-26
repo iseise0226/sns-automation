@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 
 function req(url, options, body) {
   return new Promise((resolve, reject) => {
@@ -326,29 +326,92 @@ async function fetchBrollVideos(scenes, outDir, account) {
   return videoBySlot;
 }
 
-// 既定は男性声(Adam)。聖さん本人として「僕」で語るため男声にする。
-// 女性ペルソナのアカウントはwf4_accounts.jsonのvoiceIdで上書きする(sessi_life=Sarah)
-const ELEVENLABS_VOICE_ID = 'pNInz6obpgDQGcFmaJgB';
+// VOICEVOX(無料・ローカルエンジン)でTTS生成。ElevenLabsのクレジット枯渇を気にせず毎日投稿するため2026-07-26に移行。
+// 既定は男声(玄野武宏)。女性ペルソナのアカウントはwf4_accounts.jsonのvoicevoxName/voicevoxStyleで上書きする(sessi_life=四国めたん等)
+const VOICEVOX_ENGINE = 'http://127.0.0.1:50021';
+const VOICEVOX_ENGINE_DIR = process.env.ENGINE_DIR || path.join(__dirname, 'daily-pipeline', 'voicevox_engine');
+const DEFAULT_VOICEVOX_NAME = '玄野武宏';
+const DEFAULT_VOICEVOX_STYLE = 'ノーマル';
 
-async function generateTTS(narrations, outDir, voiceId) {
-  const key = (process.env.ELEVENLABS_API_KEY || '').trim();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function voicevoxAlive() {
+  try {
+    const res = await fetch(`${VOICEVOX_ENGINE}/version`, { signal: AbortSignal.timeout(3000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function findVoicevoxRunBinary(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const names = ['run', 'run.exe'];
+  const stack = [dir];
+  while (stack.length) {
+    const d = stack.pop();
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isFile() && names.includes(e.name.toLowerCase())) return full;
+      if (e.isDirectory()) stack.push(full);
+    }
+  }
+  return null;
+}
+
+async function ensureVoicevoxEngine() {
+  if (await voicevoxAlive()) return;
+  const exe = findVoicevoxRunBinary(VOICEVOX_ENGINE_DIR);
+  if (!exe) throw new Error(`VOICEVOXエンジンが見つかりません: ${VOICEVOX_ENGINE_DIR}`);
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(exe, 0o755);
+    } catch (e) {}
+  }
+  console.log('VOICEVOXエンジンを起動中...', exe);
+  const child = spawn(exe, [], { detached: true, stdio: 'inherit', cwd: path.dirname(exe) });
+  child.unref();
+  for (let i = 0; i < 60; i++) {
+    await sleep(3000);
+    if (await voicevoxAlive()) {
+      console.log('エンジン起動OK');
+      return;
+    }
+  }
+  throw new Error('VOICEVOXエンジンが3分以内に起動しませんでした');
+}
+
+async function resolveVoicevoxSpeaker(name, styleName) {
+  const res = await fetch(`${VOICEVOX_ENGINE}/speakers`);
+  const speakers = await res.json();
+  const sp = speakers.find((s) => s.name === name) || speakers[0];
+  if (!sp) throw new Error('VOICEVOXの話者一覧が取得できません');
+  const style = sp.styles.find((st) => st.name === styleName) || sp.styles[0];
+  console.log(`話者: ${sp.name}(${style.name}) id=${style.id}`);
+  return style.id;
+}
+
+async function generateTTS(narrations, outDir, voicevoxName, voicevoxStyle) {
+  const speaker = await resolveVoicevoxSpeaker(voicevoxName || DEFAULT_VOICEVOX_NAME, voicevoxStyle || DEFAULT_VOICEVOX_STYLE);
   const audioPaths = [];
   for (let i = 0; i < narrations.length; i++) {
-    const body = JSON.stringify({
-      text: narrations[i],
-      model_id: 'eleven_flash_v2_5', // 0.5クレジット/文字。リールはBGM付き短文なので軽量版で十分(YouTube長尺はmultilingual_v2を使う)
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    });
-    const audioPath = path.join(outDir, `audio${i + 1}.mp3`);
+    const audioPath = path.join(outDir, `audio${i + 1}.wav`);
     try {
-      const audioBuf = await reqBinary(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId || ELEVENLABS_VOICE_ID}`,
-        { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' } },
-        body
-      );
-      fs.writeFileSync(audioPath, audioBuf);
+      const q = await fetch(`${VOICEVOX_ENGINE}/audio_query?speaker=${speaker}&text=${encodeURIComponent(narrations[i])}`, { method: 'POST' });
+      if (!q.ok) throw new Error(`audio_query失敗 ${q.status}`);
+      const query = await q.json();
+      query.speedScale = 1.0;
+      query.postPhonemeLength = 0.3;
+      const s = await fetch(`${VOICEVOX_ENGINE}/synthesis?speaker=${speaker}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(query),
+      });
+      if (!s.ok) throw new Error(`synthesis失敗 ${s.status}`);
+      fs.writeFileSync(audioPath, Buffer.from(await s.arrayBuffer()));
       audioPaths.push(audioPath);
     } catch (e) {
+      console.log(`  TTS失敗(scene${i + 1}):`, e.message);
       audioPaths.push(null);
     }
   }
@@ -572,6 +635,7 @@ async function main() {
     return;
   }
   process.env.WF4_ACCOUNT_UPPER = account.toUpperCase();
+  await ensureVoicevoxEngine();
 
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const outDir = path.resolve('wf4_media', account, today);
@@ -588,7 +652,7 @@ async function main() {
   console.log(`[${account}] broll slots:`, Object.keys(videoBySlot).join(',') || 'none');
 
   const narrations = scenario.scenes.map((s) => s.narration);
-  const audioPaths = await generateTTS(narrations, outDir, persona.voiceId);
+  const audioPaths = await generateTTS(narrations, outDir, persona.voicevoxName, persona.voicevoxStyle);
   const videoPath = renderVideo(scenario.scenes, videoBySlot, audioPaths, outDir, persona.chibi, scenario.chibiPoses, scenario.seChoices);
   console.log(`[${account}] video rendered:`, videoPath);
 
