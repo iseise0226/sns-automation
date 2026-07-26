@@ -96,10 +96,11 @@ async function generateStoryScenario(systemPrompt) {
   ];
   const chosen = layoutOptions[Math.floor(Math.random() * layoutOptions.length)];
 
+  // ナレーションは55〜70文字(VOICEVOXの読み上げ速度で約9〜11秒。ストーリーズの目安尺=約10秒)
   const directive =
     chosen.layout === 'reject'
-      ? '今日の一言メッセージ。1個目は「これは○○の話ではありません」という否定+icon+note、2個目は本当に伝えたいこと(**強調**1箇所)+icon。ナレーション(narration)は25〜40文字'
-      : `今日その場で伝えたい、具体的で小さな気づき・ヒントを1つ。points${chosen.pointCount}個。各pointは{text(2行以内・具体的な一言), icon}${chosen.layout === 'flow3' ? '、note(補足1行、最後のpointは**強調**可)' : ''}。ナレーション(narration)は25〜40文字`;
+      ? '今日の一言メッセージ。1個目は「これは○○の話ではありません」という否定+icon+note、2個目は本当に伝えたいこと(**強調**1箇所)+icon。ナレーション(narration)は55〜70文字'
+      : `今日その場で伝えたい、具体的で小さな気づき・ヒントを1つ。points${chosen.pointCount}個。各pointは{text(2行以内・具体的な一言), icon}${chosen.layout === 'flow3' ? '、note(補足1行、最後のpointは**強調**可)' : ''}。ナレーション(narration)は55〜70文字`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -284,7 +285,8 @@ function getAudioDuration(audioPath) {
 function renderStoryVideo(scene, videoFile, audioPath, outDir, useChibi, pose) {
   const audio = audioPath && fs.existsSync(audioPath) ? path.basename(audioPath) : '';
   const audioDur = audio ? getAudioDuration(audioPath) : null;
-  const minDuration = (scene.points || []).length >= 3 ? 7.0 : 5.5;
+  // ナレーションを55〜70文字に伸ばした(約9〜11秒)ため、最低尺もそれに合わせて底上げ
+  const minDuration = (scene.points || []).length >= 3 ? 10.5 : 9.5;
   const scenes = [
     {
       type: scene.type,
