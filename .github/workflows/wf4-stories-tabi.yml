@@ -1,0 +1,62 @@
+name: WF4 Stories - tabi_life_design (pilot, manual only)
+
+# 試作段階: まずworkflow_dispatch(手動実行)のみ。動作確認できたらscheduleを追加して
+# 1日3回(JST 8:00/13:00/20:00)の自動投稿にする。他の5アカウントへの展開もそのあと。
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: "trueなら動画生成のみ行い、実際の投稿はしない(WF4_STORY_DRYRUN)"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install ffmpeg and Japanese fonts
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - name: VOICEVOXエンジンをキャッシュ
+        id: cache-voicevox
+        uses: actions/cache@v4
+        with:
+          path: scripts/daily-pipeline/voicevox_engine
+          key: voicevox-engine-linux-cpu-x64-0.25.2
+      - name: VOICEVOXエンジン取得
+        if: steps.cache-voicevox.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p scripts/daily-pipeline/voicevox_engine
+          cd scripts/daily-pipeline/voicevox_engine
+          curl -sL -o engine.7z https://github.com/VOICEVOX/voicevox_engine/releases/download/0.25.2/voicevox_engine-linux-cpu-x64-0.25.2.7z.001
+          sudo apt-get install -y p7zip-full
+          7z x engine.7z
+          chmod +x linux-cpu-x64/run || chmod +x run || true
+      - name: Install Remotion dependencies
+        working-directory: remotion
+        run: npm install
+      - name: Ensure Remotion's headless Chromium is installed
+        working-directory: remotion
+        run: npx remotion browser ensure
+      - name: Generate (and optionally post) story
+        env:
+          WF4_STORY_DRYRUN: ${{ github.event.inputs.dryrun == 'true' && '1' || '0' }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ENGINE_DIR: ${{ github.workspace }}/scripts/daily-pipeline/voicevox_engine
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          IG_TOKEN_TABI_LIFE_DESIGN: ${{ secrets.IG_TOKEN_TABI_LIFE_DESIGN }}
+        run: node scripts/generate-story.js tabi_life_design
+      - name: Upload rendered story video
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-video
+          path: wf4_story_media/**/video.mp4
+          retention-days: 3
