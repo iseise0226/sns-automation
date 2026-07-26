@@ -111,7 +111,7 @@ async function generateStoryScenario(systemPrompt) {
         `トーン：AIが書いた説明文ではなく、自分の言葉で友達にひとこと呟くように。「〜なんですよね」「〜だったんです」のような柔らかい語尾を使う。禁止表現:「〜してみませんか」「いかがでしょうか」「大切です」「おすすめです」。\n` +
         `アイコンに使える名前: ${ICON_DOC}\n` +
         `解説キャラクターのポーズを次から1つ選ぶ: "default"(口パクで喋る・基本), "arms_crossed", "thinking", "explaining", "pointing_left", "guts", "thumbs_up", "bowing"。\n` +
-        `{"scenes":[{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"英語2〜4語"}],"chibi_pose":"..."}`,
+        `以下の形式のJSONで返してください: {"scenes":[{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"英語2〜4語"}],"chibi_pose":"..."}`,
     },
   ];
   const content = await callGroqWithFallback(messages, 1200);
