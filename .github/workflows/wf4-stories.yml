@@ -1,8 +1,8 @@
-name: WF4 Stories - 6 accounts (manual only)
+name: WF4 Stories - 6 accounts
 
-# tabi_life_designでの試作(wf4-stories-tabi.yml)が本投稿まで成功したので、
-# 残り5アカウントに展開した本番版。まずworkflow_dispatch(手動実行)のみ。
-# 動作確認できたらscheduleを追加して1日3回(JST 8:00/13:00/20:00)の自動投稿にする。
+# tabi_life_design/sessi_lifeでの試作が本投稿まで成功したので、6アカウント本番運用。
+# 1日3回(JST 7:00/13:00/20:00 = UTC 22:00前日/04:00/11:00)、6アカウント全部に自動投稿する。
+# workflow_dispatchで手動実行(dryrun切替・アカウント絞り込み)も引き続き可能。
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +14,10 @@ on:
         description: "特定の1アカウントだけ実行する場合はアカウント名を指定(空なら6アカウント全部)"
         required: false
         default: ""
+  schedule:
+    - cron: "0 22 * * *" # JST 7:00
+    - cron: "0 4 * * *"  # JST 13:00
+    - cron: "0 11 * * *" # JST 20:00
 
 permissions:
   contents: read
