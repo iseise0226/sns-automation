@@ -88,13 +88,18 @@ async function callGroqWithFallback(messages, maxTokens) {
 }
 
 // ストーリーズ用: diagramシーン1枚だけの軽量台本(今日の一言・気づき・小さなヒント)
-async function generateStoryScenario(systemPrompt) {
+async function generateStoryScenario(systemPrompt, gender) {
   const layoutOptions = [
     { layout: 'iconsteps', pointCount: 3 },
     { layout: 'flow3', pointCount: 2 },
     { layout: 'reject', pointCount: 2 },
   ];
   const chosen = layoutOptions[Math.floor(Math.random() * layoutOptions.length)];
+
+  const toneNote =
+    gender === 'female'
+      ? '話者は女性。「〜なんですよね」「〜だったんです」「〜なんだよね」のような女性らしい柔らかい語尾にする。「〜だよな」「〜だぜ」「〜だろ」のような男性的な語尾は禁止。'
+      : '話者は男性。「〜なんですよね」「〜だったんです」のような柔らかい語尾を使う。';
 
   // ナレーションは55〜70文字(VOICEVOXの読み上げ速度で約9〜11秒。ストーリーズの目安尺=約10秒)
   const directive =
@@ -109,7 +114,7 @@ async function generateStoryScenario(systemPrompt) {
       content:
         `Instagramストーリーズ(24時間で消える・一瞬で読める短い1枚)向けに、今日のテーマを1つ選び、${directive}。\n` +
         `titleはカテゴリ名ではなく、内容そのものを表す8〜16字の見出し(体言止めや短い断言)。\n` +
-        `トーン：AIが書いた説明文ではなく、自分の言葉で友達にひとこと呟くように。「〜なんですよね」「〜だったんです」のような柔らかい語尾を使う。禁止表現:「〜してみませんか」「いかがでしょうか」「大切です」「おすすめです」。\n` +
+        `トーン：AIが書いた説明文ではなく、自分の言葉で友達にひとこと呟くように。${toneNote}禁止表現:「〜してみませんか」「いかがでしょうか」「大切です」「おすすめです」。\n` +
         `アイコンに使える名前: ${ICON_DOC}\n` +
         `解説キャラクターのポーズを次から1つ選ぶ: "default"(口パクで喋る・基本), "arms_crossed", "thinking", "explaining", "pointing_left", "guts", "thumbs_up", "bowing"。\n` +
         `以下の形式のJSONで返してください: {"scenes":[{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"英語2〜4語"}],"chibi_pose":"..."}`,
@@ -413,7 +418,7 @@ async function main() {
   const outDir = path.resolve('wf4_story_media', account, `${today}_${stamp}`);
   fs.mkdirSync(outDir, { recursive: true });
 
-  const { scene, pose } = await generateStoryScenario(persona.system);
+  const { scene, pose } = await generateStoryScenario(persona.system, persona.gender);
   console.log(`[${account}] story:`, scene.layout, scene.title, '|', scene.narration);
 
   const videoFile = await fetchStoryBroll(scene, outDir, account);
