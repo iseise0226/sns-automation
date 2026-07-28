@@ -46,7 +46,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # HyperFramesがNode22以上を要求するため20から引き上げた(Remotion4も22で動く)
+          node-version: 22
 
       - name: ffmpeg導入
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
