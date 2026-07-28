@@ -8,3 +8,9 @@ youtube_out/
 remotion/public/
 youtube_out/
 remotion/yt01-props.json
+hyperframes/index.html
+hyperframes/assets/media/
+hyperframes/output.mp4
+hyperframes/snapshots/
+scripts/daily-pipeline/generated/
+scripts/daily-pipeline/out/

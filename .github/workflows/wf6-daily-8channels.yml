@@ -20,7 +20,8 @@ on:
 jobs:
   post-one-channel:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # HyperFrames版は1920x1080を1フレームずつブラウザで描くため、Remotion版より時間がかかる
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -78,6 +79,11 @@ jobs:
         working-directory: scripts
         run: npm install googleapis
 
+      - name: HyperFrames用Chrome取得
+        if: steps.pick.outputs.account == 'ise_satoshi'
+        working-directory: hyperframes
+        run: npx --yes hyperframes@0.7.77 browser ensure
+
       - name: 台本生成(Groq)
         if: steps.pick.outputs.account != ''
         working-directory: scripts/daily-pipeline
@@ -98,7 +104,12 @@ jobs:
           ENGINE_DIR: ${{ github.workspace }}/scripts/daily-pipeline/voicevox_engine
         run: |
           TODAY=$(date -u +%Y%m%d)
-          node build_and_upload.js "generated/daily_${{ steps.pick.outputs.account }}_${TODAY}.json"
+          SCRIPT="generated/daily_${{ steps.pick.outputs.account }}_${TODAY}.json"
+          # HyperFrames(線画図解＋実写の確定デザイン)に移行済みのアカウント。問題なければ順に増やす
+          case "${{ steps.pick.outputs.account }}" in
+            ise_satoshi) node hf_build_and_upload.js "$SCRIPT" ;;
+            *)           node build_and_upload.js "$SCRIPT" ;;
+          esac
 
       - name: お題の進行状況をコミット
         if: always() && steps.pick.outputs.account != ''
