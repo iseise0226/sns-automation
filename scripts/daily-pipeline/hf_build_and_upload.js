@@ -196,7 +196,11 @@ async function main() {
   if (!accountsJson) { console.log('ACCOUNTS_JSON未設定のためアップロードをスキップ'); return; }
   const acc = JSON.parse(accountsJson)[script.account];
   if (!acc?.refreshToken) { console.log(`アカウント${script.account}のrefreshTokenがありません`); return; }
-  const description = script.description + buildChapters(timed) + (script.cta || '');
+  // 概要欄は「もっと見る」を押さないと下が隠れるため、LINEリンクは埋もれないよう一番上に出す
+  const lineHeader = script.lineUrl
+    ? `▼${script.lineHook || '無料LINE配信'}\n${script.lineUrl}\n（売り込みはありません。読むだけでOKです）\n\n`
+    : '';
+  const description = lineHeader + script.description + buildChapters(timed) + (script.cta || '');
   try {
     const videoId = await uploadToYoutube(videoPath, script.youtubeTitle, description, acc.refreshToken, thumbnailPath);
     const videoUrl = 'https://youtu.be/' + videoId;

@@ -81,7 +81,7 @@ jobs:
         run: npm install googleapis
 
       - name: HyperFrames用Chrome取得
-        if: steps.pick.outputs.account == 'ise_satoshi'
+        if: contains('ise_satoshi,satoshi_mindset,satoshi_mind_coach,ise_sato_kosodate,ise_kenkou_otaku,tabi_life_design40', steps.pick.outputs.account)
         working-directory: hyperframes
         run: npx --yes hyperframes@0.7.77 browser ensure
 
@@ -106,9 +106,11 @@ jobs:
         run: |
           TODAY=$(date -u +%Y%m%d)
           SCRIPT="generated/daily_${{ steps.pick.outputs.account }}_${TODAY}.json"
-          # HyperFrames(線画図解＋実写の確定デザイン)に移行済みのアカウント。問題なければ順に増やす
+          # HyperFrames(線画図解＋実写＋chibiキャラの確定デザイン)に移行済みのアカウント。
+          # 聖さんキャラを使う6アカウントが対象。sessi_life/ko_gi_omotiは別キャラ(chibi画像なし)のためRemotionのまま
           case "${{ steps.pick.outputs.account }}" in
-            ise_satoshi) node hf_build_and_upload.js "$SCRIPT" ;;
+            ise_satoshi|satoshi_mindset|satoshi_mind_coach|ise_sato_kosodate|ise_kenkou_otaku|tabi_life_design40)
+              node hf_build_and_upload.js "$SCRIPT" ;;
             *)           node build_and_upload.js "$SCRIPT" ;;
           esac
 

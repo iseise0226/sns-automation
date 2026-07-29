@@ -317,7 +317,11 @@ async function main() {
     if (!acc?.refreshToken) { console.log(`アカウント${script.account}のrefreshTokenがありません`); return; }
     const cta = script.cta || '';
     const chapters = buildChapters(scenes, script.scenes);
-    const description = script.description + chapters + cta;
+    // 概要欄は「もっと見る」を押さないと下が隠れるため、LINEリンクは埋もれないよう一番上に出す
+    const lineHeader = script.lineUrl
+      ? `▼${script.lineHook || '無料LINE配信'}\n${script.lineUrl}\n（売り込みはありません。読むだけでOKです）\n\n`
+      : '';
+    const description = lineHeader + script.description + chapters + cta;
     try {
       const videoId = await uploadToYoutube(videoPath, script.youtubeTitle, description, acc.refreshToken, thumbnailPath);
       const videoUrl = 'https://youtu.be/' + videoId;

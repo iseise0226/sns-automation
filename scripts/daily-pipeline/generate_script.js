@@ -298,9 +298,14 @@ seフィールド(beat単位の効果音。要所の3〜5割だけに付ける):
 
 // フェーズ1: 動画全体の設計図(タイトル・サムネ・3章立て・冒頭とCTA)を作る
 async function generateOutline(cfg, topic) {
-  const lpInstruction = cfg.lpUrl
-    ? `\nctaSceneのbeatsは3個: 1個目で今日の話を一言で振り返り、2個目で「今日話しきれなかった部分は、概要欄のリンクから続きを読めます」という趣旨をテーマに絡めて自然に伝え、3個目で名乗り(${cfg.speakerLabel})と「今日も、いい一日にしていきましょう」的な締めの挨拶。`
-    : `\nctaSceneのbeatsは3個構成で、最後のbeatに名乗り(${cfg.speakerLabel})と締めの挨拶を入れる。`;
+  let lpInstruction;
+  if (cfg.lpUrl && cfg.lineUrl) {
+    lpInstruction = `\nctaSceneのbeatsは4個: 1個目で今日の話を一言で振り返る。2個目で「今日話しきれなかった部分は、概要欄のリンクから続きを読めます」という趣旨をテーマに絡めて自然に伝える。3個目で「概要欄のLINEから、${cfg.lineHook || '無料の配信'}を受け取れます。今日だけでもよかったら覗いてみてください」という趣旨を自然に伝える(押し売り感を出さない)。4個目で名乗り(${cfg.speakerLabel})と「今日も、いい一日にしていきましょう」的な締めの挨拶。`;
+  } else if (cfg.lpUrl) {
+    lpInstruction = `\nctaSceneのbeatsは3個: 1個目で今日の話を一言で振り返り、2個目で「今日話しきれなかった部分は、概要欄のリンクから続きを読めます」という趣旨をテーマに絡めて自然に伝え、3個目で名乗り(${cfg.speakerLabel})と「今日も、いい一日にしていきましょう」的な締めの挨拶。`;
+  } else {
+    lpInstruction = `\nctaSceneのbeatsは3個構成で、最後のbeatに名乗り(${cfg.speakerLabel})と締めの挨拶を入れる。`;
+  }
   const system = `あなたはYouTube解説動画(5〜6分)の構成作家です。出力は厳密なJSONのみ。
 
 次の構造で動画の設計図を作ってください:
@@ -311,7 +316,7 @@ async function generateOutline(cfg, topic) {
   "thumbnailText": "サムネイルのメインコピー(改行\\nで2〜3行、合計12〜20文字、一番刺さる語だけ**強調**で1箇所囲む)",
   "titleScene": {"type":"title","kicker":"見出し英字ラベル","beats":[{"kind":"big","text":"印象的な一文(改行\\n可、**強調**可)","sub":"導入の読み上げ文(80〜130文字。テーマの悩みに共感し、この動画で何がわかるかを予告する)"}],"pose":"explaining"},
   "chapters": [3個ちょうど、各{"title":"章タイトル(12字以内)","summary":"この章で話す内容(50文字程度。主張+使う具体例のメモ)","hookSub":"冒頭フックでこの章を予告する読み上げ文(30〜50文字)","keyPoint":"まとめ画面用の要点(12字以内)","keySub":"まとめでこの要点を振り返る読み上げ文(40〜60文字)"}],
-  "ctaScene": {"type":"cta","beats":[3個、{"kind":"big","text":"...","sub":"読み上げ文(40〜80文字)"}],"pose":"bowing"}
+  "ctaScene": {"type":"cta","beats":[下記の指示で指定された個数、各{"kind":"big","text":"...","sub":"読み上げ文(40〜80文字)"}],"pose":"bowing"}
 }
 
 共通ルール:
@@ -570,6 +575,8 @@ async function main() {
     useChibi: !!cfg.useChibi,
     speaker: cfg.speaker,
     cta: cfg.cta,
+    lineUrl: cfg.lineUrl,
+    lineHook: cfg.lineHook,
     scenes: generated.scenes,
   };
 
