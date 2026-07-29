@@ -185,7 +185,7 @@ async function generateScenario(systemPrompt) {
         `テーマを1つ選び、${PASONA_STRUCTURE}\n\n各シーンの構成(必ずこの通りに埋めること):\n${structureDoc}\n\n` +
         `さらに各シーンで画面に映る解説キャラクターのポーズを次の候補から1つずつ選んでください: "default"(口パクで喋る・基本), "arms_crossed"(腕組み・問題提起), "thinking"(考える・悩み), "explaining"(説明), "pointing_left"(指差し・注目), "guts"(ガッツポーズ・励まし), "thumbs_up"(いいね・肯定), "bowing"(お辞儀・挨拶)。半分以上のシーンは"default"にして、内容に特に合う場面だけ他のポーズを使うこと。` +
         `さらに、ナレーションの内容に効果音がハマるシーンだけ、次の候補から1つ選んでください（合う場面が無いシーンはnullのままでよい。目安は9シーン中2〜3個程度）: "kakan_impact"(コツンと軽い衝撃・失敗や気づき), "cancel"(否定・やめる・キャンセル), "kira_sparkle"(キラッと閃き・良いこと), "chiin_disappointment"(チーン・がっかり・落ち込み), "don_impact"(ドンと強い決意・インパクト), "pa_switch"(パッと場面転換・切り替え), "papa_quick_switch"(テンポよく2段階の切り替え), "register_payment"(お金・購入・レジ), "small_punch"(軽いツッコミ), "kotsuzumi_japanese"(和風の間・情緒), "hyoshigi1_japanese"(拍子木・和風の場面転換1), "hyoshigi2_japanese"(拍子木・和風の場面転換2), "decide1_button"(決定・確定1), "decide2_button"(決定・確定2), "suzu1_bell"(鈴・キラキラした気づき), "suzu2_bell_ring"(鈴・お知らせ・合図)。` +
-        `このscenes(diagramはtitle/narration/points/stockQuery、cutはheadline/narration/stockQuery)・ポーズ・効果音とInstagramキャプション（150文字以内）をJSONで返してください。` +
+        `このscenes(diagramはtitle/narration/points/stockQuery、cutはheadline/narration/stockQuery)・ポーズ・効果音とInstagramキャプションをJSONで返してください。キャプションはPREP法（結論→理由→具体例→結論の再提示）の構成で5～8行程度で書き、最後にテーマに合ったハッシュタグを５個つけてくださいをJSONで返してください。` +
         `{"caption":"投稿文","scenes":[9個。diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"..."}、cutは{"headline":"...","narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`,
     },
   ];
