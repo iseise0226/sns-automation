@@ -115,6 +115,68 @@ function stripForeignChars(text) {
 const ICON_NAMES = ['person_worried', 'person_calm', 'clock', 'wallet', 'coin', 'yen', 'chart_up', 'chart_bar', 'document', 'document_check', 'pencil', 'book', 'wall', 'flag', 'smartphone', 'cart', 'calendar', 'envelope', 'safe', 'gear', 'check_circle', 'cross_circle', 'piggy', 'lightbulb', 'target', 'hourglass'];
 const CHIBI_POSES = ['default', 'arms_crossed', 'bowing', 'explaining', 'guts', 'pointing_left', 'thinking', 'thumbs_up'];
 const BEAT_SE_KEYS = ['clink', 'reveal', 'reveal_multi', 'spark', 'sad', 'impact', 'decide', 'decide2', 'cash', 'punch', 'drum', 'clapper', 'clapper2', 'bell', 'bell2'];
+const RICH_LAYOUTS = ['stairs', 'process', 'databadge'];
+
+// リッチ図解の必須フィールドが揃っているか。公開投稿なので、欠けていたら通常図解に落とす
+function isValidRich(sc) {
+  if (sc.layout === 'stairs') {
+    const st = sc.stack, w = sc.wall, c = sc.circle;
+    return !!(st && Array.isArray(st.items) && st.items.length >= 2 &&
+      st.items.every((it) => it && it.t) && w && w.hl && c && c.text);
+  }
+  if (sc.layout === 'process') {
+    return !!(Array.isArray(sc.items) && sc.items.length >= 3 && sc.items.length <= 4 &&
+      sc.items.every((it) => it && it.t) && Array.isArray(sc.conclusion) && sc.conclusion.length >= 2);
+  }
+  if (sc.layout === 'databadge') {
+    const ch = sc.chart, s = sc.steps;
+    return !!(ch && ch.from && ch.to && ch.from.v != null && ch.to.v != null &&
+      s && Array.isArray(s.items) && s.items.length >= 3 && s.items.every((it) => it && it.t));
+  }
+  return false;
+}
+
+// リッチ図解のフィールドから外国語文字を除き、アイコン名を検証する(数値vは残す)
+function cleanIconField(it) { if (it && it.icon && !ICON_NAMES.includes(it.icon)) delete it.icon; }
+function sanitizeRich(sc) {
+  const st = sc.stack;
+  if (st) {
+    ['label', 'axis', 'goal'].forEach((k) => { if (st[k]) st[k] = stripForeignChars(st[k]); });
+    (st.items || []).forEach((it) => { if (it.t) it.t = stripForeignChars(it.t); if (it.s) it.s = stripForeignChars(it.s); });
+  }
+  if (sc.wall) { ['pill', 'hl'].forEach((k) => { if (sc.wall[k]) sc.wall[k] = stripForeignChars(sc.wall[k]); }); cleanIconField(sc.wall); }
+  if (sc.circle && sc.circle.text) sc.circle.text = stripForeignChars(sc.circle.text);
+  if (Array.isArray(sc.items)) sc.items.forEach((it) => { if (it.t) it.t = stripForeignChars(it.t); cleanIconField(it); });
+  if (sc.pinNote) sc.pinNote = stripForeignChars(sc.pinNote);
+  if (Array.isArray(sc.conclusion)) sc.conclusion = sc.conclusion.map(stripForeignChars);
+  const ch = sc.chart;
+  if (ch) {
+    ['label', 'caption', 'badge'].forEach((k) => { if (ch[k]) ch[k] = stripForeignChars(ch[k]); });
+    // from/toのyear/unitはひらがな語なので掃除。v(数値)はグラフ表示なので残す
+    [ch.from, ch.to].forEach((p) => { if (p) { if (p.year) p.year = stripForeignChars(p.year); if (p.unit) p.unit = stripForeignChars(p.unit); } });
+  }
+  if (sc.steps) {
+    if (sc.steps.label) sc.steps.label = stripForeignChars(sc.steps.label);
+    (sc.steps.items || []).forEach((it) => { if (it.t) it.t = stripForeignChars(it.t); cleanIconField(it); });
+  }
+}
+
+// リッチ図解が壊れていたら、beatsを使う通常図解に落とす(描画事故を防ぐ最後の砦)
+function downgradeRich(sc) {
+  const src = (sc.stack && sc.stack.items) || sc.items || (sc.steps && sc.steps.items) || [];
+  (sc.beats || []).forEach((b, i) => {
+    if (!b.text && src[i] && src[i].t) b.text = src[i].t;
+    if (!b.icon && src[i] && src[i].icon) b.icon = src[i].icon;
+    if (!b.text) b.text = 'ポイント';
+    if (!b.icon || !ICON_NAMES.includes(b.icon)) b.icon = 'check_circle';
+  });
+  const n = (sc.beats || []).length;
+  sc.layout = n === 2 ? 'reject' : n >= 3 ? 'iconsteps' : 'flow3';
+  delete sc.stack; delete sc.wall; delete sc.circle;
+  delete sc.items; delete sc.pinNote; delete sc.conclusion;
+  delete sc.chart; delete sc.steps;
+}
+
 function sanitizeScenes(scenes) {
   for (const sc of scenes) {
     if (sc.title) sc.title = stripForeignChars(sc.title);
@@ -125,6 +187,11 @@ function sanitizeScenes(scenes) {
       // iconはアイコン名なので英字を残す。未知の名前はRemotion側の既定にフォールバックさせる
       if (b.icon && !ICON_NAMES.includes(b.icon)) delete b.icon;
       if (!BEAT_SE_KEYS.includes(b.se)) delete b.se;
+    }
+    // リッチ図解は専用フィールドも掃除し、壊れていれば通常図解に落とす
+    if (RICH_LAYOUTS.includes(sc.layout)) {
+      sanitizeRich(sc);
+      if (!isValidRich(sc)) downgradeRich(sc);
     }
     sc.pose = CHIBI_POSES.includes(sc.pose) ? sc.pose : 'default';
   }
@@ -148,6 +215,8 @@ function randomizeLayouts(scenes) {
   let prevLayout = null;
   for (const sc of scenes) {
     if (sc.type !== 'points') continue;
+    // AIが選んだ有効なリッチ図解はそのまま残す(専用フィールドが必要なので上書きしない)
+    if (RICH_LAYOUTS.includes(sc.layout) && isValidRich(sc)) { prevLayout = sc.layout; continue; }
     const candidates = compatibleLayouts((sc.beats || []).length).filter((l) => l !== prevLayout);
     const pool = candidates.length ? candidates : compatibleLayouts((sc.beats || []).length);
     sc.layout = pool[Math.floor(Math.random() * pool.length)];
@@ -195,6 +264,24 @@ const SCENE_TYPES_DOC = `各sceneは次のいずれかの型:
      beats[0]: {"kind":"cross","text":"否定する内容(2行・**強調**可)","icon":"アイコン名","note":"下の一言","sub":"..."}
      beats[1]: {"kind":"big","text":"本当に伝えたいこと(3行以内。一番大事な語を**強調**で囲む)","icon":"アイコン名","sub":"..."}
    iconに使える名前: person_worried(悩む人)/person_calm(穏やかな人)/clock(時計)/wallet(財布)/coin(コイン)/yen(お金)/chart_up(右肩上がり)/chart_bar(棒グラフ)/document(書類)/document_check(チェック済み書類)/pencil(鉛筆)/book(本)/wall(壁)/flag(旗)/smartphone(スマホ)/cart(買い物カゴ)/calendar(カレンダー)/envelope(封筒・給料)/safe(金庫・貯金)/gear(歯車・自動)/check_circle(チェック)/cross_circle(バツ)/piggy(貯金箱)/lightbulb(気づき)/target(目標)/hourglass(砂時計)
+
+- 【リッチ図解】情報量が多く見栄えする型。内容がぴったり合うときだけ使う(1つの章で最大1個)。使える名前: stairs/process/databadge。
+  どれも type="points"。beatsは読み上げ(sub)とタイミング用。各beatには保険として"text"(短いラベル)と"icon"も必ず入れる。図の中身はscene直下の専用フィールドに入れる。
+  - layout="stairs": 「がんばりを積み上げても、ある壁で止まる」構造を見せる。beatsは3個ちょうど(1.積み上げ 2.壁にぶつかる 3.結論)。
+    scene直下に:
+      "stack":{"label":"左上の黒タグ(10字以内)","axis":"縦軸の名前(8字以内・例:努力の積み上げ)","goal":"頂上の目標(8字以内・例:成果/評価)","items":[3個 {"t":"段の見出し(8字以内)","s":"赤い補足(8字以内・例:何年も)"}]}
+      "wall":{"pill":"壁の上の前置き(8字以内・例:最初の一歩で)","hl":"黄色ベタで強調する短い語(4字以内・例:折れる/詰む)","icon":"アイコン名(例:person_worried)"}
+      "circle":{"text":"右の円の中の一言(2行以内・一番大事な語を**強調**)"}
+  - layout="process": 「工程が横に並び、その全部に自分が張り付いてすり減る」を見せる。beatsは3個ちょうど(1.工程が並ぶ 2.全部に張り付く 3.結論)。
+    scene直下に:
+      "items":[3〜4個 {"t":"工程名(6字以内)","icon":"アイコン名"}]
+      "pinNote":"各工程の下に出す一言(8字以内・例:自分が張り付く)"
+      "conclusion":[3個 下部の結論チップ(各12字以内・大事な語を**強調**)。1個目が枠囲みになる]
+  - layout="databadge": 「数字が改善した／やったのはこれだけ」を左のグラフ＋右の番号ステップで見せる。beatsは2個ちょうど(1.データ 2.やったこと)。
+    scene直下に:
+      "chart":{"label":"左上の青タグ(10字以内)","caption":"グラフの説明(2行以内)","from":{"v":"開始の数値(算用数字OK)","unit":"単位(例:分)","year":"下のラベル(例:始める前)"},"to":{"v":"改善後の数値","unit":"単位","year":"下のラベル"},"badge":"トゲtrバッジの中の一言(2行以内・例:約四倍に増えた)"}
+      "steps":{"label":"右上の黒タグ(10字以内)","items":[4個 {"t":"手順(2行以内・1行7字程度)","icon":"アイコン名"}]}
+  ※databadgeのchart数値だけは算用数字を使ってよい(グラフなので)。それ以外の本文はすべてひらがな。
 - {"type":"cut","stockQuery":"Pexels検索用の英語キーワード(2〜4語、実写で見せたい具体的な場面)","beats":[1個ちょうど、{"kind":"big","text":"短い一文\\n改行可(一番刺さる語だけ**強調**で1箇所囲む)","sub":"読み上げ文(20〜40文字)"}],"pose":"..."} ※実写の上に一言だけ出す4秒の短いカット
 
 poseフィールド(シーンの内容に合わせて1つ選ぶ):
@@ -248,6 +335,7 @@ ${SCENE_TYPES_DOC}
 この章のルール:
 - シーンは2〜3個。「主張→具体例やエピソード→今日からできる行動」の流れで深掘りする
 - 【必須】このうち1個は必ずcut型(実写4秒)にする。残りはpoints型(白背景の図解)。cut型は章の中で一番強く言い切りたい一言を短く出す場所として使う
+- points型のうち、内容が本当に合う場合はリッチ図解(stairs/process/databadge)を1個だけ使ってよい。合わないなら無理に使わず通常の図解でよい。使うときは専用フィールドを必ず全部埋める
 - 前の章と同じエピソード・同じ言い回しを繰り返さない。cut型のstockQueryも章ごとに違う場面にする
 - 語り口は、一人の人間が自分の言葉で友達に打ち明けるように。必要なら語り手自身の失敗談・本音を一人称で入れる`;
   const user = `話者設定: ${cfg.persona}
