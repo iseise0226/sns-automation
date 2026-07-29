@@ -660,6 +660,11 @@ body{font-family:"Zen Maru Gothic",sans-serif;color:#1a1a1a}
 .db-ic{width:176px;height:156px;border-radius:18px;background:#eef2f7;display:flex;align-items:center;justify-content:center}
 .db-sep{width:28px;height:28px;margin-top:28px;flex:none}
 
+/* chibiキャラ(右下・字幕バーの上に立たせる。データに重ならない余白レイアウトだけ) */
+.chibi{position:absolute;right:24px;bottom:200px;width:290px;height:388px;pointer-events:none;filter:drop-shadow(0 12px 20px rgba(0,0,0,.28))}
+.ch-body{position:absolute;inset:0}
+.ch-m{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:bottom}
+
 /* 字幕バー(全型共通) */
 .caption{position:absolute;left:60px;bottom:56px;width:1800px;height:132px;background:#16202e;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:18px 56px}
 .caption span{font-weight:700;color:#fff;line-height:1.35;text-align:center}

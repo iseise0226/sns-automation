@@ -8,6 +8,10 @@ const FPS = 30;
 const BEAT_GAP = 0.25; // ビート間の間(息継ぎ)
 const SCENE_TAIL = 0.4; // シーン末尾の余韻
 
+// 聖さんchibiキャラを右下に出す。余白のあるレイアウトだけ(密度の高い図解3種はデータに重なるので出さない)
+const CHIBI_LAYOUTS = ['cut', 'title', 'cta', 'iconsteps'];
+const CHIBI_POSES = ['default', 'arms_crossed', 'bowing', 'explaining', 'guts', 'pointing_left', 'thinking', 'thumbs_up'];
+
 // 秒をフレーム境界に丸める。字幕とアニメのズレを防ぐ
 function q(sec) {
   return Math.round(sec * FPS) / FPS;
@@ -33,10 +37,36 @@ function layoutTimeline(scenes) {
   return { scenes: timed, total: q(t) };
 }
 
+// 1シーン分のchibiオーバーレイ(HTML＋アニメ)。口パクや瞬きは音声解析ができないので、
+// defaultポーズのときだけ口を機械的にパクパクさせる(有限repeatでseek可能)。他はポーズ静止画。
+function chibiFor(sc) {
+  const pose = CHIBI_POSES.includes(sc.pose) ? sc.pose : 'default';
+  const talkEnd = sc.beats && sc.beats.length ? sc.beats[sc.beats.length - 1].start + (sc.beats[sc.beats.length - 1].dur || 0) : sc.dur;
+  let inner;
+  const anims = [];
+  if (pose === 'default') {
+    inner =
+      `<img class="ch-m ch-closed" src="assets/chibi/mouth_closed.png" />` +
+      `<img class="ch-m ch-open" src="assets/chibi/mouth_open.png" style="opacity:0" />`;
+    // 口をパクパク(ナレーション中だけ・0.16秒刻み)
+    const reps = Math.max(2, Math.floor(Math.max(0.5, talkEnd) / 0.16));
+    anims.push({ sel: `#${sc.sid}-ch .ch-open`, from: { opacity: 0 }, to: { opacity: 1, repeat: reps, yoyo: true, ease: 'steps(1)' }, dur: 0.16, ease: 'steps(1)', at: 0.2 });
+  } else {
+    inner = `<img class="ch-m" src="assets/chibi/poses/${pose}.png" />`;
+  }
+  const html = `<div class="chibi" id="${sc.sid}-ch"><div class="ch-body" id="${sc.sid}-chb">${inner}</div></div>`;
+  // 登場(下からふわっ)は外側、ゆっくり上下(生きている感)は内側。translateYの取り合いを避ける
+  anims.push({ sel: `#${sc.sid}-ch`, from: { y: 40, opacity: 0 }, to: { y: 0, opacity: 1 }, dur: 0.5, ease: 'power3.out', at: 0.1 });
+  const bobReps = Math.max(2, Math.floor(sc.dur / 1.0));
+  anims.push({ sel: `#${sc.sid}-chb`, from: { yPercent: 0 }, to: { yPercent: -1.6, repeat: bobReps, yoyo: true, ease: 'sine.inOut' }, dur: 1.0, ease: 'sine.inOut', at: 0.6 });
+  return { html, anims };
+}
+
 function buildHtml(timedScenes, total, opts = {}) {
   const bodyParts = [];
   const videoParts = [];
   const captionParts = [];
+  const chibiParts = [];
   const anims = [];
 
   for (const sc of timedScenes) {
@@ -71,6 +101,15 @@ function buildHtml(timedScenes, total, opts = {}) {
       );
       anims.push({ sel: `#${sc.sid}-c${j} span`, from: { opacity: 0 }, to: { opacity: 1 }, dur: 0.3, ease: 'power2.out', at: b.start + 0.05, scene: sc });
     });
+
+    // chibiキャラ(余白のあるレイアウトだけ・useChibi=trueのアカウントだけ)
+    if (opts.useChibi && CHIBI_LAYOUTS.includes(kind)) {
+      const ch = chibiFor(sc);
+      chibiParts.push(
+        `<div class="ch-clip clip" id="${sc.sid}-chw" data-start="${sc.start}" data-duration="${sc.dur}" data-track-index="7">${ch.html}</div>`
+      );
+      for (const a of ch.anims) anims.push({ ...a, scene: sc });
+    }
   }
 
   const tlLines = anims
@@ -95,6 +134,7 @@ function buildHtml(timedScenes, total, opts = {}) {
       <div id="paper"></div>
 ${videoParts.map((s) => '      ' + s).join('\n')}
 ${bodyParts.map((s) => '      ' + s).join('\n')}
+${chibiParts.map((s) => '      ' + s).join('\n')}
 ${captionParts.map((s) => '      ' + s).join('\n')}
     </div>
     <script>

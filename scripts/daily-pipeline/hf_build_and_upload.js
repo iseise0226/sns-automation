@@ -143,7 +143,7 @@ async function main() {
     scenes.push({ ...sc, audio, videoFile });
   }
 
-  const { total, scenes: timed } = build(scenes, HF_DIR, { title: script.youtubeTitle, footer: script.footer });
+  const { total, scenes: timed } = build(scenes, HF_DIR, { title: script.youtubeTitle, footer: script.footer, useChibi: !!script.useChibi });
   console.log(`合計 ${Math.floor(total / 60)}分${Math.round(total % 60)}秒 / ${timed.length}シーン`);
 
   try {
