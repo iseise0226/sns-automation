@@ -26,7 +26,7 @@ const FACTS = `
 
 // Groq(無料)を優先し、TPM制限は待って再試行。1日枠(TPD)切れ等で復帰不能なら
 // OpenAI gpt-4o-mini(低単価)へ自動フォールバックする
-async function callGroq(system, user, maxTokens = 3000) {
+async function callGroq(system, user, maxTokens = 3000, temperature = 0.85) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -38,7 +38,7 @@ async function callGroq(system, user, maxTokens = 3000) {
           { role: 'user', content: user },
         ],
         max_tokens: maxTokens,
-        temperature: 0.85,
+        temperature,
         response_format: { type: 'json_object' },
       }),
     });
@@ -62,10 +62,10 @@ async function callGroq(system, user, maxTokens = 3000) {
     }
   }
   console.log('GroqからOpenAI(gpt-4o-mini)にフォールバックします');
-  return callOpenAI(system, user, maxTokens);
+  return callOpenAI(system, user, maxTokens, temperature);
 }
 
-async function callOpenAI(system, user, maxTokens) {
+async function callOpenAI(system, user, maxTokens, temperature = 0.85) {
   const key = (process.env.OPENAI_API_KEY || '').trim();
   if (!key) throw new Error('OPENAI_API_KEYが未設定のためフォールバックできません');
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -78,7 +78,7 @@ async function callOpenAI(system, user, maxTokens) {
         { role: 'user', content: user },
       ],
       max_tokens: maxTokens,
-      temperature: 0.85,
+      temperature,
       response_format: { type: 'json_object' },
     }),
   });
@@ -328,14 +328,14 @@ ${cfg.persona.includes('聖') || cfg.persona.includes('僕') ? FACTS : ''}${lpIn
 // フェーズ2: 1つの章を2〜3シーンに深掘りする
 async function generateChapterScenes(cfg, topic, outline, chapterIdx, previousRecap) {
   const ch = outline.chapters[chapterIdx];
-  const system = `あなたはYouTube解説動画の台本作家です。出力は厳密なJSONのみ: {"scenes":[2〜3個のscene]}
+  const system = `あなたはYouTube解説動画の台本作家です。出力は厳密なJSONのみ: {"scenes":[1〜2個のscene]}
 
 ${SCENE_TYPES_DOC}
 
 この章のルール:
-- シーンは2〜3個。「主張→具体例やエピソード→今日からできる行動」の流れで深掘りする
-- 【必須】このうち1個は必ずcut型(実写4秒)にする。残りはpoints型(白背景の図解)。cut型は章の中で一番強く言い切りたい一言を短く出す場所として使う
-- points型のうち、内容が本当に合う場合はリッチ図解(stairs/process/databadge)を1個だけ使ってよい。合わないなら無理に使わず通常の図解でよい。使うときは専用フィールドを必ず全部埋める
+- この章には別途、図解シーンが1つ用意されます。あなたが作るのは、それを補う1〜2個のシーンです
+- 【必須】1個目は必ずcut型(実写4秒)。章の中で一番強く言い切りたい一言を短く出す
+- 2個目を入れるなら通常のpoints型(layoutはflow3かiconstepsかreject)。リッチ図解(stairs/process/databadge)はここでは作らない(別で作るため)
 - 前の章と同じエピソード・同じ言い回しを繰り返さない。cut型のstockQueryも章ごとに違う場面にする
 - 語り口は、一人の人間が自分の言葉で友達に打ち明けるように。必要なら語り手自身の失敗談・本音を一人称で入れる`;
   const user = `話者設定: ${cfg.persona}
@@ -345,9 +345,118 @@ ${cfg.persona.includes('聖') || cfg.persona.includes('僕') ? FACTS : ''}
 【すでに話した内容(繰り返し禁止)】
 ${previousRecap || '(まだ無し)'}
 
-今回書くのは第${chapterIdx + 1}章「${ch.title}」です。内容: ${ch.summary}
-この章の台本(scenes 2〜3個)を作ってください。`;
+今回書くのは第${chapterIdx + 1}章「${ch.title}」の補助シーンです。内容: ${ch.summary}
+cut型を1個(必須)＋必要なら通常points型を1個、作ってください。`;
   return callGroq(system, user);
+}
+
+// 章ごとに必ず1つ入れるリッチ図解。type毎に「何を見せる型か」と記入済みの見本を渡す。
+// 章は3つなので stairs→process→databadge が1本の動画に必ず1つずつ入る(＝毎回デザインが変わる)。
+const RICH_ROTATION = ['stairs', 'process', 'databadge'];
+const RICH_DESC = {
+  stairs: '「努力を積み上げても、ある壁でつまずいて止まる」という限界・つまずきの構造を見せる型',
+  process: '「工程や予定が横に並び、その全部に自分が張り付いて消耗する」という負担・仕組みを見せる型',
+  databadge: '「あることを続けたら数字が改善した／やったのはこの四つだけ」という変化と手順を、棒グラフと番号ステップで見せる型',
+};
+const RICH_SCHEMA = {
+  stairs: `{"type":"points","layout":"stairs","title":"見出し(一番刺さる語を**強調**)","stack":{"label":"左上の黒タグ(10字以内)","axis":"縦軸名(8字以内)","goal":"頂上の目標(8字以内)","items":[3個 {"t":"段の見出し(8字以内)","s":"赤い補足(8字以内)"}]},"wall":{"pill":"壁上の前置き(8字以内)","hl":"黄色ベタで囲む短い語(4字以内)","icon":"アイコン名"},"circle":{"text":"円の中の一言(2行以内・大事な語を**強調**)"},"beats":[3個 {"text":"短ラベル","icon":"アイコン名","sub":"読み上げ文(40〜70字)"}],"pose":"..."}`,
+  process: `{"type":"points","layout":"process","title":"見出し(**強調**可)","items":[3〜4個 {"t":"工程名(6字以内)","icon":"アイコン名"}],"pinNote":"各工程の下の一言(8字以内)","conclusion":[3個 結論チップ(各12字以内・**強調**可)],"beats":[3個 {"text":"短ラベル","icon":"アイコン名","sub":"読み上げ文(40〜70字)"}],"pose":"..."}`,
+  databadge: `{"type":"points","layout":"databadge","chart":{"label":"青タグ(10字以内)","caption":"グラフ説明(2行以内)","from":{"v":"開始数値(算用数字)","unit":"単位","year":"下ラベル"},"to":{"v":"改善後数値","unit":"単位","year":"下ラベル"},"badge":"バッジ内の一言(2行以内)"},"steps":{"label":"黒タグ(10字以内)","items":[4個 {"t":"手順(2行以内)","icon":"アイコン名"}]},"beats":[2個 {"text":"短ラベル","icon":"アイコン名","sub":"読み上げ文(40〜70字)"}],"pose":"..."}`,
+};
+const RICH_EXAMPLES = {
+  stairs: `{"type":"points","layout":"stairs","title":"がんばりを積むほど**すり減る**わけ","stack":{"label":"積み上げ型","axis":"努力の積み上げ","goal":"成果","items":[{"t":"まず準備","s":"何時間も"},{"t":"技術を磨く","s":"何年も"},{"t":"実践と改善","s":"休みなく"}]},"wall":{"pill":"最初の一歩で","hl":"折れる","icon":"person_worried"},"circle":{"text":"余白がない人は\\n**ここで止まる**"},"beats":[{"text":"積み上げ","icon":"chart_bar","sub":"がんばりは、準備して技術を磨いて、と積み上げていく形です。"},{"text":"壁","icon":"wall","sub":"でも余白がないと、その最初の一歩で折れてしまうんです。"},{"text":"止まる","icon":"person_worried","sub":"だから余白のない人ほど、ここで止まってしまいます。"}],"pose":"thinking"}`,
+  process: `{"type":"points","layout":"process","title":"一日ぜんぶに**自分**が張り付く","items":[{"t":"朝の準備","icon":"clock"},{"t":"仕事","icon":"document"},{"t":"人の用事","icon":"envelope"},{"t":"夜の片づけ","icon":"gear"}],"pinNote":"自分が張り付く","conclusion":["一つの予定 = 自分の時間","**埋めた分**すり減る","**自分が最後**に回る"],"beats":[{"text":"工程","icon":"calendar","sub":"一日の予定は、朝から夜までこう並んでいますよね。"},{"text":"張り付く","icon":"person_calm","sub":"その全部に、自分という人間が張り付いているんです。"},{"text":"結論","icon":"hourglass","sub":"埋めた分だけすり減って、自分はいつも最後に回ります。"}],"pose":"explaining"}`,
+  databadge: `{"type":"points","layout":"databadge","chart":{"label":"自分の時間","caption":"一日のうち自分のために\\n使えた時間の変化","from":{"v":"11","unit":"分","year":"始める前"},"to":{"v":"42","unit":"分","year":"三か月後"},"badge":"約四倍に\\n増えた"},"steps":{"label":"やったのはこれだけ","items":[{"t":"朝に十分\\n予約する","icon":"clock"},{"t":"人より先に\\n置く","icon":"calendar"},{"t":"できた日に\\n印をつける","icon":"check_circle"},{"t":"週末に\\n見返す","icon":"book"}]},"beats":[{"text":"データ","icon":"chart_up","sub":"実際にやってみた方の数字です。三か月でここまで変わりました。"},{"text":"手順","icon":"document_check","sub":"やったことは複雑ではありません。この四つだけです。"}],"pose":"thumbs_up"}`,
+};
+
+// beat数が足りないとリッチ図解の段階表示が崩れるので、最低限の数まで補う
+function ensureRichBeats(sc, target) {
+  const need = target === 'databadge' ? 2 : 3;
+  if (!Array.isArray(sc.beats)) sc.beats = [];
+  const filler = { stairs: ['積み上げ', '壁', '止まる'], process: ['工程', '張り付く', '結論'], databadge: ['データ', '手順'] }[target];
+  while (sc.beats.length < need) {
+    const i = sc.beats.length;
+    sc.beats.push({ text: filler[i] || 'ポイント', icon: 'check_circle', sub: '' });
+  }
+}
+
+// AIが構造を守れなかった時の最後の保険。章の言葉を使って型を確定で埋める(データ捏造はしない)。
+function buildFallbackRich(target, ch) {
+  const kp = (ch.keyPoint || ch.title || '').slice(0, 8) || 'あり方';
+  if (target === 'stairs') {
+    return {
+      type: 'points', layout: 'stairs', title: ch.title,
+      stack: { label: '積み上げ型', axis: '努力の積み上げ', goal: '成果', items: [{ t: 'まず準備', s: '何時間も' }, { t: '力をつける', s: '何年も' }, { t: '続ける', s: '休みなく' }] },
+      wall: { pill: '最初の一歩で', hl: '折れる', icon: 'person_worried' },
+      circle: { text: `余白がないと\n**${kp}**` },
+      beats: [{ text: '積み上げ', icon: 'chart_bar', sub: `${ch.title}は、積み上げていく形になっています。` }, { text: '壁', icon: 'wall', sub: 'でも余白がないと、最初の一歩でつまずいてしまいます。' }, { text: '止まる', icon: 'person_worried', sub: 'だから多くの人が、ここで止まってしまうんです。' }],
+      pose: 'thinking',
+    };
+  }
+  if (target === 'process') {
+    return {
+      type: 'points', layout: 'process', title: ch.title,
+      items: [{ t: '朝の準備', icon: 'clock' }, { t: '仕事', icon: 'document' }, { t: '人の用事', icon: 'envelope' }, { t: '夜の片づけ', icon: 'gear' }],
+      pinNote: '自分が張り付く',
+      conclusion: [`一つの予定 = 自分`, `**埋めた分**すり減る`, `**${kp}**`],
+      beats: [{ text: '工程', icon: 'calendar', sub: '一日の予定は、朝から夜までこう並んでいますよね。' }, { text: '張り付く', icon: 'person_calm', sub: 'その全部に、自分という人間が張り付いています。' }, { text: '結論', icon: 'hourglass', sub: `だからこそ、${ch.title}が大事になってきます。` }],
+      pose: 'explaining',
+    };
+  }
+  // databadge の保険(数値は捏造せず「ある方の例」の穏当な範囲)
+  return {
+    type: 'points', layout: 'databadge',
+    chart: { label: '変化のデータ', caption: '続けた人に\n起きた変化の例', from: { v: '11', unit: '分', year: '始める前' }, to: { v: '42', unit: '分', year: '三か月後' }, badge: '約四倍に\n増えた' },
+    steps: { label: 'やることはこれだけ', items: [{ t: '朝に少し\n時間をとる', icon: 'clock' }, { t: '人より先に\n置く', icon: 'calendar' }, { t: 'できた日に\n印をつける', icon: 'check_circle' }, { t: '週末に\n見返す', icon: 'book' }] },
+    beats: [{ text: 'データ', icon: 'chart_up', sub: 'ある方の例です。続けたことで、三か月でここまで変わりました。' }, { text: '手順', icon: 'document_check', sub: 'やることは複雑ではありません。この四つだけです。' }],
+    pose: 'thumbs_up',
+  };
+}
+
+// 章に対して、指定タイプのリッチ図解を1個だけ生成する(2回試行→ダメなら確定の保険)
+async function generateRichScene(cfg, topic, outline, chapterIdx, target, previousRecap) {
+  const ch = outline.chapters[chapterIdx];
+  const system = `あなたはYouTube解説動画の台本作家です。出力は厳密なJSONのみ: {"scene": <1個のsceneオブジェクト>}
+
+作るのは layout="${target}" のリッチ図解シーンをちょうど1個。これは${RICH_DESC[target]}。
+この章の内容を、必ずこの型の形に落とし込んでください(型は絶対に変えない・専用フィールドは全部埋める)。
+
+スキーマ:
+${RICH_SCHEMA[target]}
+
+記入済みの見本(この構造・キー・個数を必ず守り、中身だけ章の内容に差し替える):
+${RICH_EXAMPLES[target]}
+
+共通ルール:
+- 数字は基本ひらがな。ただしdatabadgeのchartのv(数値)だけは算用数字でよい
+- databadgeの数値は、話者の実体験の数字か「ある方の例」として穏当な範囲にする。誇張・断定はしない
+- 英数字・アルファベット・他言語の文字は本文に使わない
+- 各beatにtext・icon・subを必ず入れる。subは読み上げ文`;
+  const user = `話者設定: ${cfg.persona}
+動画全体のテーマ: ${topic}
+${cfg.persona.includes('聖') || cfg.persona.includes('僕') ? FACTS : ''}
+【すでに話した内容(繰り返し禁止)】
+${previousRecap || '(まだ無し)'}
+
+第${chapterIdx + 1}章「${ch.title}」(${ch.summary})の内容を、layout="${target}"のリッチ図解1個にしてください。`;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await callGroq(system, user, 1600, 0.55);
+      const sc = res.scene || (res.type ? res : null);
+      if (sc && typeof sc === 'object') {
+        sc.type = 'points';
+        sc.layout = target;
+        ensureRichBeats(sc, target);
+        sanitizeRich(sc);
+        if (isValidRich(sc)) return sc;
+      }
+    } catch (e) {
+      console.log(`リッチ図解(${target})生成失敗 試行${attempt}: ${e.message}`);
+    }
+  }
+  console.log(`リッチ図解(${target})は確定の保険テンプレを使用`);
+  return buildFallbackRich(target, ch);
 }
 
 // 2段階生成: アウトライン→各章→コード側で組み立て(構成とシーン数をコードで保証する)
@@ -374,18 +483,28 @@ async function generate(cfg, topic) {
   };
 
   // 各章を順番に生成(直前までの内容を要約として渡して重複を防ぐ)
+  // 章ごとに「必ず入るリッチ図解1つ(型はローテーション)」＋「補助のcut/通常図解」を作り、
+  // 単調にならないよう毎章デザインを変える。
   const bodyScenes = [];
   let recap = '';
   for (let i = 0; i < outline.chapters.length; i++) {
+    const target = RICH_ROTATION[i % RICH_ROTATION.length];
+    const richScene = await generateRichScene(cfg, topic, outline, i, target, recap.slice(0, 1500));
+
     const res = await generateChapterScenes(cfg, topic, outline, i, recap.slice(0, 1500));
-    const scenes = (Array.isArray(res.scenes) ? res.scenes : []).slice(0, 3).filter((sc) => Array.isArray(sc.beats) && sc.beats.length);
-    if (!scenes.length) throw new Error(`第${i + 1}章の生成に失敗`);
-    // 章の始まりがわかるよう、各章の先頭のpoints型シーンの見出しは章タイトルに揃える
-    const firstPoints = scenes.find((sc) => sc.type === 'points');
-    if (firstPoints) firstPoints.title = outline.chapters[i].title;
-    // 実写と白背景が必ず交互になるよう、章の中でも並べ替えておく
-    bodyScenes.push(...alternateCutAndPoints(scenes));
-    recap += scenes.map((sc) => sc.beats.map((b) => b.sub).join('')).join('') + '\n';
+    const support = (Array.isArray(res.scenes) ? res.scenes : [])
+      .slice(0, 2)
+      .filter((sc) => Array.isArray(sc.beats) && sc.beats.length)
+      // 補助側にリッチ図解が紛れ込んでも二重にしない
+      .filter((sc) => !RICH_LAYOUTS.includes(sc.layout));
+    // 補助にcutが無ければ最低限のcutを足す(実写と図解が交互になるように)
+    if (!support.some((sc) => sc.type === 'cut')) {
+      support.unshift({ type: 'cut', stockQuery: 'calm daily life japan', beats: [{ kind: 'big', text: outline.chapters[i].keyPoint || outline.chapters[i].title, sub: `${outline.chapters[i].title}、ここが今日の大事なところです。` }], pose: 'arms_crossed' });
+    }
+
+    const chapterScenes = [richScene, ...support];
+    bodyScenes.push(...alternateCutAndPoints(chapterScenes));
+    recap += chapterScenes.map((sc) => (sc.beats || []).map((b) => b.sub).join('')).join('') + '\n';
   }
 
   // まとめ: 3章の要点を矢印でつないで振り返る
@@ -466,4 +585,4 @@ if (require.main === module) {
   main().catch((e) => { console.error('失敗:', e.message); process.exit(1); });
 }
 
-module.exports = { main };
+module.exports = { main, buildFallbackRich, isValidRich, sanitizeScenes, randomizeLayouts, downgradeRich, ensureRichBeats, RICH_ROTATION, RICH_LAYOUTS };
