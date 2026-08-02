@@ -592,4 +592,6 @@ if (require.main === module) {
   main().catch((e) => { console.error('失敗:', e.message); process.exit(1); });
 }
 
-module.exports = { main, buildFallbackRich, isValidRich, sanitizeScenes, randomizeLayouts, downgradeRich, ensureRichBeats, RICH_ROTATION, RICH_LAYOUTS };
+module.exports = { main, buildFallbackRich, isValidRich, sanitizeScenes, randomizeLayouts, downgradeRich, ensureRichBeats, RICH_ROTATION, RICH_LAYOUTS,
+  // 対談ジェネレータ(generate_taidan_script.js)から再利用する
+  callGroq, RICH_SCHEMA, RICH_EXAMPLES, RICH_DESC, sanitizeRich, ICON_NAMES, nextTopic, stripForeignChars, FACTS };

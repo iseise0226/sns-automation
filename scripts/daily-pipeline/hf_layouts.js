@@ -668,6 +668,23 @@ body{font-family:"Zen Maru Gothic",sans-serif;color:#1a1a1a}
 /* 字幕バー(全型共通) */
 .caption{position:absolute;left:60px;bottom:56px;width:1800px;height:132px;background:#16202e;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:18px 56px}
 .caption span{font-weight:700;color:#fff;line-height:1.35;text-align:center}
+
+/* ===== 対談モード(2キャラ) ===== */
+/* うっすらグレーの"スタジオ"背景＋中央の白い図解カード。図解はカード上に載せる */
+body.taidan #paper{background:#e7ecf2}
+body.taidan .scene{transform:scale(.72);transform-origin:50% 3%}
+.tk-stage{position:absolute;top:26px;left:196px;width:1528px;height:812px;background:#fff;border:6px solid #16202e;border-radius:30px;box-shadow:0 18px 44px rgba(0,0,0,.12)}
+/* 左=質問役 / 右=先生役。字幕バーの上に立たせる */
+.tk-ch{position:absolute;bottom:0;width:372px;height:684px;pointer-events:none}
+.tk-l{left:-18px}
+.tk-r{right:-18px}
+.tk-enter{position:absolute;inset:0}
+.tk-cbody{position:absolute;inset:0;filter:drop-shadow(0 14px 22px rgba(0,0,0,.28))}
+.tk-ch .ch-m{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:bottom}
+/* 話者名タグ(字幕バーの上・左端) */
+.cap-name{position:absolute;left:60px;bottom:200px;font-size:34px;font-weight:900;color:#fff;padding:9px 28px;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.cap-name.nm-q{background:#a86e1a}
+.cap-name.nm-s{background:#16202e}
 `;
 
 // 字幕文の長さに応じて字を縮める(2行132pxに収める)

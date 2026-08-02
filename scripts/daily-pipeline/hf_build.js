@@ -62,7 +62,50 @@ function chibiFor(sc) {
   return { html, anims };
 }
 
+// 対談モード: 2キャラを画面下の左右に常駐させる。
+//   左=質問役(assets/chibi2) / 右=先生役=聖さん(assets/chibi)
+//   話しているビートの人だけ口をパクパク＋明るく、聞いてる側は少し暗くする。
+//   音声解析はできないので口パクは有限repeatのyoyo(seek可能)。
+function taidanChars(allBeats, total) {
+  const html = [];
+  const anims = [];
+  const S0 = { start: 0 };
+  const sides = [
+    { key: 'q', dir: 'chibi2', cls: 'tk-l', track: 6, open: 'tk-lo', body: 'tk-lb', enter: 'tk-le', at: 0.1 },
+    { key: 's', dir: 'chibi', cls: 'tk-r', track: 7, open: 'tk-ro', body: 'tk-rb', enter: 'tk-re', at: 0.25 },
+  ];
+  for (const s of sides) {
+    html.push(
+      `<div class="tk-ch ${s.cls} clip" data-start="0" data-duration="${total}" data-track-index="${s.track}">` +
+        `<div class="tk-enter" id="${s.enter}">` +
+        `<div class="tk-cbody" id="${s.body}">` +
+        `<img class="ch-m" src="assets/${s.dir}/mouth_closed.png" />` +
+        `<img class="ch-m" id="${s.open}" src="assets/${s.dir}/mouth_open.png" style="opacity:0" />` +
+        `</div></div></div>`
+    );
+    // 登場(下からふわっ)は外側、呼吸の上下は内側。translateYの取り合いを避ける
+    anims.push({ sel: `#${s.enter}`, from: { y: 54, opacity: 0 }, to: { y: 0, opacity: 1 }, dur: 0.6, ease: 'power3.out', at: s.at, scene: S0 });
+    const bobReps = Math.max(2, Math.floor(total / 1.1));
+    anims.push({ sel: `#${s.body}`, from: { yPercent: 0 }, to: { yPercent: -1.4, repeat: bobReps, yoyo: true, ease: 'sine.inOut' }, dur: 1.1, ease: 'sine.inOut', at: 0.8, scene: S0 });
+  }
+  for (const b of allBeats) {
+    const isS = b.speaker === 's';
+    const openSel = isS ? '#tk-ro' : '#tk-lo';
+    const actBody = isS ? '#tk-rb' : '#tk-lb';
+    const inaBody = isS ? '#tk-lb' : '#tk-rb';
+    // 口パク(0.16秒刻み・偶数回で閉じて終わる)
+    let reps = Math.max(2, Math.round((b.dur || 1) / 0.16));
+    if (reps % 2) reps += 1;
+    anims.push({ sel: openSel, from: { opacity: 0 }, to: { opacity: 1, repeat: reps, yoyo: true, ease: 'steps(1)' }, dur: 0.16, ease: 'steps(1)', at: b.absStart + 0.05, scene: S0 });
+    // 話者を明るく・聞き手を少し暗く(ターンの切り替わりがはっきりする)
+    anims.push({ sel: actBody, from: { opacity: 0.55 }, to: { opacity: 1 }, dur: 0.28, ease: 'power2.out', at: b.absStart, scene: S0 });
+    anims.push({ sel: inaBody, from: { opacity: 1 }, to: { opacity: 0.55 }, dur: 0.28, ease: 'power2.out', at: b.absStart, scene: S0 });
+  }
+  return { html: html.join(''), anims };
+}
+
 function buildHtml(timedScenes, total, opts = {}) {
+  const taidan = !!opts.taidan;
   const bodyParts = [];
   const videoParts = [];
   const captionParts = [];
@@ -100,16 +143,34 @@ function buildHtml(timedScenes, total, opts = {}) {
           `<span style="font-size:${fs2}px">${esc(b.sub)}</span></div>`
       );
       anims.push({ sel: `#${sc.sid}-c${j} span`, from: { opacity: 0 }, to: { opacity: 1 }, dur: 0.3, ease: 'power2.out', at: b.start + 0.05, scene: sc });
+      // 対談モードは字幕バーの上に話者名タグを出す
+      if (taidan) {
+        const isS = b.speaker === 's';
+        const nm = isS ? (opts.sLabel || '先生') : (opts.qLabel || '質問');
+        captionParts.push(
+          `<div class="cap-name ${isS ? 'nm-s' : 'nm-q'} clip" id="${sc.sid}-n${j}" data-start="${b.absStart}" data-duration="${b.dur}" data-track-index="8">${esc(nm)}</div>`
+        );
+        anims.push({ sel: `#${sc.sid}-n${j}`, from: { x: -16, opacity: 0 }, to: { x: 0, opacity: 1 }, dur: 0.25, ease: 'power2.out', at: b.start + 0.02, scene: sc });
+      }
     });
 
-    // chibiキャラ(余白のあるレイアウトだけ・useChibi=trueのアカウントだけ)
-    if (opts.useChibi && CHIBI_LAYOUTS.includes(kind)) {
+    // chibiキャラ(余白のあるレイアウトだけ・useChibi=trueのアカウントだけ)。対談モードでは常駐キャラを使うのでスキップ
+    if (!taidan && opts.useChibi && CHIBI_LAYOUTS.includes(kind)) {
       const ch = chibiFor(sc);
       chibiParts.push(
         `<div class="ch-clip clip" id="${sc.sid}-chw" data-start="${sc.start}" data-duration="${sc.dur}" data-track-index="7">${ch.html}</div>`
       );
       for (const a of ch.anims) anims.push({ ...a, scene: sc });
     }
+  }
+
+  // 対談モードの2キャラ(全編常駐)。全ビートを絶対時刻で渡す
+  if (taidan) {
+    const allBeats = [];
+    for (const sc of timedScenes) for (const b of sc.beats) allBeats.push(b);
+    const tk = taidanChars(allBeats, total);
+    chibiParts.push(tk.html);
+    for (const a of tk.anims) anims.push(a);
   }
 
   const tlLines = anims
@@ -129,10 +190,10 @@ function buildHtml(timedScenes, total, opts = {}) {
     <script src="assets/vendor/gsap.min.js"></script>
     <style>${BASE_CSS}</style>
   </head>
-  <body>
+  <body class="${taidan ? 'taidan' : ''}">
     <div id="root" data-composition-id="main" data-start="0" data-duration="${total}" data-width="1920" data-height="1080">
       <div id="paper"></div>
-${videoParts.map((s) => '      ' + s).join('\n')}
+${taidan ? '      <div class="tk-stage"></div>\n' : ''}${videoParts.map((s) => '      ' + s).join('\n')}
 ${bodyParts.map((s) => '      ' + s).join('\n')}
 ${chibiParts.map((s) => '      ' + s).join('\n')}
 ${captionParts.map((s) => '      ' + s).join('\n')}

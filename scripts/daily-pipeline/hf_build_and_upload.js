@@ -112,6 +112,11 @@ async function main() {
 
   await ensureEngine(ENGINE_DIR);
   const speaker = await resolveSpeakerId(script.speaker?.name || '玄野武宏', script.speaker?.style || 'ノーマル');
+  // 対談モードは質問役の声(speaker2)も用意し、ビートのspeaker(q/s)で使い分ける
+  let speaker2 = null;
+  if (script.taidan && script.speaker2) {
+    speaker2 = await resolveSpeakerId(script.speaker2.name, script.speaker2.style || 'ノーマル');
+  }
 
   const outDir = path.join(OUT_ROOT, id);
   const audioDir = path.join(outDir, 'audio');
@@ -128,7 +133,8 @@ async function main() {
     for (let j = 0; j < sc.beats.length; j++) {
       const text = sc.beats[j].sub || sc.beats[j].text || '。';
       const file = path.join(audioDir, `s${i + 1}b${j + 1}.wav`);
-      await tts(text, speaker, file);
+      const sp = speaker2 && sc.beats[j].speaker === 'q' ? speaker2 : speaker;
+      await tts(text, sp, file);
       audio.push({ file, dur: audioDuration(file) });
     }
     console.log(`TTS ${i + 1}/${script.scenes.length} (${sc.beats.length}ビート)`);
@@ -143,7 +149,10 @@ async function main() {
     scenes.push({ ...sc, audio, videoFile });
   }
 
-  const { total, scenes: timed } = build(scenes, HF_DIR, { title: script.youtubeTitle, footer: script.footer, useChibi: !!script.useChibi });
+  const { total, scenes: timed } = build(scenes, HF_DIR, {
+    title: script.youtubeTitle, footer: script.footer, useChibi: !!script.useChibi,
+    taidan: !!script.taidan, qLabel: script.qLabel, sLabel: script.sLabel,
+  });
   console.log(`合計 ${Math.floor(total / 60)}分${Math.round(total % 60)}秒 / ${timed.length}シーン`);
 
   try {

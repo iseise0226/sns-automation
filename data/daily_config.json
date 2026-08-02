@@ -3,7 +3,10 @@
     "persona": "美容師歴25年以上・経営者の聖(さとし)。一人称「僕」。マインド・プラス思考・人生哲学を、癒しと気づきのトーンで話す。",
     "mood": "穏やか",
     "footer": "心の土台を、整える。｜伊勢 聖",
-    "speaker": { "name": "玄野武宏", "style": "ノーマル" },
+    "speaker": {
+      "name": "玄野武宏",
+      "style": "ノーマル"
+    },
     "speakerLabel": "いせさとし",
     "useChibi": true,
     "lpUrl": "https://ise-satoshi-lp.pages.dev/",
@@ -15,7 +18,10 @@
     "persona": "美容師歴25年以上・算命学鑑定士の聖(さとし)。一人称「僕」。算命学・運気の流れをテーマに、占い断定せず「季節」の考え方で話す。",
     "mood": "穏やか",
     "footer": "算命学 × マインド｜伊勢 聖",
-    "speaker": { "name": "玄野武宏", "style": "ノーマル" },
+    "speaker": {
+      "name": "玄野武宏",
+      "style": "ノーマル"
+    },
     "speakerLabel": "いせさとし",
     "useChibi": true,
     "lpUrl": "https://ise-satoshi-lp.pages.dev/",
@@ -27,7 +33,10 @@
     "persona": "美容師歴25年以上・40歳でコロナ禍に独立した聖(さとし)。一人称「僕」。独立・フリーランス・キャリアをテーマに、自身の独立体験を交えて話す。",
     "mood": "穏やか",
     "footer": "独立・副業｜伊勢 聖",
-    "speaker": { "name": "玄野武宏", "style": "ノーマル" },
+    "speaker": {
+      "name": "玄野武宏",
+      "style": "ノーマル"
+    },
     "speakerLabel": "いせさとし",
     "useChibi": true,
     "lpUrl": "https://ise-satoshi-lp.pages.dev/",
@@ -39,7 +48,10 @@
     "persona": "美容師歴25年以上の聖(さとし)。一人称「僕」。子育て・親子関係をテーマに、自身の父親としての経験を交えて話す。",
     "mood": "穏やか",
     "footer": "親子の時間｜伊勢 聖",
-    "speaker": { "name": "玄野武宏", "style": "ノーマル" },
+    "speaker": {
+      "name": "玄野武宏",
+      "style": "ノーマル"
+    },
     "speakerLabel": "いせさとし",
     "useChibi": true,
     "lpUrl": "https://ise-satoshi-lp.pages.dev/",
@@ -51,7 +63,10 @@
     "persona": "美容師歴25年以上の聖(さとし)。一人称「僕」。健康・ダイエット・食事をテーマに、美容師としての現場経験を交えて話す。",
     "mood": "穏やか",
     "footer": "健康と経営｜伊勢 聖",
-    "speaker": { "name": "玄野武宏", "style": "ノーマル" },
+    "speaker": {
+      "name": "玄野武宏",
+      "style": "ノーマル"
+    },
     "speakerLabel": "いせさとし",
     "useChibi": true,
     "lpUrl": "https://ise-satoshi-lp.pages.dev/",
@@ -63,7 +78,10 @@
     "persona": "美容師歴25年以上の聖(さとし)。一人称「僕」。40代からのお金の使い方・節約・人生設計をテーマに話す。",
     "mood": "穏やか",
     "footer": "40代のお金の話｜伊勢 聖",
-    "speaker": { "name": "玄野武宏", "style": "ノーマル" },
+    "speaker": {
+      "name": "玄野武宏",
+      "style": "ノーマル"
+    },
     "speakerLabel": "いせさとし",
     "useChibi": true,
     "lpUrl": "https://ise-satoshi-lp.pages.dev/",
@@ -75,7 +93,10 @@
     "persona": "黒髪ボブの女性美容ライター「せっし」。一人称「私」。美容師としての知識を活かし、美容・スキンケア・ライフスタイルをテーマに話す。聖さんの実体験は使わない。",
     "mood": "穏やか",
     "footer": "美容と暮らし｜せっし",
-    "speaker": { "name": "波音リツ", "style": "ノーマル" },
+    "speaker": {
+      "name": "波音リツ",
+      "style": "ノーマル"
+    },
     "speakerLabel": "せっし",
     "cta": ""
   },
@@ -83,8 +104,32 @@
     "persona": "コーギーの「もち」。一人称「ぼく」。語尾は「〜なのだ」。飼い主との日常のあるあるネタを、天然でマイペースな犬視点で面白おかしく話す。マインドや教訓は一切なし、純粋なあるあるネタだけ。",
     "mood": "穏やか",
     "footer": "コーギーのもち",
-    "speaker": { "name": "ずんだもん", "style": "ノーマル" },
+    "speaker": {
+      "name": "ずんだもん",
+      "style": "ノーマル"
+    },
     "speakerLabel": "もち",
     "cta": ""
+  },
+  "okane_taidan": {
+    "persona": "お金と暮らしの制度にくわしい先生「いせ先生」。年金・保険・税金・補助金などの制度を、断定や投資の助言はせず、一般的な情報としてやさしくかみくだいて説明する。一人称は僕。",
+    "senseiName": "いせ先生",
+    "mood": "穏やか",
+    "footer": "お金と制度の話｜いせ先生×あかり",
+    "speaker": {
+      "name": "玄野武宏",
+      "style": "ノーマル"
+    },
+    "speaker2": {
+      "name": "四国めたん",
+      "style": "ノーマル"
+    },
+    "qLabel": "あかり",
+    "sLabel": "いせ先生",
+    "useChibi": false,
+    "lpUrl": "https://ise-satoshi-lp.pages.dev/",
+    "lineUrl": "https://lin.ee/60aEpWN",
+    "lineHook": "お金の不安が軽くなる「7日間の無料LINE配信」",
+    "cta": "\n\n▼動画のつづきはこちら\nhttps://ise-satoshi-lp.pages.dev/\n\n#年金 #お金 #制度"
   }
 }

@@ -16,6 +16,7 @@ on:
     - cron: '7 8 * * *'    # tabi_life_design40 17:07 JST
     - cron: '22 10 * * *'  # sessi_life         19:22 JST
     - cron: '38 12 * * *'  # ko_gi_omoti        21:38 JST
+    - cron: '50 13 * * *'  # okane_taidan       22:50 JST（対談チャンネル）
 
 jobs:
   post-one-channel:
@@ -41,6 +42,7 @@ jobs:
             "7 8 * * *")   echo "account=tabi_life_design40" >> "$GITHUB_OUTPUT" ;;
             "22 10 * * *") echo "account=sessi_life" >> "$GITHUB_OUTPUT" ;;
             "38 12 * * *") echo "account=ko_gi_omoti" >> "$GITHUB_OUTPUT" ;;
+            "50 13 * * *") echo "account=okane_taidan" >> "$GITHUB_OUTPUT" ;;
             *) echo "account=" >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -81,7 +83,7 @@ jobs:
         run: npm install googleapis
 
       - name: HyperFrames用Chrome取得
-        if: contains('ise_satoshi,satoshi_mindset,satoshi_mind_coach,ise_sato_kosodate,ise_kenkou_otaku,tabi_life_design40', steps.pick.outputs.account)
+        if: contains('ise_satoshi,satoshi_mindset,satoshi_mind_coach,ise_sato_kosodate,ise_kenkou_otaku,tabi_life_design40,okane_taidan', steps.pick.outputs.account)
         working-directory: hyperframes
         run: npx --yes hyperframes@0.7.77 browser ensure
 
@@ -91,7 +93,13 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: node generate_script.js "${{ steps.pick.outputs.account }}"
+        run: |
+          # okane_taidanは対談形式(2キャラ)の専用ジェネレータを使う
+          if [ "${{ steps.pick.outputs.account }}" = "okane_taidan" ]; then
+            node generate_taidan_script.js "${{ steps.pick.outputs.account }}"
+          else
+            node generate_script.js "${{ steps.pick.outputs.account }}"
+          fi
 
       - name: 動画ビルド＆アップロード
         if: steps.pick.outputs.account != ''
@@ -105,13 +113,17 @@ jobs:
           ENGINE_DIR: ${{ github.workspace }}/scripts/daily-pipeline/voicevox_engine
         run: |
           TODAY=$(date -u +%Y%m%d)
-          SCRIPT="generated/daily_${{ steps.pick.outputs.account }}_${TODAY}.json"
+          ACC="${{ steps.pick.outputs.account }}"
           # HyperFrames(線画図解＋実写＋chibiキャラの確定デザイン)に移行済みのアカウント。
           # 聖さんキャラを使う6アカウントが対象。sessi_life/ko_gi_omotiは別キャラ(chibi画像なし)のためRemotionのまま
-          case "${{ steps.pick.outputs.account }}" in
+          # okane_taidanは対談形式(台本ファイル名はtaidan_接頭辞)
+          case "$ACC" in
+            okane_taidan)
+              node hf_build_and_upload.js "generated/taidan_${ACC}_${TODAY}.json" ;;
             ise_satoshi|satoshi_mindset|satoshi_mind_coach|ise_sato_kosodate|ise_kenkou_otaku|tabi_life_design40)
-              node hf_build_and_upload.js "$SCRIPT" ;;
-            *)           node build_and_upload.js "$SCRIPT" ;;
+              node hf_build_and_upload.js "generated/daily_${ACC}_${TODAY}.json" ;;
+            *)
+              node build_and_upload.js "generated/daily_${ACC}_${TODAY}.json" ;;
           esac
 
       - name: お題の進行状況をコミット
