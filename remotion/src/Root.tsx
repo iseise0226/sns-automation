@@ -4,6 +4,7 @@ import { SlideVideo } from "./SlideVideo";
 import { RichSlideVideo } from "./RichSlideVideo";
 import { Thumbnail } from "./Thumbnail";
 import { TalkingChibi } from "./TalkingChibi";
+import { TaidanReel } from "./TaidanReel";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -92,6 +93,28 @@ export const RemotionRoot: React.FC = () => {
       height={1350}
       defaultProps={{
         audioSrc: "satoshi_chibi/test_audio.wav",
+      }}
+    />
+    <Composition
+      id="TaidanReel"
+      component={TaidanReel}
+      durationInFrames={600}
+      fps={30}
+      width={1080}
+      height={1920}
+      defaultProps={{
+        beats: [
+          { speaker: "q" as const, text: "サンプル", audio: "", durationInSeconds: 4 },
+          { speaker: "s" as const, text: "サンプル", audio: "", durationInSeconds: 4 },
+        ],
+      }}
+      calculateMetadata={({ props }) => {
+        const fps = 30;
+        const total = props.beats.reduce(
+          (sum: number, b: any) => sum + Math.round(b.durationInSeconds * fps),
+          0
+        );
+        return { durationInFrames: total };
       }}
     />
     <Still

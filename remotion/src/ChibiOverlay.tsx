@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Img, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 
-// 聖さんちびキャラを動画右下に固定表示するワイプ。
+// ちびキャラを動画下に固定表示するワイプ。
 // 口パクの仕組み: その瞬間の音量を読んで「閉じ・半開き・開き」の全身画像を丸ごと差し替えるだけ。
 // 4枚の口差分(C:\キャラクター背景透過\口元 由来)は同一ポーズで位置が揃っているのでズレない。
 // ※瞬きは目閉じ画像のポーズが口セットと揃っていないため入れていない(揃った画像ができたら追加)。
@@ -12,11 +12,14 @@ import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 // "default"(=指差し口パクセット)以外は口差分を持たない静止ポーズ画像(体の動きフォルダ由来)を
 // そのまま表示する。口パクは無いが、要所でポーズが変わることで単調さを防ぐ。
 // (SEはポーズ連動ではなく、MyVideo側でナレーション内容に応じてAIが選ぶ独立の仕組みになっている)
+//
+// 2キャラ対談(TaidanReel)用に assetDir/side/hasHalf/dim を追加(2026-08-02)。
+// 既存の呼び出し(satoshi_chibi・右下1体)はデフォルト値のままなので無変更で動く。
 
-const ASSET_DIR = "satoshi_chibi";
-const MOUTH_OPEN = `${ASSET_DIR}/mouth_open.png`;
-const MOUTH_HALF = `${ASSET_DIR}/mouth_half.png`;
-const MOUTH_CLOSED = `${ASSET_DIR}/mouth_closed.png`;
+const DEFAULT_ASSET_DIR = "satoshi_chibi";
+const MOUTH_OPEN = "mouth_open.png";
+const MOUTH_HALF = "mouth_half.png";
+const MOUTH_CLOSED = "mouth_closed.png";
 
 export const CHIBI_POSES = [
   "default",
@@ -28,23 +31,37 @@ export const CHIBI_POSES = [
   "thinking",
   "thumbs_up",
 ] as const;
-export type ChibiPose = (typeof CHIBI_POSES)[number];
+export type ChibiPose = (typeof CHIBI_POSES)[number] | "curious" | "surprised";
 
 export type ChibiOverlayProps = {
   audioSrc: string; // 必須。シーンにナレーション音声がある時だけこのコンポーネントをmountすること
-  pose?: ChibiPose; // シーン内容に応じたポーズ(既定: default=指差い口パク)
+  pose?: ChibiPose; // シーン内容に応じたポーズ(既定: default=指差し口パク)
   size?: number; // ワイプの高さ(px)。幅は画像比率(約3:4)で自動計算
+  assetDir?: string; // キャラの画像フォルダ(既定: satoshi_chibi)。対談の質問役はakari_chibiを渡す
+  side?: "left" | "right"; // 画面のどちら側に立つか(既定: right)
+  hasHalf?: boolean; // 口の半開き画像を持っているか(あかりは持っていないのでfalse)
+  dim?: boolean; // 話していない側を少し暗く・小さくする(対談のターン切り替え用)
+  bottom?: number; // 下端位置(px)。字幕バーの高さに合わせて呼び出し側で調整
 };
 
-export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({ audioSrc, pose = "default", size = 330 }) => {
+export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({
+  audioSrc,
+  pose = "default",
+  size = 330,
+  assetDir = DEFAULT_ASSET_DIR,
+  side = "right",
+  hasHalf = true,
+  dim = false,
+  bottom = 300,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const audioData = useAudioData(staticFile(audioSrc));
 
-  let imgSrc: string = MOUTH_CLOSED;
+  let imgSrc: string = `${assetDir}/${MOUTH_CLOSED}`;
   if (pose === "default") {
-    let mouthSrc = MOUTH_CLOSED;
-    if (audioData) {
+    let mouthFile = MOUTH_CLOSED;
+    if (audioData && !dim) {
       const visualization = visualizeAudio({
         fps,
         frame,
@@ -53,16 +70,17 @@ export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({ audioSrc, pose = "de
       });
       // 低〜中域のパワーを合算して「声の大きさ」の目安にする
       const volume = visualization.slice(2, 12).reduce((a, b) => a + b, 0) / 10;
-      if (volume > 0.018) mouthSrc = MOUTH_OPEN;
-      else if (volume > 0.007) mouthSrc = MOUTH_HALF;
+      if (volume > 0.018) mouthFile = MOUTH_OPEN;
+      else if (hasHalf && volume > 0.007) mouthFile = MOUTH_HALF;
     }
-    imgSrc = mouthSrc;
+    imgSrc = `${assetDir}/${mouthFile}`;
   } else {
-    imgSrc = `${ASSET_DIR}/poses/${pose}.png`;
+    imgSrc = `${assetDir}/poses/${pose}.png`;
   }
 
-  // 喋りに合わせて体がわずかに揺れる(生きている感を出す)
-  const bobY = Math.sin(frame / 9) * 3;
+  // 喋りに合わせて体がわずかに揺れる(生きている感を出す)。話していない側は揺らさない
+  const bobY = dim ? 0 : Math.sin(frame / 9) * 3;
+  const scale = dim ? 0.92 : 1;
   const width = Math.round(size * 0.75);
 
   return (
@@ -70,12 +88,14 @@ export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({ audioSrc, pose = "de
       <div
         style={{
           position: "absolute",
-          right: 18,
+          [side]: 18,
           // 下部字幕(黒帯)と重ならないように、字幕エリアの上に立たせる
-          bottom: 300,
+          bottom,
           width,
           height: size,
-          transform: `translateY(${bobY}px)`,
+          opacity: dim ? 0.55 : 1,
+          transform: `translateY(${bobY}px) scale(${scale})`,
+          transformOrigin: "50% 100%",
           filter: "drop-shadow(0 10px 18px rgba(0,0,0,0.28))",
         }}
       >

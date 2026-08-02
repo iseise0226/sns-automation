@@ -1,0 +1,73 @@
+name: WF 対談リール(okane_taidan・毎日)
+
+on:
+  schedule:
+    # JST 20:15 = UTC 11:15。YouTube対談(22:50 JST)とは別時間に分散
+    - cron: "15 11 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  post-taidan-reel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: ffmpeg導入
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
+
+      - name: VOICEVOXエンジンをキャッシュ
+        id: cache-voicevox
+        uses: actions/cache@v4
+        with:
+          path: scripts/daily-pipeline/voicevox_engine
+          key: voicevox-engine-linux-cpu-x64-0.25.2
+
+      - name: VOICEVOXエンジン取得
+        if: steps.cache-voicevox.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p scripts/daily-pipeline/voicevox_engine
+          cd scripts/daily-pipeline/voicevox_engine
+          curl -sL -o engine.7z https://github.com/VOICEVOX/voicevox_engine/releases/download/0.25.2/voicevox_engine-linux-cpu-x64-0.25.2.7z.001
+          sudo apt-get install -y p7zip-full
+          7z x engine.7z
+          chmod +x linux-cpu-x64/run || chmod +x run || true
+
+      - name: Remotion依存インストール
+        working-directory: remotion
+        run: npm install
+
+      - name: Remotion用Chromium取得
+        working-directory: remotion
+        run: npx remotion browser ensure
+
+      - name: 対談リール台本生成(Groq)
+        working-directory: scripts/daily-pipeline
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node generate_taidan_reel_script.js
+
+      - name: レンダー＆Instagram投稿
+        working-directory: scripts
+        env:
+          ENGINE_DIR: ${{ github.workspace }}/scripts/daily-pipeline/voicevox_engine
+          IG_TOKEN_OKANE_TAIDAN: ${{ secrets.IG_TOKEN_OKANE_TAIDAN }}
+        run: |
+          TODAY=$(date -u +%Y%m%d)
+          node post_taidan_reel.js "daily-pipeline/generated/taidan_reel_${TODAY}.json"
+
+      - name: お題の進行状況をコミット
+        if: always()
+        run: |
+          git config user.name "wf-taidan-bot"
+          git config user.email "wf-taidan-bot@users.noreply.github.com"
+          git add data/daily_state.json
+          git diff --cached --quiet || git commit -m "chore: 対談リール topic progress"
+          git push || echo "push失敗(無視)"
