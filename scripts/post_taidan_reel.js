@@ -9,7 +9,7 @@ const ENGINE_DIR = process.env.ENGINE_DIR || path.join(__dirname, 'daily-pipelin
 const REPO_ROOT = path.join(__dirname, '..');
 const REMOTION_DIR = path.join(REPO_ROOT, 'remotion');
 const OUT_ROOT = path.join(__dirname, 'daily-pipeline', 'out');
-const IG_USER_ID = '17841700000000000'; // TODO: 実際のIGビジネスアカウントIDに書き換える
+const IG_USER_ID = '17841443565092674'; // @oshiete.okane
 
 function isDirectVideoUrl(url) {
   try {
