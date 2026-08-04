@@ -69,26 +69,6 @@ const QuoteCard: React.FC<{ text: string; opacity: number; pop: number }> = ({ t
   );
 };
 
-const NameTag: React.FC<{ speaker: "q" | "s"; opacity: number }> = ({ speaker, opacity }) => (
-  <div
-    style={{
-      position: "absolute",
-      top: 130,
-      left: speaker === "q" ? 90 : 630,
-      opacity,
-      background: speaker === "q" ? "#a86e1a" : NAVY,
-      color: "#fff",
-      fontFamily: MARU,
-      fontWeight: 900,
-      fontSize: 30,
-      padding: "8px 26px",
-      borderRadius: 12,
-    }}
-  >
-    {speaker === "q" ? "あかり" : "いせ先生"}
-  </div>
-);
-
 const CaptionBar: React.FC<{ text: string; opacity: number }> = ({ text, opacity }) => (
   <div
     style={{
@@ -140,7 +120,6 @@ const BeatView: React.FC<{ beat: ReelBeat; durationInFrames: number }> = ({ beat
     <AbsoluteFill style={{ opacity, backgroundColor: PAPER }}>
       <Audio src={staticFile(beat.audio)} />
 
-      <NameTag speaker={beat.speaker} opacity={Math.min(1, pop * 1.3)} />
       <QuoteCard text={beat.text} opacity={Math.min(1, pop * 1.3)} pop={pop} />
 
       {/* 質問役(あかり・左)。話していない時は少し暗く小さく */}

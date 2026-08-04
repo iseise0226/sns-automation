@@ -143,15 +143,6 @@ function buildHtml(timedScenes, total, opts = {}) {
           `<span style="font-size:${fs2}px">${esc(b.sub)}</span></div>`
       );
       anims.push({ sel: `#${sc.sid}-c${j} span`, from: { opacity: 0 }, to: { opacity: 1 }, dur: 0.3, ease: 'power2.out', at: b.start + 0.05, scene: sc });
-      // 対談モードは字幕バーの上に話者名タグを出す
-      if (taidan) {
-        const isS = b.speaker === 's';
-        const nm = isS ? (opts.sLabel || '先生') : (opts.qLabel || '質問');
-        captionParts.push(
-          `<div class="cap-name ${isS ? 'nm-s' : 'nm-q'} clip" id="${sc.sid}-n${j}" data-start="${b.absStart}" data-duration="${b.dur}" data-track-index="8">${esc(nm)}</div>`
-        );
-        anims.push({ sel: `#${sc.sid}-n${j}`, from: { x: -16, opacity: 0 }, to: { x: 0, opacity: 1 }, dur: 0.25, ease: 'power2.out', at: b.start + 0.02, scene: sc });
-      }
     });
 
     // chibiキャラ(余白のあるレイアウトだけ・useChibi=trueのアカウントだけ)。対談モードでは常駐キャラを使うのでスキップ
