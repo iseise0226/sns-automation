@@ -4,7 +4,12 @@ on:
   schedule:
     # JST 20:15 = UTC 11:15。YouTube対談(22:50 JST)とは別時間に分散
     - cron: "15 11 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      no_upload:
+        description: "trueならInstagramに投稿せず動画だけ生成してartifactに残す"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -61,7 +66,17 @@ jobs:
           IG_TOKEN_OKANE_TAIDAN: ${{ secrets.IG_TOKEN_OKANE_TAIDAN }}
         run: |
           TODAY=$(date -u +%Y%m%d)
-          node post_taidan_reel.js "daily-pipeline/generated/taidan_reel_${TODAY}.json"
+          FLAG=""
+          if [ "${{ github.event.inputs.no_upload }}" = "true" ]; then FLAG="--no-upload"; fi
+          node post_taidan_reel.js "daily-pipeline/generated/taidan_reel_${TODAY}.json" $FLAG
+
+      - name: 動画をartifactに保存(no_upload時)
+        if: github.event.inputs.no_upload == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: taidan-reel-preview
+          path: scripts/daily-pipeline/out/*/video.mp4
+          retention-days: 3
 
       - name: お題の進行状況をコミット
         if: always()
