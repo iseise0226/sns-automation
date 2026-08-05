@@ -17,17 +17,35 @@ function stripForeignCharsAllowDigits(s) {
   return G.stripForeignChars(s || '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
 }
 
+function normalizeGraphic(g, maxInsertAfter) {
+  if (!g || !['stairs', 'process', 'databadge'].includes(g.type)) return null;
+  const insertAfter = Math.max(0, Math.min(maxInsertAfter, Number(g.insertAfterBeatIndex) || 0));
+  const graphic = { type: g.type, title: stripForeignCharsAllowDigits(g.title || ''), insertAfter };
+  if (g.type === 'stairs') {
+    graphic.items = (g.items || []).slice(0, 3).map((it) => ({ t: stripForeignCharsAllowDigits(it.t || ''), s: stripForeignCharsAllowDigits(it.s || '') }));
+    graphic.goal = stripForeignCharsAllowDigits(g.goal || '');
+  } else if (g.type === 'process') {
+    graphic.items = (g.items || []).slice(0, 4).map((it) => ({ t: stripForeignCharsAllowDigits(it.t || '') }));
+  } else if (g.type === 'databadge') {
+    graphic.from = { v: stripForeignCharsAllowDigits(g.from?.v || ''), label: stripForeignCharsAllowDigits(g.from?.label || '') };
+    graphic.to = { v: stripForeignCharsAllowDigits(g.to?.v || ''), label: stripForeignCharsAllowDigits(g.to?.label || '') };
+    graphic.badge = stripForeignCharsAllowDigits(g.badge || '');
+  }
+  return graphic;
+}
+
 async function genReel(topic) {
-  const system = `あなたはInstagramリール(20〜35秒の短尺)の台本作家です。出力は厳密なJSONのみ:
+  const system = `あなたはInstagramリール(35〜55秒)の台本作家です。出力は厳密なJSONのみ:
 {
   "caption":"投稿キャプション(80〜150文字。最後にハッシュタグ3〜4個)",
-  "beats":[5〜7個、各{"text":"画面に大きく出す一言＋読み上げ文(15〜35文字)"}],
-  "graphic": {
-    "type":"stairs か process か databadge のどれか1つ",
+  "beats":[6〜8個、各{"text":"画面に大きく出す一言＋読み上げ文(15〜35文字)"}],
+  "graphics":[3〜5個、各{
+    "type":"stairs か process か databadge のどれか1つ(同じtypeを複数回使ってもよい)",
     "title":"図解の見出し(12〜18文字)",
-    "insertAfterBeatIndex": 1個目(0始まり)のbeatの直後に出すなら1、などbeats配列内のどこに挿入するか(0〜beats数-2の整数。前半〜中盤が良い)
-  }
+    "insertAfterBeatIndex": このbeat(0始まり)の直後に挿入する番号(0〜beats数-1の整数。全体にばらけさせる)
+  }]
 }
+最終的な画面の枚数(beats数+graphics数)が必ず10枚以上になるようにすること。
 
 図解タイプごとの追加フィールド:
 - stairs(積み上げ努力では届かないことを見せる): "items":[2〜3個、各{"t":"短い見出し(6〜10文字)","s":"補足(6〜12文字)"}], "goal":"到達したい目標(4〜8文字)"
@@ -38,34 +56,32 @@ async function genReel(topic) {
 - 1個目は質問役が視聴者代表として素朴な疑問を投げかける(短いフック。「え、○○って知ってました？」等)
 - 最後の1個は先生の一言まとめ(「今日も、いい一日を」等の軽い締め)
 - 全体で1つの「知らないと損する」豆知識が伝わるようにする
-- graphicはテーマの数字・手順・構造のうち一番伝わりやすいものを1つ選んで必ず作る
-- beatsのテキストは数字をひらがな表記。graphic内は算用数字・①②③④を使ってよい
+- graphicsはテーマの数字・手順・構造を複数の角度から見せる(3〜5枚。同じ話の繰り返しにならないよう内容を変える)
+- graphicsのinsertAfterBeatIndexは0から最後のbeatまで均等にばらけさせ、beats数+graphics数が10以上になるようにする
+- beatsのテキストは数字をひらがな表記。graphics内は算用数字・①②③④を使ってよい
 - 英数字・他言語文字は使わない(算用数字と丸数字は除く)
 - 誇張・断定しすぎる表現は禁止。短く・テンポよく`;
   const user = `今日のテーマ: ${topic}`;
-  const res = await G.callGroq(system, user, 1100, 0.85);
+  const res = await G.callGroq(system, user, 1600, 0.85);
   if (!Array.isArray(res.beats) || res.beats.length < 4) throw new Error('リール台本生成に失敗(beatsが不足)');
-  const beats = res.beats.slice(0, 7).map((b) => ({ text: G.stripForeignChars(b.text || '') }));
+  const beats = res.beats.slice(0, 8).map((b) => ({ text: G.stripForeignChars(b.text || '') }));
   stampAlt(beats);
 
-  let graphic = null;
-  const g = res.graphic;
-  if (g && ['stairs', 'process', 'databadge'].includes(g.type)) {
-    const insertAfter = Math.max(0, Math.min(beats.length - 2, Number(g.insertAfterBeatIndex) || 1));
-    graphic = { type: g.type, title: stripForeignCharsAllowDigits(g.title || ''), insertAfter };
-    if (g.type === 'stairs') {
-      graphic.items = (g.items || []).slice(0, 3).map((it) => ({ t: stripForeignCharsAllowDigits(it.t || ''), s: stripForeignCharsAllowDigits(it.s || '') }));
-      graphic.goal = stripForeignCharsAllowDigits(g.goal || '');
-    } else if (g.type === 'process') {
-      graphic.items = (g.items || []).slice(0, 4).map((it) => ({ t: stripForeignCharsAllowDigits(it.t || '') }));
-    } else if (g.type === 'databadge') {
-      graphic.from = { v: stripForeignCharsAllowDigits(g.from?.v || ''), label: stripForeignCharsAllowDigits(g.from?.label || '') };
-      graphic.to = { v: stripForeignCharsAllowDigits(g.to?.v || ''), label: stripForeignCharsAllowDigits(g.to?.label || '') };
-      graphic.badge = stripForeignCharsAllowDigits(g.badge || '');
+  const rawGraphics = Array.isArray(res.graphics) ? res.graphics : (res.graphic ? [res.graphic] : []);
+  let graphics = rawGraphics.slice(0, 6).map((g) => normalizeGraphic(g, beats.length - 1)).filter(Boolean);
+
+  // 不足時は最後のgraphicsを別位置に複製してでも10枚以上を確保する(音沙汰なしの短い動画を避ける)
+  if (graphics.length) {
+    let idx = 0;
+    while (beats.length + graphics.length < 10) {
+      const base = graphics[idx % graphics.length];
+      const insertAfter = Math.min(beats.length - 1, idx % beats.length);
+      graphics.push({ ...base, insertAfter });
+      idx++;
     }
   }
 
-  return { caption: G.stripForeignChars(res.caption || ''), beats, graphic };
+  return { caption: G.stripForeignChars(res.caption || ''), beats, graphics };
 }
 
 async function main() {
@@ -76,7 +92,7 @@ async function main() {
   const generated = await genReel(topic);
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const id = `taidan_reel_${today}`;
-  const script = { id, caption: generated.caption, beats: generated.beats, graphic: generated.graphic };
+  const script = { id, caption: generated.caption, beats: generated.beats, graphics: generated.graphics };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const outPath = path.join(OUT_DIR, `${id}.json`);

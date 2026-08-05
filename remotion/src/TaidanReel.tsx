@@ -49,7 +49,7 @@ export type ReelGraphic = {
 type Props = {
   beats: ReelBeat[];
   footer?: string;
-  graphic?: ReelGraphic;
+  graphics?: ReelGraphic[];
 };
 
 const QuoteCard: React.FC<{ text: string; opacity: number; pop: number }> = ({ text, opacity, pop }) => {
@@ -346,7 +346,7 @@ const GraphicView: React.FC<{ graphic: ReelGraphic; durationInFrames: number }> 
   );
 };
 
-export const TaidanReel: React.FC<Props> = ({ beats, footer, graphic }) => {
+export const TaidanReel: React.FC<Props> = ({ beats, footer, graphics }) => {
   let startFrame = 0;
   const items: React.ReactNode[] = [];
   beats.forEach((beat, i) => {
@@ -358,15 +358,15 @@ export const TaidanReel: React.FC<Props> = ({ beats, footer, graphic }) => {
         <BeatView beat={beat} durationInFrames={durationInFrames} />
       </Sequence>
     );
-    if (graphic && graphic.insertAfter === i) {
-      const gDur = Math.round((graphic.durationInSeconds || 4) * FPS);
+    (graphics || []).filter((g) => g.insertAfter === i).forEach((g, gi) => {
+      const gDur = Math.round((g.durationInSeconds || 3.2) * FPS);
       items.push(
-        <Sequence key="graphic" from={startFrame} durationInFrames={gDur}>
-          <GraphicView graphic={graphic} durationInFrames={gDur} />
+        <Sequence key={`g${i}-${gi}`} from={startFrame} durationInFrames={gDur}>
+          <GraphicView graphic={g} durationInFrames={gDur} />
         </Sequence>
       );
       startFrame += gDur;
-    }
+    });
   });
 
   return (

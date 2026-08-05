@@ -129,7 +129,7 @@ async function main() {
   }
 
   const propsPath = path.join(outDir, 'props.json');
-  fs.writeFileSync(propsPath, JSON.stringify({ beats, graphic: script.graphic || null, footer: 'いせ先生×あかり' }));
+  fs.writeFileSync(propsPath, JSON.stringify({ beats, graphics: script.graphics || [], footer: 'いせ先生×あかり' }));
 
   const videoPath = path.join(outDir, 'video.mp4');
   execFileSync('npx', ['remotion', 'render', 'src/index.ts', 'TaidanReel', videoPath, `--props=${propsPath}`, `--public-dir=${publicDir}`], {
