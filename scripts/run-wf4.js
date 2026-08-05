@@ -2,9 +2,9 @@
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+// satoshi_mind_coachingは2026-08-05から「ハッとしたんだよね」専用ワークフロー(wf-hitmehard.yml)に置き換え済み
 const ACCOUNTS = [
   'satoshi_mindset',
-  'satoshi_mind_coaching',
   'ise_sato_kosodate',
   'sessi_life',
   'ise_kenkou_otaku',

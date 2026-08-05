@@ -1,0 +1,324 @@
+// 「ハッとしたんだよね」: satoshi_mind_coaching専用の日替わりInstagramリール生成・投稿
+// ちびキャラ×鉛筆画5枚(背景は毎回変える)+ VOICEVOXナレーション15フレーズ(結起承転結×3)
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const { execFileSync, spawn } = require('child_process');
+
+function req(url, options, body) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const r = https.request(
+      { hostname: u.hostname, path: u.pathname + u.search, method: options.method || 'GET', headers: options.headers || {} },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf8');
+          try {
+            resolve({ status: res.statusCode, json: JSON.parse(data || '{}') });
+          } catch (e) {
+            resolve({ status: res.statusCode, json: null, raw: data });
+          }
+        });
+      }
+    );
+    r.on('error', reject);
+    if (body) r.write(body);
+    r.end();
+  });
+}
+
+const ACCOUNT = 'satoshi_mind_coaching';
+const IG_USER_ID = '17841417429080871';
+const SLIDE_COUNT = 5;
+const PHRASES_PER_SLIDE = 3;
+
+const SYSTEM_PROMPT =
+  'あなたは聖（さとし）。美容師歴25年以上、算命学の鑑定を300人以上やってきた50代の経営者。一人称は「僕」。' +
+  '日常のちょっとした辛さ・しんどさから始まり、ふとした瞬間に考え方が変わって前向きになる、という物語を毎回違う具体的なエピソードで作る。' +
+  '説教くさくならず、自分の失敗や弱さも正直に見せながら、隣に座って話すような優しい語り口にする。';
+
+// Groqが失敗したらOpenAI(gpt-4o-mini)にフォールバック
+async function callTextAI(messages, maxTokens) {
+  const body = JSON.stringify({ model: 'llama-3.3-70b-versatile', messages, max_tokens: maxTokens, response_format: { type: 'json_object' } });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await req(
+      'https://api.groq.com/openai/v1/chat/completions',
+      { method: 'POST', headers: { Authorization: `Bearer ${(process.env.GROQ_API_KEY || '').trim()}`, 'Content-Type': 'application/json' } },
+      body
+    );
+    const content = res.json?.choices?.[0]?.message?.content;
+    if (content) return content;
+    const errStr = JSON.stringify(res.json || {}).slice(0, 300);
+    if (/tokens per day|TPD/i.test(errStr)) break;
+    if (attempt < 3 && /rate limit|429/i.test(errStr)) {
+      await new Promise((r) => setTimeout(r, 65000));
+      continue;
+    }
+    break;
+  }
+  const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
+  if (!openaiKey) throw new Error('Groqで台本生成できず、OPENAI_API_KEYも未設定');
+  const res2 = await req(
+    'https://api.openai.com/v1/chat/completions',
+    { method: 'POST', headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' } },
+    JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: maxTokens, response_format: { type: 'json_object' } })
+  );
+  const content2 = res2.json?.choices?.[0]?.message?.content;
+  if (!content2) throw new Error('OpenAIフォールバックも失敗');
+  return content2;
+}
+
+async function generateScenario() {
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content:
+        '今日の具体的なエピソードを1つ考えて、「結(結論)→起(辛かった日常)→承(それでも続けた)→転(気づき)→結び直し」の5段階構成で書いてください。' +
+        `各段階につき日本語1行(15〜20字程度)を${PHRASES_PER_SLIDE}個作ってください(合計${SLIDE_COUNT * PHRASES_PER_SLIDE}行)。各日本語行に対応する英訳も1行ずつ付けてください。` +
+        '各段階(5つ)にはそれぞれ全く違う背景シーンを英語で考えてください(例: 横断歩道、川辺、屋上、丘の上、窓辺など、5つとも別ロケーションで内容の雰囲気に合うもの)。' +
+        'さらにInstagramキャプションを5〜8行、最後にテーマに合うハッシュタグ5個を付けて考えてください。' +
+        'JSON形式で返してください: {"caption":"...", "slides":[5個。各{"scene":"英語のシーン描写(場所・状況、キャラの描写は含めない)","phrases":[3個。各{"jp":"...","en":"..."}]}]}',
+    },
+  ];
+  const content = await callTextAI(messages, 3000);
+  const data = JSON.parse(content || '{}');
+  if (!Array.isArray(data.slides) || data.slides.length !== SLIDE_COUNT) {
+    throw new Error(`slidesが${SLIDE_COUNT}個ではありません: ${JSON.stringify(data).slice(0, 300)}`);
+  }
+  for (const s of data.slides) {
+    if (!Array.isArray(s.phrases) || s.phrases.length !== PHRASES_PER_SLIDE) {
+      throw new Error(`phrasesが${PHRASES_PER_SLIDE}個ではないスライドがあります`);
+    }
+  }
+  return data;
+}
+
+const CHIBI_STYLE =
+  "Minimal hand-drawn pencil sketch on plain beige textured paper, cute chibi character with a large round head and tiny simple body (2-head-tall proportions), short spiky black hair, simple dot eyes and small smile, wearing a plain vest over a long-sleeve shirt, loose sketchy pencil linework with visible pencil texture and light shading, lots of empty negative space, soft muted sepia pencil tones, no text, no letters, no watermark, minimalist Japanese sketch diary aesthetic";
+
+async function generateImage(scene, outPath) {
+  const key = (process.env.OPENAI_API_KEY || '').trim();
+  const prompt = `${CHIBI_STYLE}, chibi character ${scene}`;
+  const res = await req(
+    'https://api.openai.com/v1/images/generations',
+    { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } },
+    JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'low', n: 1 })
+  );
+  const b64 = res.json?.data?.[0]?.b64_json;
+  if (!b64) throw new Error(`画像生成失敗: ${JSON.stringify(res.json || {}).slice(0, 300)}`);
+  fs.writeFileSync(outPath, Buffer.from(b64, 'base64'));
+}
+
+// --- VOICEVOX (generate-reel.jsと同じ仕組みを流用) ---
+const VOICEVOX_ENGINE = 'http://127.0.0.1:50021';
+const VOICEVOX_ENGINE_DIR = process.env.ENGINE_DIR || path.join(__dirname, 'daily-pipeline', 'voicevox_engine');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function voicevoxAlive() {
+  try {
+    const res = await fetch(`${VOICEVOX_ENGINE}/version`, { signal: AbortSignal.timeout(3000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function findVoicevoxRunBinary(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const names = ['run', 'run.exe'];
+  const stack = [dir];
+  while (stack.length) {
+    const d = stack.pop();
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isFile() && names.includes(e.name.toLowerCase())) return full;
+      if (e.isDirectory()) stack.push(full);
+    }
+  }
+  return null;
+}
+
+async function ensureVoicevoxEngine() {
+  if (await voicevoxAlive()) return;
+  const exe = findVoicevoxRunBinary(VOICEVOX_ENGINE_DIR);
+  if (!exe) throw new Error(`VOICEVOXエンジンが見つかりません: ${VOICEVOX_ENGINE_DIR}`);
+  if (process.platform !== 'win32') {
+    try { fs.chmodSync(exe, 0o755); } catch (e) {}
+  }
+  const child = spawn(exe, [], { detached: true, stdio: 'inherit', cwd: path.dirname(exe) });
+  child.unref();
+  for (let i = 0; i < 60; i++) {
+    await sleep(3000);
+    if (await voicevoxAlive()) return;
+  }
+  throw new Error('VOICEVOXエンジンが3分以内に起動しませんでした');
+}
+
+async function resolveSpeakerId() {
+  const res = await fetch(`${VOICEVOX_ENGINE}/speakers`);
+  const speakers = await res.json();
+  const sp = speakers.find((s) => s.name === '玄野武宏') || speakers[0];
+  const style = sp.styles.find((st) => st.name === 'ノーマル') || sp.styles[0];
+  return style.id;
+}
+
+async function generateNarration(text, speaker, outPath) {
+  const q = await fetch(`${VOICEVOX_ENGINE}/audio_query?speaker=${speaker}&text=${encodeURIComponent(text)}`, { method: 'POST' });
+  const query = await q.json();
+  query.speedScale = 0.85;
+  query.pauseLengthScale = 1.2;
+  query.prePhonemeLength = 0.0;
+  query.postPhonemeLength = 0.1;
+  const s = await fetch(`${VOICEVOX_ENGINE}/synthesis?speaker=${speaker}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(query),
+  });
+  fs.writeFileSync(outPath, Buffer.from(await s.arrayBuffer()));
+}
+
+function getAudioDuration(audioPath) {
+  const out = execFileSync('ffprobe', ['-i', audioPath, '-show_entries', 'format=duration', '-v', 'quiet', '-of', 'csv=p=0'], { timeout: 15000 })
+    .toString()
+    .trim();
+  return parseFloat(out);
+}
+
+// 15ビート(5スライド×3フレーズ)を組み立てて最終動画を作る
+function buildVideo(outDir, slides) {
+  const beats = [];
+  slides.forEach((slide, slideIdx) => {
+    slide.phrases.forEach((p, pIdx) => {
+      beats.push({ slideIdx, jp: p.jp, en: p.en });
+    });
+  });
+
+  const segFiles = [];
+  beats.forEach((beat, i) => {
+    const n = i + 1;
+    const jpRel = `jp${n}.txt`;
+    const enRel = `en${n}.txt`;
+    fs.writeFileSync(path.join(outDir, jpRel), beat.jp, 'utf-8');
+    fs.writeFileSync(path.join(outDir, enRel), beat.en, 'utf-8');
+    const audioRel = `narration${n}.wav`;
+    const imgRel = `slide${beat.slideIdx + 1}.png`;
+    const dur = (getAudioDuration(path.join(outDir, audioRel)) + 0.5).toFixed(2);
+    const segRel = `seg${n}.mp4`;
+    // 絶対パス(Windowsのドライブレター"C:")はffmpegのフィルタ構文と衝突するため、
+    // cwd=outDirにして全て相対パスで渡す(Linux/Windows両対応)
+    execFileSync(
+      'ffmpeg',
+      [
+        '-y', '-loop', '1', '-i', imgRel, '-i', audioRel,
+        '-filter_complex',
+        `[0:v]scale=1080:1620,crop=1080:1350,drawtext=font='Noto Sans CJK JP':textfile='${jpRel}':fontcolor=black:fontsize=58:x=(w-text_w)/2:y=1060:box=1:boxcolor=white@0.75:boxborderw=20,drawtext=font='Noto Sans CJK JP':textfile='${enRel}':fontcolor=black@0.75:fontsize=30:x=(w-text_w)/2:y=1160,fps=30[v];[1:a]aresample=48000,apad[a]`,
+        '-map', '[v]', '-map', '[a]', '-t', String(dur),
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000',
+        segRel,
+      ],
+      { cwd: outDir, timeout: 60000, stdio: 'inherit' }
+    );
+    segFiles.push(segRel);
+  });
+
+  fs.writeFileSync(path.join(outDir, 'concat_list.txt'), segFiles.map((f) => `file '${f}'`).join('\n'), 'utf-8');
+  execFileSync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', 'concat_list.txt', '-c', 'copy', 'video.mp4'], { cwd: outDir, timeout: 60000, stdio: 'inherit' });
+  return path.join(outDir, 'video.mp4');
+}
+
+function isDirectVideoUrl(url) {
+  try {
+    const out = execFileSync('curl', ['-s', '-I', '-L', '-o', '/dev/null', '-w', '%{http_code} %{content_type}', url], { timeout: 30000 }).toString().trim();
+    const [code, type] = out.split(' ');
+    return code === '200' && (type || '').startsWith('video/');
+  } catch (e) {
+    return false;
+  }
+}
+
+function uploadPublic(videoPath) {
+  const uploaders = [
+    { name: 'litterbox', run: () => execFileSync('curl', ['-s', '-F', 'reqtype=fileupload', '-F', 'time=24h', '-F', `fileToUpload=@${videoPath}`, 'https://litterbox.catbox.moe/resources/internals/api.php'], { timeout: 300000 }).toString().trim() },
+    { name: 'uguu', run: () => execFileSync('curl', ['-s', '-F', `files[]=@${videoPath}`, 'https://uguu.se/upload?output=text'], { timeout: 300000 }).toString().trim() },
+    { name: 'tmpfiles', run: () => { const out = execFileSync('curl', ['-s', '-F', `file=@${videoPath}`, 'https://tmpfiles.org/api/v1/upload'], { timeout: 300000 }).toString(); return JSON.parse(out).data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/'); } },
+  ];
+  for (const up of uploaders) {
+    try {
+      const url = up.run();
+      if (url.startsWith('https://') && isDirectVideoUrl(url)) return url;
+    } catch (e) {}
+  }
+  throw new Error('全アップロードホストが失敗しました');
+}
+
+async function postReel(videoPath, caption) {
+  const igToken = (process.env.IG_TOKEN_SATOSHI_MIND_COACHING || '').trim();
+  const publicUrl = uploadPublic(videoPath);
+  console.log(`upload: ${publicUrl}`);
+  const container = JSON.parse(
+    execFileSync('curl', ['-s', '-X', 'POST', `https://graph.facebook.com/v23.0/${IG_USER_ID}/media`,
+      '-d', 'media_type=REELS', '-d', `video_url=${encodeURIComponent(publicUrl)}`, '-d', `caption=${encodeURIComponent(caption)}`,
+      '-d', 'thumb_offset=1500', '-d', `access_token=${igToken}`]).toString()
+  );
+  if (!container.id) throw new Error(`container failed: ${JSON.stringify(container)}`);
+  let statusCode = 'IN_PROGRESS';
+  for (let i = 0; i < 20 && statusCode !== 'FINISHED'; i++) {
+    await new Promise((r) => setTimeout(r, 6000));
+    const statusRes = JSON.parse(execFileSync('curl', ['-s', `https://graph.facebook.com/v23.0/${container.id}?fields=status_code,status&access_token=${igToken}`]).toString());
+    statusCode = statusRes.status_code;
+    if (statusCode === 'ERROR') throw new Error(`processing error: ${JSON.stringify(statusRes)}`);
+  }
+  if (statusCode !== 'FINISHED') throw new Error(`processing timeout: ${statusCode}`);
+  const publish = JSON.parse(
+    execFileSync('curl', ['-s', '-X', 'POST', `https://graph.facebook.com/v23.0/${IG_USER_ID}/media_publish`, '-d', `creation_id=${container.id}`, '-d', `access_token=${igToken}`]).toString()
+  );
+  if (!publish.id) throw new Error(`publish failed: ${JSON.stringify(publish)}`);
+  return publish;
+}
+
+async function main() {
+  await ensureVoicevoxEngine();
+  const speaker = await resolveSpeakerId();
+
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const outDir = path.resolve('hitmehard_media', today);
+  fs.mkdirSync(outDir, { recursive: true });
+
+  console.log('台本生成中...');
+  const scenario = await generateScenario();
+  console.log('caption:', scenario.caption);
+
+  for (let i = 0; i < SLIDE_COUNT; i++) {
+    console.log(`画像生成中 ${i + 1}/${SLIDE_COUNT}...`);
+    await generateImage(scenario.slides[i].scene, path.join(outDir, `slide${i + 1}.png`));
+  }
+
+  let n = 0;
+  for (const slide of scenario.slides) {
+    for (const p of slide.phrases) {
+      n++;
+      console.log(`ナレーション生成中 ${n}/${SLIDE_COUNT * PHRASES_PER_SLIDE}...`);
+      await generateNarration(p.jp, speaker, path.join(outDir, `narration${n}.wav`));
+    }
+  }
+
+  console.log('動画組み立て中...');
+  const videoPath = buildVideo(outDir, scenario.slides);
+  console.log('video:', videoPath);
+
+  const caption = scenario.caption + '\n\nプロフィールのリンクから、経営者の心が軽くなる7日間の無料配信を受け取れます😊';
+  if (process.env.HITMEHARD_DRY_RUN) {
+    console.log('DRY RUN: 投稿をスキップしました。caption:', caption);
+    return;
+  }
+  const result = await postReel(videoPath, caption);
+  console.log('posted:', result.id);
+}
+
+main().catch((e) => {
+  console.error('error:', e.message);
+  process.exit(1);
+});
