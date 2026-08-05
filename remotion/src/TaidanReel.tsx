@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  Img,
   Sequence,
   interpolate,
   spring,
@@ -10,7 +11,6 @@ import {
   useVideoConfig,
 } from "remotion";
 import { loadFont as loadMaru } from "@remotion/google-fonts/ZenMaruGothic";
-import { ChibiOverlay } from "./ChibiOverlay";
 
 // Instagramリール用の対談フォーマット(1080x1920・縦)。
 // 先生役(聖さん・satoshi_chibi・右)と質問役(あかり・akari_chibi・左)が交互に話す短い掛け合い。
@@ -50,65 +50,33 @@ type Props = {
   beats: ReelBeat[];
   footer?: string;
   graphics?: ReelGraphic[];
+  hook?: string; // 画面上部に常時出す赤帯の見出し(参考アカウントの固定タイトル帯と同じ役割)
 };
 
-const QuoteCard: React.FC<{ text: string; opacity: number; pop: number }> = ({ text, opacity, pop }) => {
-  const lines = text.split("\n");
-  return (
-    <div
-      style={{
-        position: "absolute",
-        top: 210,
-        left: 60,
-        width: 960,
-        opacity,
-        transform: `translateY(${(1 - pop) * 18}px)`,
-        textAlign: "center",
-      }}
-    >
-      {lines.map((line, i) => (
-        <div
-          key={i}
-          style={{
-            fontFamily: MARU,
-            fontWeight: 900,
-            fontSize: 60,
-            lineHeight: 1.5,
-            color: INK,
-          }}
-        >
-          {line}
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const CaptionBar: React.FC<{ text: string; opacity: number }> = ({ text, opacity }) => (
+// 参考にした他アカウントの構成: 上部に赤帯の固定見出し→白背景に大きいアイコン付きの図解カード
+// →下に一言まとめの太字→最下部に小さいアバター+一言コメント、という「スライドを主役にする」画面。
+// 対談の2人を画面いっぱいに立たせるのではなく、小さいアバター+コメント役に後退させる。
+const TopBanner: React.FC<{ text: string }> = ({ text }) => (
   <div
     style={{
       position: "absolute",
-      left: 48,
-      bottom: 130,
-      width: 984,
-      minHeight: 120,
-      background: NAVY,
-      borderRadius: 8,
+      top: 0,
+      left: 0,
+      width: 1080,
+      minHeight: 190,
+      background: RED,
       display: "flex",
       alignItems: "center",
-      justifyContent: "center",
-      padding: "18px 40px",
-      opacity,
+      padding: "50px 56px 34px",
     }}
   >
     <span
       style={{
         fontFamily: MARU,
-        fontSize: 40,
-        fontWeight: 700,
+        fontWeight: 900,
+        fontSize: 56,
+        lineHeight: 1.35,
         color: "#ffffff",
-        lineHeight: 1.4,
-        textAlign: "center",
       }}
     >
       {text}
@@ -116,9 +84,111 @@ const CaptionBar: React.FC<{ text: string; opacity: number }> = ({ text, opacity
   </div>
 );
 
+const ICONS_Q = ["❓", "🤔", "😳"];
+const ICONS_S = ["💡", "✅", "📊"];
+
+const IconCard: React.FC<{ text: string; icon: string; accent: string; opacity: number; pop: number }> = ({
+  text,
+  icon,
+  accent,
+  opacity,
+  pop,
+}) => {
+  const s = Math.min(1, Math.max(0, pop));
+  return (
+    <div style={{ position: "absolute", top: 420, left: 90, width: 900, opacity, textAlign: "center" }}>
+      <div
+        style={{
+          width: 170,
+          height: 170,
+          borderRadius: "50%",
+          background: `${accent}22`,
+          border: `5px solid ${accent}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 92,
+          margin: "0 auto 40px",
+          transform: `scale(${0.6 + s * 0.4})`,
+        }}
+      >
+        {icon}
+      </div>
+      <div
+        style={{
+          background: PAPER,
+          border: `4px solid ${INK}`,
+          borderRadius: 20,
+          padding: "36px 44px",
+          transform: `translateY(${(1 - s) * 20}px)`,
+          opacity: s,
+        }}
+      >
+        <div style={{ fontFamily: MARU, fontWeight: 900, fontSize: 52, lineHeight: 1.5, color: INK }}>{text}</div>
+      </div>
+    </div>
+  );
+};
+
+const AvatarCommentBar: React.FC<{ text: string; assetDir: string; name: string; opacity: number }> = ({
+  text,
+  assetDir,
+  name,
+  opacity,
+}) => (
+  <div
+    style={{
+      position: "absolute",
+      left: 48,
+      bottom: 110,
+      width: 984,
+      minHeight: 130,
+      background: NAVY,
+      borderRadius: 14,
+      display: "flex",
+      alignItems: "center",
+      gap: 24,
+      padding: "16px 32px",
+      opacity,
+    }}
+  >
+    <div
+      style={{
+        width: 92,
+        height: 92,
+        minWidth: 92,
+        borderRadius: "50%",
+        overflow: "hidden",
+        background: "#fff",
+        border: "3px solid #fff",
+      }}
+    >
+      <Img
+        src={staticFile(`${assetDir}/mouth_closed.png`)}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "50% 14%",
+          transform: "scale(2.6)",
+          transformOrigin: "50% 14%",
+        }}
+      />
+    </div>
+    <div>
+      <div style={{ fontFamily: MARU, fontWeight: 700, fontSize: 24, color: "#9fb0c3", marginBottom: 4 }}>{name}</div>
+      <div style={{ fontFamily: MARU, fontWeight: 700, fontSize: 34, color: "#ffffff", lineHeight: 1.35 }}>{text}</div>
+    </div>
+  </div>
+);
+
 const FADE_FRAMES = 8;
 
-const BeatView: React.FC<{ beat: ReelBeat; durationInFrames: number }> = ({ beat, durationInFrames }) => {
+const BeatView: React.FC<{ beat: ReelBeat; durationInFrames: number; beatIndex: number }> = ({
+  beat,
+  durationInFrames,
+  beatIndex,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const opacity = interpolate(
@@ -130,37 +200,21 @@ const BeatView: React.FC<{ beat: ReelBeat; durationInFrames: number }> = ({ beat
   const pop = spring({ frame: frame - 4, fps, config: { damping: 14, stiffness: 150, mass: 0.6 } });
 
   const qActive = beat.speaker === "q";
+  const icon = (qActive ? ICONS_Q : ICONS_S)[beatIndex % 3];
+  const accent = qActive ? RED : "#1a5fd9";
 
   return (
     <AbsoluteFill style={{ opacity, backgroundColor: PAPER }}>
       <Audio src={staticFile(beat.audio)} />
 
-      <QuoteCard text={beat.text} opacity={Math.min(1, pop * 1.3)} pop={pop} />
+      <IconCard text={beat.text} icon={icon} accent={accent} opacity={Math.min(1, pop * 1.3)} pop={pop} />
 
-      {/* 質問役(あかり・左)。話していない時は少し暗く小さく */}
-      <ChibiOverlay
-        audioSrc={beat.audio}
-        assetDir="akari_chibi"
-        side="left"
-        size={520}
-        bottom={330}
-        hasHalf={false}
-        dim={!qActive}
-        pose={qActive ? "default" : "default"}
+      <AvatarCommentBar
+        text={beat.text}
+        assetDir={qActive ? "akari_chibi" : "satoshi_chibi"}
+        name={qActive ? "あかり" : "先生"}
+        opacity={Math.min(1, pop * 1.3)}
       />
-      {/* 先生役(聖さん・右) */}
-      <ChibiOverlay
-        audioSrc={beat.audio}
-        assetDir="satoshi_chibi"
-        side="right"
-        size={560}
-        bottom={330}
-        hasHalf
-        dim={qActive}
-        pose={qActive ? "arms_crossed" : "default"}
-      />
-
-      <CaptionBar text={beat.text} opacity={Math.min(1, pop * 1.3)} />
     </AbsoluteFill>
   );
 };
@@ -169,7 +223,7 @@ const GraphicTitle: React.FC<{ text: string; opacity: number; y: number }> = ({ 
   <div
     style={{
       position: "absolute",
-      top: 130,
+      top: 240,
       left: 60,
       width: 960,
       textAlign: "center",
@@ -193,7 +247,7 @@ const StairsGraphic: React.FC<{ g: ReelGraphic; pop: number }> = ({ g, pop }) =>
   return (
     <>
       <GraphicTitle text={g.title} opacity={Math.min(1, pop * 1.3)} y={(1 - pop) * 16} />
-      <div style={{ position: "absolute", top: 320, left: 90, width: 900 }}>
+      <div style={{ position: "absolute", top: 420, left: 90, width: 900 }}>
         {items.map((it, i) => {
           const step = spring({ frame: pop * 90 - i * 8, fps: FPS, config: { damping: 14, stiffness: 160 } });
           return (
@@ -245,7 +299,7 @@ const ProcessGraphic: React.FC<{ g: ReelGraphic; pop: number }> = ({ g, pop }) =
   return (
     <>
       <GraphicTitle text={g.title} opacity={Math.min(1, pop * 1.3)} y={(1 - pop) * 16} />
-      <div style={{ position: "absolute", top: 340, left: 0, width: 1080, display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div style={{ position: "absolute", top: 440, left: 0, width: 1080, display: "flex", flexDirection: "column", alignItems: "center" }}>
         {items.map((it, i) => {
           const step = spring({ frame: pop * 90 - i * 10, fps: FPS, config: { damping: 14, stiffness: 160 } });
           const o = Math.min(1, Math.max(0, step));
@@ -284,7 +338,7 @@ const DataBadgeGraphic: React.FC<{ g: ReelGraphic; pop: number }> = ({ g, pop })
   return (
     <>
       <GraphicTitle text={g.title} opacity={Math.min(1, pop * 1.3)} y={(1 - pop) * 16} />
-      <div style={{ position: "absolute", top: 340, left: 0, width: 1080, display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 90, height: 420 }}>
+      <div style={{ position: "absolute", top: 440, left: 0, width: 1080, display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 90, height: 420 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div style={{ fontFamily: MARU, fontWeight: 900, fontSize: 40, color: "#666", marginBottom: 10 }}>{from.v}</div>
           <div style={{ width: 160, height: 150 * barGrow, background: "#b7b7b7", borderRadius: "10px 10px 0 0", transformOrigin: "bottom" }} />
@@ -300,7 +354,7 @@ const DataBadgeGraphic: React.FC<{ g: ReelGraphic; pop: number }> = ({ g, pop })
         <div
           style={{
             position: "absolute",
-            top: 300,
+            top: 420,
             right: 90,
             opacity: Math.min(1, Math.max(0, spring({ frame: pop * 90 - 20, fps: FPS, config: { damping: 12, stiffness: 200 } }))),
             transform: "rotate(-10deg)",
@@ -346,7 +400,7 @@ const GraphicView: React.FC<{ graphic: ReelGraphic; durationInFrames: number }> 
   );
 };
 
-export const TaidanReel: React.FC<Props> = ({ beats, footer, graphics }) => {
+export const TaidanReel: React.FC<Props> = ({ beats, footer, graphics, hook }) => {
   let startFrame = 0;
   const items: React.ReactNode[] = [];
   beats.forEach((beat, i) => {
@@ -355,7 +409,7 @@ export const TaidanReel: React.FC<Props> = ({ beats, footer, graphics }) => {
     startFrame += durationInFrames;
     items.push(
       <Sequence key={`b${i}`} from={from} durationInFrames={durationInFrames}>
-        <BeatView beat={beat} durationInFrames={durationInFrames} />
+        <BeatView beat={beat} durationInFrames={durationInFrames} beatIndex={i} />
       </Sequence>
     );
     (graphics || []).filter((g) => g.insertAfter === i).forEach((g, gi) => {
@@ -373,6 +427,7 @@ export const TaidanReel: React.FC<Props> = ({ beats, footer, graphics }) => {
     <AbsoluteFill style={{ backgroundColor: PAPER }}>
       <Audio src={staticFile("bgm.mp3")} loop volume={0.1} />
       {items}
+      {hook ? <TopBanner text={hook} /> : null}
       {footer ? (
         <div
           style={{

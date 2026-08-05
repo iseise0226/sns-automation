@@ -110,11 +110,15 @@ export const RemotionRoot: React.FC = () => {
       }}
       calculateMetadata={({ props }) => {
         const fps = 30;
-        const total = props.beats.reduce(
+        const beatsTotal = props.beats.reduce(
           (sum: number, b: any) => sum + Math.round(b.durationInSeconds * fps),
           0
         );
-        return { durationInFrames: total };
+        const graphicsTotal = (props.graphics || []).reduce(
+          (sum: number, g: any) => sum + Math.round((g.durationInSeconds || 3.2) * fps),
+          0
+        );
+        return { durationInFrames: beatsTotal + graphicsTotal };
       }}
     />
     <Still

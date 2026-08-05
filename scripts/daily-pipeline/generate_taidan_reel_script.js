@@ -38,6 +38,7 @@ async function genReel(topic) {
   const system = `あなたはInstagramリール(35〜55秒)の台本作家です。出力は厳密なJSONのみ:
 {
   "caption":"投稿キャプション(80〜150文字。最後にハッシュタグ3〜4個)",
+  "hook":"画面上部に常時出す赤帯の見出し(12〜22文字。テーマの核心を一言で。例:追う側は損、知る側が得)",
   "beats":[6〜8個、各{"text":"画面に大きく出す一言＋読み上げ文(15〜35文字)"}],
   "graphics":[3〜5個、各{
     "type":"stairs か process か databadge のどれか1つ(同じtypeを複数回使ってもよい)",
@@ -81,7 +82,9 @@ async function genReel(topic) {
     }
   }
 
-  return { caption: G.stripForeignChars(res.caption || ''), beats, graphics };
+  const hook = stripForeignCharsAllowDigits(res.hook || topic);
+
+  return { caption: G.stripForeignChars(res.caption || ''), hook, beats, graphics };
 }
 
 async function main() {
@@ -92,7 +95,7 @@ async function main() {
   const generated = await genReel(topic);
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const id = `taidan_reel_${today}`;
-  const script = { id, caption: generated.caption, beats: generated.beats, graphics: generated.graphics };
+  const script = { id, caption: generated.caption, hook: generated.hook, beats: generated.beats, graphics: generated.graphics };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const outPath = path.join(OUT_DIR, `${id}.json`);
