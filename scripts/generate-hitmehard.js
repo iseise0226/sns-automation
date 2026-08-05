@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { execFileSync, spawn } = require('child_process');
+const { google } = require('googleapis');
 
 function req(url, options, body) {
   return new Promise((resolve, reject) => {
@@ -279,6 +280,33 @@ async function postReel(videoPath, caption) {
   return publish;
 }
 
+// YouTube Shorts投稿(WF6のbuild_and_upload.jsと同じACCOUNTS_JSONの仕組みを流用)
+async function postYoutubeShort(videoPath, title, description) {
+  const accountsJson = process.env.ACCOUNTS_JSON;
+  if (!accountsJson) {
+    console.log('ACCOUNTS_JSON未設定のためYouTube投稿をスキップ');
+    return null;
+  }
+  const accounts = JSON.parse(accountsJson);
+  const acc = accounts.satoshi_mind_coach;
+  if (!acc?.refreshToken) {
+    console.log('satoshi_mind_coachのrefreshTokenがないためYouTube投稿をスキップ');
+    return null;
+  }
+  const oauth2Client = new google.auth.OAuth2(process.env.YOUTUBE_CLIENT_ID, process.env.YOUTUBE_CLIENT_SECRET);
+  oauth2Client.setCredentials({ refresh_token: acc.refreshToken });
+  const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+  const res = await youtube.videos.insert({
+    part: ['snippet', 'status'],
+    requestBody: {
+      snippet: { title: `${title} #Shorts`, description, categoryId: '22' },
+      status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },
+    },
+    media: { body: fs.createReadStream(videoPath) },
+  });
+  return 'https://youtu.be/' + res.data.id;
+}
+
 async function main() {
   await ensureVoicevoxEngine();
   const speaker = await resolveSpeakerId();
@@ -315,7 +343,15 @@ async function main() {
     return;
   }
   const result = await postReel(videoPath, caption);
-  console.log('posted:', result.id);
+  console.log('posted (IG):', result.id);
+
+  try {
+    const title = scenario.slides[0].phrases[0].jp.slice(0, 90);
+    const youtubeUrl = await postYoutubeShort(videoPath, title, caption);
+    if (youtubeUrl) console.log('posted (YouTube):', youtubeUrl);
+  } catch (e) {
+    console.error('YouTube投稿失敗(Instagramへの投稿は成功済み):', e.message);
+  }
 }
 
 main().catch((e) => {
