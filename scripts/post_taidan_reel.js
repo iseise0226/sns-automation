@@ -94,14 +94,35 @@ async function main() {
   const audioDir = path.join(outDir, 'audio');
   fs.mkdirSync(audioDir, { recursive: true });
 
+  const voiceOf = (speaker) => (speaker === 'q' ? akariId : senseiId);
+
   const beats = [];
   for (let i = 0; i < script.beats.length; i++) {
     const b = script.beats[i];
     const file = path.join(audioDir, `b${i + 1}.wav`);
-    await tts(b.text, b.speaker === 'q' ? akariId : senseiId, file);
+    await tts(b.text, voiceOf(b.speaker), file);
     const dur = audioDuration(file);
     beats.push({ speaker: b.speaker, text: b.text, audio: `taidan_reel_audio/b${i + 1}.wav`, durationInSeconds: Math.max(2.6, dur + 0.5) });
-    console.log(`TTS ${i + 1}/${script.beats.length} (${b.speaker})`);
+    console.log(`TTS beat ${i + 1}/${script.beats.length} (${b.speaker})`);
+  }
+
+  // 図解スライドにもナレーション(comment)を付けて、下の2人が喋りながら解説するようにする
+  const graphics = [];
+  const rawGraphics = script.graphics || [];
+  for (let i = 0; i < rawGraphics.length; i++) {
+    const g = rawGraphics[i];
+    const speaker = g.speaker === 'q' ? 'q' : 's';
+    const comment = (g.comment || '').trim();
+    let audio = '';
+    let durationInSeconds = 3.4;
+    if (comment) {
+      const file = path.join(audioDir, `g${i + 1}.wav`);
+      await tts(comment, voiceOf(speaker), file);
+      durationInSeconds = Math.max(3.0, audioDuration(file) + 0.5);
+      audio = `taidan_reel_audio/g${i + 1}.wav`;
+      console.log(`TTS graphic ${i + 1}/${rawGraphics.length} (${speaker})`);
+    }
+    graphics.push({ ...g, speaker, audio, durationInSeconds });
   }
 
   // Remotionのpublic-dirを一時的にoutDirにし、bgm・音声・両キャラの画像をそこに集める
@@ -127,9 +148,12 @@ async function main() {
   for (let i = 0; i < beats.length; i++) {
     fs.copyFileSync(path.join(audioDir, `b${i + 1}.wav`), path.join(audioPublicDir, `b${i + 1}.wav`));
   }
+  for (let i = 0; i < graphics.length; i++) {
+    if (graphics[i].audio) fs.copyFileSync(path.join(audioDir, `g${i + 1}.wav`), path.join(audioPublicDir, `g${i + 1}.wav`));
+  }
 
   const propsPath = path.join(outDir, 'props.json');
-  fs.writeFileSync(propsPath, JSON.stringify({ beats, graphics: script.graphics || [], hook: script.hook || '', footer: 'いせ先生×あかり' }));
+  fs.writeFileSync(propsPath, JSON.stringify({ beats, graphics, hook: script.hook || '', footer: 'いせ先生×あかり' }));
 
   const videoPath = path.join(outDir, 'video.mp4');
   execFileSync('npx', ['remotion', 'render', 'src/index.ts', 'TaidanReel', videoPath, `--props=${propsPath}`, `--public-dir=${publicDir}`], {

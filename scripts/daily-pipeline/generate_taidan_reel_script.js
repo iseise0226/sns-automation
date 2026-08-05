@@ -17,19 +17,31 @@ function stripForeignCharsAllowDigits(s) {
   return G.stripForeignChars(s || '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
 }
 
+// **...** のマーカー記号を残したまま外国語文字だけ掃除する
+function keepMark(s) {
+  return stripForeignCharsAllowDigits(s || '');
+}
+
 function normalizeGraphic(g, maxInsertAfter) {
   if (!g || !['stairs', 'process', 'databadge'].includes(g.type)) return null;
   const insertAfter = Math.max(0, Math.min(maxInsertAfter, Number(g.insertAfterBeatIndex) || 0));
-  const graphic = { type: g.type, title: stripForeignCharsAllowDigits(g.title || ''), insertAfter };
+  const speaker = g.speaker === 'q' ? 'q' : 's';
+  const graphic = {
+    type: g.type,
+    title: keepMark(g.title || ''),
+    insertAfter,
+    speaker,
+    comment: G.stripForeignChars(g.comment || ''),
+  };
   if (g.type === 'stairs') {
-    graphic.items = (g.items || []).slice(0, 3).map((it) => ({ t: stripForeignCharsAllowDigits(it.t || ''), s: stripForeignCharsAllowDigits(it.s || '') }));
-    graphic.goal = stripForeignCharsAllowDigits(g.goal || '');
+    graphic.items = (g.items || []).slice(0, 4).map((it) => ({ t: keepMark(it.t || ''), s: keepMark(it.s || '') }));
+    graphic.goal = keepMark(g.goal || '');
   } else if (g.type === 'process') {
-    graphic.items = (g.items || []).slice(0, 4).map((it) => ({ t: stripForeignCharsAllowDigits(it.t || '') }));
+    graphic.items = (g.items || []).slice(0, 5).map((it) => ({ t: keepMark(it.t || '') }));
   } else if (g.type === 'databadge') {
-    graphic.from = { v: stripForeignCharsAllowDigits(g.from?.v || ''), label: stripForeignCharsAllowDigits(g.from?.label || '') };
-    graphic.to = { v: stripForeignCharsAllowDigits(g.to?.v || ''), label: stripForeignCharsAllowDigits(g.to?.label || '') };
-    graphic.badge = stripForeignCharsAllowDigits(g.badge || '');
+    graphic.from = { v: keepMark(g.from?.v || ''), label: keepMark(g.from?.label || '') };
+    graphic.to = { v: keepMark(g.to?.v || ''), label: keepMark(g.to?.label || '') };
+    graphic.badge = keepMark(g.badge || '');
   }
   return graphic;
 }
@@ -40,27 +52,29 @@ async function genReel(topic) {
   "caption":"投稿キャプション(80〜150文字。最後にハッシュタグ3〜4個)",
   "hook":"画面上部に常時出す赤帯の見出し(12〜22文字。テーマの核心を一言で。例:追う側は損、知る側が得)",
   "beats":[6〜8個、各{"text":"画面に大きく出す一言＋読み上げ文(15〜35文字)"}],
-  "graphics":[3〜5個、各{
+  "graphics":[4〜6個、各{
     "type":"stairs か process か databadge のどれか1つ(同じtypeを複数回使ってもよい)",
-    "title":"図解の見出し(12〜18文字)",
+    "title":"図解の見出し(12〜20文字。重要語は**キーワード**で囲むとマーカー強調される)",
+    "speaker":"このスライドを解説する側。q(あかり)かs(先生)。基本はsで、たまにqの相づち",
+    "comment":"このスライドを見せながら読み上げる一言(20〜40文字。話し言葉)",
     "insertAfterBeatIndex": このbeat(0始まり)の直後に挿入する番号(0〜beats数-1の整数。全体にばらけさせる)
   }]
 }
-最終的な画面の枚数(beats数+graphics数)が必ず10枚以上になるようにすること。
+最終的な画面の枚数(beats数+graphics数)が必ず10枚以上になるようにすること。スライド(graphics)を主役にし、多めに入れること。
 
-図解タイプごとの追加フィールド:
-- stairs(積み上げ努力では届かないことを見せる): "items":[2〜3個、各{"t":"短い見出し(6〜10文字)","s":"補足(6〜12文字)"}], "goal":"到達したい目標(4〜8文字)"
-- process(手順・流れを見せる): "items":[3〜4個、各{"t":"①から始まる手順の一言(8〜16文字。①②③④を自分で付ける)"}]
-- databadge(数字のビフォーアフターを見せる): "from":{"v":"数字+単位(例:5万円)","label":"時点(例:2020年)"}, "to":{"v":"数字+単位","label":"時点"}, "badge":"一言インパクト(例:1.6倍/2倍に)"
+図解タイプごとの追加フィールド(重要語は**〜**でマーカー強調できる):
+- process(手順や仕組みの流れを縦につなげて見せる。一番よく使う): "items":[3〜5個、各{"t":"1行の説明(8〜18文字)"}]
+- stairs(番号付きの手順01/02/03を見せる): "items":[3〜4個、各{"t":"見出し(6〜12文字)","s":"補足(任意・6〜14文字)"}], "goal":"最終的にどうなるか(4〜10文字)"
+- databadge(数字のビフォーアフターを棒グラフで見せる): "from":{"v":"数字+単位(例:5万円)","label":"時点(例:2020年)"}, "to":{"v":"数字+単位","label":"時点"}, "badge":"一言インパクト(例:1.6倍/2倍に)"
 
-2人の掛け合い(質問役の女性↔先生)。beatsは交互に質問役→先生→質問役...の順で並べる(コード側で自動的にspeakerを振るので、あなたは「聞く側の短い一言」と「答える側の短い一言」を交互に書くだけでよい)。
+2人の掛け合い(質問役の女性=あかり↔先生)。beatsは交互に質問役→先生→質問役...の順で並べる(コード側で自動的にspeakerを振るので、あなたは「聞く側の短い一言」と「答える側の短い一言」を交互に書くだけでよい)。
 - 1個目は質問役が視聴者代表として素朴な疑問を投げかける(短いフック。「え、○○って知ってました？」等)
 - 最後の1個は先生の一言まとめ(「今日も、いい一日を」等の軽い締め)
 - 全体で1つの「知らないと損する」豆知識が伝わるようにする
-- graphicsはテーマの数字・手順・構造を複数の角度から見せる(3〜5枚。同じ話の繰り返しにならないよう内容を変える)
+- graphicsはテーマの数字・手順・仕組みを複数の角度から見せる(4〜6枚。同じ話の繰り返しにならないよう内容を変える)。参考にするのは「日銀の金利の仕組み」を縦フロー図で見せるような、図解が主役のスタイル
 - graphicsのinsertAfterBeatIndexは0から最後のbeatまで均等にばらけさせ、beats数+graphics数が10以上になるようにする
-- beatsのテキストは数字をひらがな表記。graphics内は算用数字・①②③④を使ってよい
-- 英数字・他言語文字は使わない(算用数字と丸数字は除く)
+- beatsとcommentのテキストは数字をひらがな表記。図解のtitle/items/from/to等の中は算用数字を使ってよい
+- 英数字・他言語文字は使わない(算用数字と、強調記号**は除く)
 - 誇張・断定しすぎる表現は禁止。短く・テンポよく`;
   const user = `今日のテーマ: ${topic}`;
   const res = await G.callGroq(system, user, 1600, 0.85);
