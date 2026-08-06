@@ -155,11 +155,19 @@ async function main() {
   const propsPath = path.join(outDir, 'props.json');
   fs.writeFileSync(propsPath, JSON.stringify({ beats, graphics, hook: script.hook || '', footer: 'いせ先生×あかり' }));
 
-  const videoPath = path.join(outDir, 'video.mp4');
-  execFileSync('npx', ['remotion', 'render', 'src/index.ts', 'TaidanReel', videoPath, `--props=${propsPath}`, `--public-dir=${publicDir}`], {
+  const rawVideoPath = path.join(outDir, 'video_raw.mp4');
+  execFileSync('npx', ['remotion', 'render', 'src/index.ts', 'TaidanReel', rawVideoPath, `--props=${propsPath}`, `--public-dir=${publicDir}`], {
     cwd: REMOTION_DIR, timeout: 600000, shell: true, stdio: 'inherit',
   });
-  console.log('レンダー完了:', videoPath);
+  console.log('レンダー完了:', rawVideoPath);
+
+  // Remotionの音声ミックスは高ビットレートになりがちで、Instagram Reelsが
+  // 「Media upload has failed(2207077)」で弾くことがあるため、音声だけ128kbps AACに再エンコードする
+  const videoPath = path.join(outDir, 'video.mp4');
+  execFileSync('ffmpeg', ['-y', '-i', rawVideoPath, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', videoPath], {
+    timeout: 300000, shell: true, stdio: 'inherit',
+  });
+  console.log('音声再エンコード完了:', videoPath);
 
   if (noUpload) { console.log('--no-upload のためアップロードしません'); return; }
   const result = await postReel(IG_USER_ID, videoPath, script.caption || '');
