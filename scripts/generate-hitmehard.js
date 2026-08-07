@@ -241,7 +241,9 @@ function buildVideo(outDir, slides) {
       [
         '-y', '-loop', '1', '-i', imgRel, '-i', audioRel,
         '-filter_complex',
-        `[0:v]scale=1080:1620,crop=1080:1350,drawtext=font='Noto Sans CJK JP':textfile='${jpRel}':fontcolor=black:fontsize=58:x=(w-text_w)/2:y=1060:box=1:boxcolor=white@0.75:boxborderw=20,drawtext=font='Noto Sans CJK JP':textfile='${enRel}':fontcolor=black@0.75:fontsize=30:x=(w-text_w)/2:y=1160,fps=30[v];[1:a]aresample=48000,apad[a]`,
+        // Instagram Reelsは9:16(1080x1920)必須。4:5(1080x1350)だとMedia upload failed(2207077)で弾かれるため
+        // 元画像(1024x1536)を高さ基準でカバースケール→幅を1080に中央クロップして縦長キャンバスにする
+        `[0:v]scale=1280:1920,crop=1080:1920,drawtext=font='Noto Sans CJK JP':textfile='${jpRel}':fontcolor=black:fontsize=58:x=(w-text_w)/2:y=1500:box=1:boxcolor=white@0.75:boxborderw=20,drawtext=font='Noto Sans CJK JP':textfile='${enRel}':fontcolor=black@0.75:fontsize=30:x=(w-text_w)/2:y=1600,fps=30[v];[1:a]aresample=48000,apad[a]`,
         '-map', '[v]', '-map', '[a]', '-t', String(dur),
         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000',
         segRel,
