@@ -393,7 +393,7 @@ async function main() {
   console.log('video:', videoPath);
 
   const caption = scenario.caption + '\n\nプロフィールのリンクから、経営者の心が軽くなる7日間の無料配信を受け取れます😊';
-  if (process.env.HITMEHARD_DRY_RUN) {
+  if (process.env.HITMEHARD_DRY_RUN === 'true') {
     console.log('DRY RUN: 投稿をスキップしました。caption:', caption);
     return;
   }

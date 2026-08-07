@@ -5,6 +5,11 @@ on:
     # JST 4:50 = UTC 19:50(前日)
     - cron: "50 19 * * *"
   workflow_dispatch:
+    inputs:
+      no_upload:
+        description: "trueなら投稿せず動画だけ生成してartifactに残す"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -46,4 +51,13 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
+          HITMEHARD_DRY_RUN: ${{ github.event.inputs.no_upload }}
         run: node scripts/generate-hitmehard.js
+
+      - name: 動画をartifactに保存(no_upload時)
+        if: github.event.inputs.no_upload == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hitmehard-preview
+          path: hitmehard_media/*/video.mp4
+          retention-days: 3
