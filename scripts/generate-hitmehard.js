@@ -98,11 +98,16 @@ async function generateScenario() {
 }
 
 const CHIBI_STYLE =
-  "Minimal hand-drawn pencil sketch on plain beige textured paper, cute chibi character with a large round head and tiny simple body (2-head-tall proportions), short spiky black hair, simple dot eyes and small smile, wearing a plain vest over a long-sleeve shirt, loose sketchy pencil linework with visible pencil texture and light shading, lots of empty negative space, soft muted sepia pencil tones, no text, no letters, no watermark, minimalist Japanese sketch diary aesthetic";
+  "Hand-drawn pencil sketch illustration on beige textured paper, cute chibi character with a large round head and tiny simple body (2-head-tall proportions), short spiky black hair, simple dot eyes and small smile, wearing a plain vest over a long-sleeve shirt, loose sketchy pencil linework with visible pencil texture and light shading, soft muted sepia pencil tones, no text, no letters, no watermark, minimalist Japanese sketch diary aesthetic";
 
 async function requestImage(scene) {
   const key = (process.env.OPENAI_API_KEY || '').trim();
-  const prompt = `${CHIBI_STYLE}, chibi character ${scene}`;
+  const prompt =
+    `${CHIBI_STYLE}. The chibi character is ${scene}. ` +
+    'Draw a full sketched background environment that clearly shows this location and its mood ' +
+    '(e.g. buildings, trees, furniture, sky, ground texture, or room details, all in the same loose pencil-sketch style) ' +
+    '- the background should fill the scene and set the atmosphere, not be left blank or mostly empty paper. ' +
+    'The character stays small in the frame relative to the surrounding scene.';
   const res = await req(
     'https://api.openai.com/v1/images/generations',
     { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } },
