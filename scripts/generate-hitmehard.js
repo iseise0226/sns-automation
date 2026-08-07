@@ -214,6 +214,33 @@ function getAudioDuration(audioPath) {
   return parseFloat(out);
 }
 
+// 長い1行は画面幅(1080px)からはみ出て字幕が切れるため、句読点付近か中央で2行に折り返す
+function wrapJp(text, maxPerLine = 13) {
+  const chars = [...text];
+  if (chars.length <= maxPerLine) return text;
+  const mid = Math.ceil(chars.length / 2);
+  let splitAt = -1;
+  for (let offset = 0; offset < mid; offset++) {
+    if (mid - offset > 0 && '、。'.includes(chars[mid - offset - 1])) { splitAt = mid - offset; break; }
+    if (mid + offset < chars.length && '、。'.includes(chars[mid + offset])) { splitAt = mid + offset + 1; break; }
+  }
+  if (splitAt <= 0 || splitAt >= chars.length) splitAt = mid;
+  return chars.slice(0, splitAt).join('') + '\n' + chars.slice(splitAt).join('');
+}
+
+function wrapEn(text, maxPerLine = 34) {
+  if (text.length <= maxPerLine) return text;
+  const words = text.split(' ');
+  let line1 = '';
+  let i = 0;
+  while (i < words.length && (line1 + words[i]).length <= maxPerLine) {
+    line1 += (line1 ? ' ' : '') + words[i];
+    i++;
+  }
+  const line2 = words.slice(i).join(' ');
+  return line2 ? `${line1}\n${line2}` : line1;
+}
+
 // 15ビート(5スライド×3フレーズ)を組み立てて最終動画を作る
 function buildVideo(outDir, slides) {
   const beats = [];
@@ -228,8 +255,8 @@ function buildVideo(outDir, slides) {
     const n = i + 1;
     const jpRel = `jp${n}.txt`;
     const enRel = `en${n}.txt`;
-    fs.writeFileSync(path.join(outDir, jpRel), beat.jp, 'utf-8');
-    fs.writeFileSync(path.join(outDir, enRel), beat.en, 'utf-8');
+    fs.writeFileSync(path.join(outDir, jpRel), wrapJp(beat.jp), 'utf-8');
+    fs.writeFileSync(path.join(outDir, enRel), wrapEn(beat.en), 'utf-8');
     const audioRel = `narration${n}.wav`;
     const imgRel = `slide${beat.slideIdx + 1}.png`;
     const dur = (getAudioDuration(path.join(outDir, audioRel)) + 0.5).toFixed(2);
@@ -243,7 +270,7 @@ function buildVideo(outDir, slides) {
         '-filter_complex',
         // Instagram Reelsは9:16(1080x1920)必須。4:5(1080x1350)だとMedia upload failed(2207077)で弾かれるため
         // 元画像(1024x1536)を高さ基準でカバースケール→幅を1080に中央クロップして縦長キャンバスにする
-        `[0:v]scale=1280:1920,crop=1080:1920,drawtext=font='Noto Sans CJK JP':textfile='${jpRel}':fontcolor=black:fontsize=58:x=(w-text_w)/2:y=1500:box=1:boxcolor=white@0.75:boxborderw=20,drawtext=font='Noto Sans CJK JP':textfile='${enRel}':fontcolor=black@0.75:fontsize=30:x=(w-text_w)/2:y=1600,fps=30[v];[1:a]aresample=48000,apad[a]`,
+        `[0:v]scale=1280:1920,crop=1080:1920,drawtext=font='Noto Sans CJK JP':textfile='${jpRel}':fontcolor=black:fontsize=54:line_spacing=8:x=(w-text_w)/2:y=1440:box=1:boxcolor=white@0.75:boxborderw=20,drawtext=font='Noto Sans CJK JP':textfile='${enRel}':fontcolor=black@0.75:fontsize=28:line_spacing=4:x=(w-text_w)/2:y=1660,fps=30[v];[1:a]aresample=48000,apad[a]`,
         '-map', '[v]', '-map', '[a]', '-t', String(dur),
         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000',
         segRel,
