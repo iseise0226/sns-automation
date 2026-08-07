@@ -113,7 +113,9 @@ async function requestImage(scene) {
     { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } },
     JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'low', n: 1 })
   );
-  return res.json?.data?.[0]?.b64_json;
+  const b64 = res.json?.data?.[0]?.b64_json;
+  if (!b64) throw new Error(`status=${res.status} ${JSON.stringify(res.json || res.raw || {}).slice(0, 300)}`);
+  return b64;
 }
 
 // AIが考えた場面描写がOpenAIの安全フィルタ(self-harm等)に引っかかることがあるため、
