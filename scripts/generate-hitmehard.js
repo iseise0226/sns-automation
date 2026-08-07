@@ -100,7 +100,7 @@ async function generateScenario() {
 const CHIBI_STYLE =
   "Minimal hand-drawn pencil sketch on plain beige textured paper, cute chibi character with a large round head and tiny simple body (2-head-tall proportions), short spiky black hair, simple dot eyes and small smile, wearing a plain vest over a long-sleeve shirt, loose sketchy pencil linework with visible pencil texture and light shading, lots of empty negative space, soft muted sepia pencil tones, no text, no letters, no watermark, minimalist Japanese sketch diary aesthetic";
 
-async function generateImage(scene, outPath) {
+async function requestImage(scene) {
   const key = (process.env.OPENAI_API_KEY || '').trim();
   const prompt = `${CHIBI_STYLE}, chibi character ${scene}`;
   const res = await req(
@@ -108,9 +108,35 @@ async function generateImage(scene, outPath) {
     { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } },
     JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'low', n: 1 })
   );
-  const b64 = res.json?.data?.[0]?.b64_json;
-  if (!b64) throw new Error(`画像生成失敗: ${JSON.stringify(res.json || {}).slice(0, 300)}`);
-  fs.writeFileSync(outPath, Buffer.from(b64, 'base64'));
+  return res.json?.data?.[0]?.b64_json;
+}
+
+// AIが考えた場面描写がOpenAIの安全フィルタ(self-harm等)に引っかかることがあるため、
+// 一度弾かれたら場面描写を汎用的なもの(座って考え込む/窓辺で微笑む等)に差し替えて再挑戦する。
+// それでも失敗する場合は動画生成自体を止めず、最も無難な場面で通す。
+const SAFE_FALLBACK_SCENES = [
+  'sitting quietly at a desk, calm expression',
+  'standing by a window, gentle smile',
+  'walking on a quiet street, looking forward',
+  'sitting on a park bench, relaxed posture',
+  'looking up at the sky, peaceful expression',
+];
+
+async function generateImage(scene, outPath, slideIndex = 0) {
+  let lastErr;
+  const candidates = [scene, SAFE_FALLBACK_SCENES[slideIndex % SAFE_FALLBACK_SCENES.length]];
+  for (const candidate of candidates) {
+    try {
+      const b64 = await requestImage(candidate);
+      if (!b64) throw new Error('画像データが空です');
+      fs.writeFileSync(outPath, Buffer.from(b64, 'base64'));
+      return;
+    } catch (e) {
+      lastErr = e;
+      console.log(`画像生成リトライ(${candidate}): ${e.message.slice(0, 200)}`);
+    }
+  }
+  throw new Error(`画像生成失敗(フォールバックも失敗): ${lastErr?.message?.slice(0, 300)}`);
 }
 
 // --- VOICEVOX (generate-reel.jsと同じ仕組みを流用) ---
@@ -321,7 +347,7 @@ async function main() {
 
   for (let i = 0; i < SLIDE_COUNT; i++) {
     console.log(`画像生成中 ${i + 1}/${SLIDE_COUNT}...`);
-    await generateImage(scenario.slides[i].scene, path.join(outDir, `slide${i + 1}.png`));
+    await generateImage(scenario.slides[i].scene, path.join(outDir, `slide${i + 1}.png`), i);
   }
 
   let n = 0;
