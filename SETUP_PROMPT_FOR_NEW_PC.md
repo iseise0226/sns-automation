@@ -55,11 +55,13 @@ PCの電源とは無関係に毎日動き続けます。APIキーもGitHub Secre
 | `wf4-reels.yml` | Instagramリール6アカウント。実写B-roll+Remotion | 毎日4:40 |
 | `wf4-stories.yml` | Instagramストーリーズ | 7:00/13:00/20:00 |
 | `wf2-threads.yml` | Threads 8アカウント | 8:00/13:00/20:00 |
-| `wf3-corgi.yml` | コーギーのカルーセル投稿 | - |
+| `wf3-corgi.yml` | コーギーのカルーセル(単体写真)投稿 | 5:20 |
+| `wf2-corgi-image.yml` | ko_gi_omoti専用Threadsテキスト投稿 | 8:15/13:15/20:15 |
 | `wf-hitmehard.yml` | satoshi_mind_coaching専用「ハッとしたんだよね」形式 | 4:50 |
 | `wf-taidan-reel.yml` | oshiete.okane の2キャラ対談リール | 20:15 |
 | `wf1-note.yml` | note記事の下書き生成(自動投稿はしない・手動コピペ)。今は ise_satoshi 1アカウントのみ | 6:10 |
-| `wf7-weekly-stats.yml` | 週次の統計レポート | - |
+| `wf7-weekly-stats.yml` | 週次の統計レポート | 月9:00 |
+| `wf5-youtube.yml` | 停止中(WF6に統合済み・手動実行のみ) | - |
 
 ### 技術スタック
 
@@ -237,6 +239,59 @@ Groqは無料枠なので1日のトークン上限(TPD)に当たることがあ�
 - ペルソナ・ナレーター・LP誘導文は `data/daily_config.json`
 - **今の形(ちびキャラのスライドを2枚出してからフリー動画に移る流れ)は
   気に入っているので絶対に崩さないでほしい**
+
+### WF2-threads: Threads 8アカウント(毎日 JST 8:00/13:00/20:00)
+
+`wf2-threads.yml` → アカウントごとにGroqでテキスト生成 → Threads API 2段階投稿(`/threads`で下書き作成→8秒待ち→`/threads_publish`で公開)
+
+### WF2-corgi-image: ko_gi_omoti専用Threadsテキスト投稿(毎日 JST 8:15/13:15/20:15)
+
+`wf2-corgi-image.yml` → `scripts/post-corgi.js`
+
+- `data/personas.json` のko_gi_omoti用ペルソナでGroqにテキストだけ生成させ、
+  Threads APIで投稿(画像は使わない。ファイル名に反してテキスト専用)
+- wf2-threadsと15分ずらしてあるのは同時実行を避けるため
+
+### WF3: コーギーInstagramカルーセル(毎日 JST 5:20)
+
+`wf3-corgi.yml` → `scripts/generate-corgi-content.js`
+
+1. Groqでその日のテーマ・キャプション・画像雰囲気(英語)をJSONで生成
+2. `assets/corgi_template.png` を元にgpt-image-1の image edit で
+   **同じコーギーキャラのデザインを保ったまま**ポーズ・シーンだけ変えた1枚絵を生成
+3. litterbox→uguu→tmpfilesの順で公開URLにアップロード(直リンクとして機能するか`curl -I`で確認してから採用)
+4. Instagram Graph APIで単体写真として投稿
+5. corgi-bot名義で生成物をコミット
+
+### WF4-stories: Instagramストーリーズ 6アカウント(毎日 JST 7:00/13:00/20:00)
+
+`wf4-stories.yml` → `scripts/run-wf4-stories.js` → `scripts/generate-story.js`
+
+- `run-wf4.js`(リール)と同じパターンで、6アカウントを配列で順に回すだけ
+- 各アカウント内部でシナリオ生成→Pexels/PixabayでB-roll取得→VOICEVOXナレーション→
+  Remotionでストーリー動画(chibiキャラ/実写)をレンダリング→アップロード→IG投稿
+- `workflow_dispatch`の`dryrun`入力で生成のみ・投稿スキップも可能
+
+### WF-taidan-reel: oshiete.okane 2キャラ対談リール(毎日 JST 20:15)
+
+`wf-taidan-reel.yml` → `scripts/daily-pipeline/generate_taidan_reel_script.js` → `scripts/post_taidan_reel.js`
+
+- 先生役(聖さん)と質問役(あかり)の掛け合い台本を生成し、VOICEVOXで2声分のナレーションを作る
+- Remotionで縦動画(1080x1920)にレンダリング
+- litterbox→uguu→tmpfilesの順で公開URLアップロード→Instagram Reelsとして投稿
+  (コンテナ作成後、`status_code`が`FINISHED`になるまで6秒間隔で最大20回ポーリング)
+- `--no-upload`オプションで投稿せず動画生成だけ試せる
+- WF6のYouTube対談(22:50 JST)とは別時間に分散してある
+
+### WF5: 停止中(WF6に統合済み)
+
+`wf5-youtube.yml` は2026-07-16に停止。旧SlideVideo(文字だけの簡素なスライド)をWF6のRichSlideVideo(リッチ図解つき)が置き換えたため。`workflow_dispatch`での手動実行のみ可能。**新PCでは復活させる必要なし。**
+
+### WF7: 週次統計レポート(毎週月曜 JST9:00)
+
+`wf7-weekly-stats.yml` → `scripts/weekly-stats.js`
+
+- Threads/Instagram各アカウントのAPIから週次の投稿数・エンゲージメントを取得して記録するだけ。投稿は行わない
 
 ### 動画フォーマットの決まりごと(絶対に崩さない)
 
