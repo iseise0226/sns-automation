@@ -226,17 +226,71 @@ Groqは無料枠なので1日のトークン上限(TPD)に当たることがあ�
 
 `HITMEHARD_DRY_RUN=1` を付けると投稿せずに生成だけ試せます。
 
-### WF6: YouTube 9チャンネル(各チャンネル毎日・時刻バラバラ)
+### WF6: YouTube 9チャンネル毎日投稿(全ワークフローで一番複雑)
 
 `wf6-daily-8channels.yml` → `scripts/daily-pipeline/generate_script.js`
 → `scripts/daily-pipeline/hf_build_and_upload.js`
 
-- cronが9本あり、**どのcronで起動したかでアカウントを決めている**
-- `data/daily_topics.json` のお題プールを順番に消化し、
-  どこまで進んだかを `data/daily_state.json` に記録してコミットで戻す
-- ペルソナ・ナレーター・LP誘導文は `data/daily_config.json`
-- **今の形(ちびキャラのスライドを2枚出してからフリー動画に移る流れ)は
-  気に入っているので絶対に崩さないでほしい**
+**1. どのアカウントを投稿するか決める**
+- 1本のワークフローに **cronが9個** ぶら下がっていて、
+  `github.event.schedule` の値をcase文で見て、
+  どのcronで起動したかでアカウントを決める(手動実行時は入力値を使う)
+  ```
+  06:03 JST → ise_satoshi
+  08:17 JST → satoshi_mindset
+  10:41 JST → satoshi_mind_coach
+  12:29 JST → ise_sato_kosodate
+  14:53 JST → ise_kenkou_otaku
+  17:07 JST → tabi_life_design40
+  19:22 JST → sessi_life
+  21:38 JST → ko_gi_omoti
+  22:50 JST → okane_taidan(対談チャンネル)
+  ```
+
+**2. 台本生成は2段階に分けている**(`generate_script.js`。okane_taidanだけ`generate_taidan_script.js`)
+- **フェーズ1(アウトライン)**: タイトル・サムネ文言・3章のタイトルと要約・
+  冒頭シーン・締めのCTAシーンをGroqで1回のJSON生成にまとめる
+- **フェーズ2(章ごと)**: 3章を1章ずつ個別に生成する。
+  **直前までの内容(recap)を毎回渡して**同じエピソードの繰り返しを防ぐのはWF1と同じ考え方
+  - 各章には必ず「リッチ図解1個」+「実写カット(cut)1個は必須」+「通常図解は0〜1個」を作る
+  - リッチ図解は3種類(`stairs`=積み上げて壁にぶつかる型、`process`=工程に張り付いて消耗する型、
+    `databadge`=数字の変化と手順を見せる型)。**3章あるので必ず3種類が1回ずつ出る**ようローテーションしている
+    (`RICH_ROTATION = ['stairs','process','databadge']`)
+- **コード側の安全装置**(AIの出力ミスで動画が壊れないようにする仕組み):
+  - `sanitizeScenes`: 英数字・記号を除去し、存在しないアイコン名は消す
+  - `isValidRich`/`downgradeRich`: リッチ図解の必須フィールドが欠けていたら、
+    自動的に普通の図解(通常beatsのみ)に格下げする
+  - `alternateCutAndPoints`: 実写カットと図解シーンが連続しないよう、
+    コード側で強制的に交互に織り交ぜる(AIが偏って出しても直る)
+  - `randomizeLayouts`: 通常図解のレイアウト(flow3/iconsteps/reject)が
+    毎回同じにならないようランダム化
+  - `buildFallbackRich`: リッチ図解がAIの出力で2回失敗したら、
+    決め打ちの保険テンプレで型だけは必ず埋める(数値の捏造はしない)
+- お題は `data/daily_topics.json` のプールを `data/daily_state.json` の
+  インデックスで順番に消化(使い切ったら最初に戻る)。アカウント別ペルソナ・
+  ナレーター・LP誘導文・BGMムードは `data/daily_config.json`
+
+**3. 動画をビルドしてアップロード**(`hf_build_and_upload.js`)
+- ビート(台詞の1文単位)ごとにVOICEVOXで音声を作る
+  → 字幕の表示タイミングを音声にぴったり合わせるため、シーン単位ではなくビート単位でTTSする
+- `cut`シーンはPexels→Pixabayの順で実写B-rollを取得(見つからなければ濃紺ベタ画面で続行)
+- HyperFrames CLI(`npx hyperframes@0.7.77 render`)で無音動画をレンダリング
+- ffmpegでナレーション音声とBGM(ムード別に選曲、音量0.07に絞って重ねる)を合成
+- サムネイルはRemotionで別途スチル画像として生成
+- YouTube Data API v3でアップロード。概要欄はLINE誘導リンクを一番上に固定
+  (「もっと見る」を押さないと下が隠れるため)、その下に本文とチャプター(自動生成)
+- **アカウントによって使うビルダーが違う**:
+  ise_satoshi/satoshi_mindset/satoshi_mind_coach/ise_sato_kosodate/
+  ise_kenkou_otaku/tabi_life_design40/okane_taidan は `hf_build_and_upload.js`(HyperFrames版・ちびキャラ+線画図解)。
+  **sessi_life と ko_gi_omoti だけ** `build_and_upload.js`(Remotion版のまま)。
+  この2つは聖さんちびキャラを使わない別キャラ設定のため、まだ移行していない
+
+**4. 状態を保存**
+- `data/daily_state.json`(お題の進行)と`data/post_log.csv`(投稿ログ)を
+  wf6-bot名義でコミット・push
+
+**今の形(ちびキャラのスライドを出してからフリー動画に移っていく流れ)は
+気に入っているので絶対に崩さないでほしい。**
 
 ### 動画フォーマットの決まりごと(絶対に崩さない)
 
@@ -294,6 +348,8 @@ gh run list --limit 20
 2. `satoshi_mind_coaching` は今どのワークフローで投稿されていますか？
    なぜ `run-wf4.js` のアカウント配列から外してあるのですか？
 3. Instagramに動画を投稿するとき、なぜ一度 litterbox などにアップロードするのですか？
+4. WF6で、なぜ台本をアウトライン(全体)と章ごとの2段階に分けて生成しているのですか？
+5. WF6で、sessi_life と ko_gi_omoti だけ他の7チャンネルと違うビルダーを使っているのはなぜですか？
 
 ## 注意点・ハマりどころ
 
