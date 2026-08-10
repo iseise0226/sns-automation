@@ -151,4 +151,52 @@ async function getBraveTrends() {
   return results.slice(0, 3).map((r) => r.title).join('、');
 }
 
-module.exports = { req, reqBinary, groqChat, fetchUnsplashImage, fetchPexelsImage, fetchPixabayImage, fetchStockImage, getBraveTrends };
+// Brave Web Searchでnote.com上のヒット記事タイトルを拾う(本文は取得しない。テーマ傾向の参考のみ)
+async function getNoteHitTitles(query) {
+  const key = (process.env.BRAVE_API_KEY || '').trim();
+  const url =
+    'https://api.search.brave.com/res/v1/web/search?q=' +
+    encodeURIComponent(`site:note.com ${query}`) +
+    '&count=5&country=JP&search_lang=jp';
+  const res = await req(url, { headers: { Accept: 'application/json', 'X-Subscription-Token': key } });
+  const results = res.json?.web?.results || [];
+  return results.slice(0, 5).map((r) => r.title).filter(Boolean);
+}
+
+// Brave Web SearchでInstagram/Threads上のヒット投稿タイトル・要約を拾う(本文は取得しない。テーマ傾向の参考のみ)
+async function getInstagramThreadsHitTitles(query) {
+  const key = (process.env.BRAVE_API_KEY || '').trim();
+  const url =
+    'https://api.search.brave.com/res/v1/web/search?q=' +
+    encodeURIComponent(`(site:instagram.com OR site:threads.net) ${query}`) +
+    '&count=5&country=JP&search_lang=jp';
+  const res = await req(url, { headers: { Accept: 'application/json', 'X-Subscription-Token': key } });
+  const results = res.json?.web?.results || [];
+  return results.slice(0, 5).map((r) => r.title).filter(Boolean);
+}
+
+// note + Instagram/Threadsのヒットタイトルをミックスして返す。全て空なら空文字。
+async function getMixedTrends(query) {
+  const [noteTitles, igTitles] = await Promise.all([
+    getNoteHitTitles(query).catch(() => []),
+    getInstagramThreadsHitTitles(query).catch(() => []),
+  ]);
+  const parts = [];
+  if (noteTitles.length) parts.push(`note人気記事: ${noteTitles.join('、')}`);
+  if (igTitles.length) parts.push(`Instagram/Threads人気投稿: ${igTitles.join('、')}`);
+  return parts.join(' / ');
+}
+
+module.exports = {
+  req,
+  reqBinary,
+  groqChat,
+  fetchUnsplashImage,
+  fetchPexelsImage,
+  fetchPixabayImage,
+  fetchStockImage,
+  getBraveTrends,
+  getNoteHitTitles,
+  getInstagramThreadsHitTitles,
+  getMixedTrends,
+};

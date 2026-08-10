@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync, execFileSync: run } = require('child_process');
-const { req, getBraveTrends } = require('./note-lib');
+const { req, getBraveTrends, getMixedTrends } = require('./note-lib');
 
 const MAIN_ACCOUNT = 'ise_satoshi';
 // ise_satoshi以外・マガジンは一時停止中(2026-07-25)
@@ -25,6 +25,13 @@ async function decideSourceText() {
   if (content && content !== lastContent) {
     fs.writeFileSync(TRANSCRIPT_CACHE, content, 'utf-8');
     return `今日の文字起こし内容: ${content}`;
+  }
+
+  // note/Instagram/Threadsで今ヒットしているテーマ傾向をミックスして渡す
+  // (本文は取得しない。タイトルからテーマ・切り口を掴んで新しい記事を書かせるための参考情報)
+  const mixed = await getMixedTrends('マインド プラス思考 自己成長');
+  if (mixed) {
+    return `今note・Instagram/Threadsで話題のテーマ傾向(タイトルのみ・内容はコピーせずここから新しい切り口を考えること): ${mixed}`;
   }
 
   const titles = await getBraveTrends();
