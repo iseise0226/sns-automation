@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { execFileSync, spawn } = require('child_process');
+const { slotsForTheme, normalizeTitleEn, clampLines, stripEmphasis, pickFromCandidates } = require('./reel-editorial');
 
 function req(url, options, body) {
   return new Promise((resolve, reject) => {
@@ -259,27 +260,47 @@ async function generateScenario(systemPrompt) {
   };
 }
 
-async function fetchPexelsVideo(keyword, usedIds) {
+// 候補を配列で返す。6秒未満の足切りとかぶり除外は合流後に pickFromCandidates でかける。
+async function listPexelsVideos(keyword) {
   const key = (process.env.PEXELS_API_KEY || '').trim();
-  const res = await req(`https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=30&orientation=portrait`, {
-    headers: { Authorization: key },
-  });
-  const candidates = (res.json?.videos || []).filter((v) => v.duration >= 6 && !usedIds.has(`px_${v.id}`));
-  if (!candidates.length) return null;
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  const files = (pick.video_files || []).filter((f) => f.height && f.height <= 1920).sort((a, b) => b.height - a.height);
-  const file = files[0] || pick.video_files[0];
-  return { id: `px_${pick.id}`, url: file.link };
+  if (!key) return [];
+  try {
+    const res = await req(
+      `https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=30&orientation=portrait`,
+      { headers: { Authorization: key } }
+    );
+    return (res.json?.videos || [])
+      .map((v) => {
+        const files = (v.video_files || [])
+          .filter((f) => f.height && f.height <= 1920)
+          .sort((a, b) => b.height - a.height);
+        const file = files[0] || (v.video_files || [])[0];
+        if (!file || !file.link) return null;
+        return { id: `px_${v.id}`, url: file.link, duration: Number(v.duration) || 0 };
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error('Pexels検索に失敗:', e.message);
+    return [];
+  }
 }
 
-async function fetchPixabayVideo(keyword, usedIds) {
+async function listPixabayVideos(keyword) {
   const key = (process.env.PIXABAY_API_KEY || '').trim();
-  const res = await req(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(keyword)}&per_page=30`, {});
-  const candidates = (res.json?.hits || []).filter((v) => v.duration >= 6 && !usedIds.has(`pb_${v.id}`));
-  if (!candidates.length) return null;
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  const v = pick.videos.medium || pick.videos.small || pick.videos.large;
-  return { id: `pb_${pick.id}`, url: v.url };
+  if (!key) return [];
+  try {
+    const res = await req(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(keyword)}&per_page=30`, {});
+    return (res.json?.hits || [])
+      .map((v) => {
+        const f = (v.videos && (v.videos.medium || v.videos.small || v.videos.large)) || null;
+        if (!f || !f.url) return null;
+        return { id: `pb_${v.id}`, url: f.url, duration: Number(v.duration) || 0 };
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error('Pixabay検索に失敗:', e.message);
+    return [];
+  }
 }
 
 // 各シーン用の実写動画を取得する（かぶり除外は全アカウント台帳を統合）
@@ -306,7 +327,9 @@ async function fetchBrollVideos(scenes, outDir, account) {
     const keywordChain = [scenes[sceneIdx].stockQuery, ...fallbackPool].filter(Boolean);
     let found = null;
     for (const kw of keywordChain) {
-      found = (await fetchPexelsVideo(kw, excludeIds)) || (await fetchPixabayVideo(kw, excludeIds));
+      // 両方を毎回引いて候補を合流させる。片方が失敗しても、もう一方の候補で成立する。
+      const [px, pb] = await Promise.all([listPexelsVideos(kw), listPixabayVideos(kw)]);
+      found = pickFromCandidates([...px, ...pb], excludeIds);
       if (found) break;
     }
     if (!found) {
