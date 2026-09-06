@@ -843,7 +843,11 @@ export const EditorialCut: React.FC<{ video?: string; titleEn?: string[]; headli
 };
 ```
 
-- [ ] **Step 2: 目視確認用の Still を Root.tsx に追加する**
+- [ ] **Step 2: 目視確認用のプレビュー用コンポジションを Root.tsx に追加する**
+
+`Still` は使わない。`Still` は `durationInFrames` が1に固定されるため `--frame=45` が
+`RangeError` になり、そもそも `spring()` の入りが終わっていないフレームしか描けない。
+`Composition` にして、入りが終わったフレームを書き出す。
 
 `remotion/src/Root.tsx` の import 群の最後に足す。
 
@@ -854,8 +858,10 @@ import { EditorialCover, EditorialCut } from "./EditorialScenes";
 `<Still id="Thumbnail" ... />` の閉じタグの直後、`</>` の直前に次を足す。
 
 ```tsx
-    <Still
+    <Composition
       id="EditorialCoverStill"
+      durationInFrames={90}
+      fps={30}
       component={EditorialCover}
       width={1080}
       height={1920}
@@ -864,8 +870,10 @@ import { EditorialCover, EditorialCut } from "./EditorialScenes";
         headline: "乾燥する夜に\nやめた3つのこと",
       }}
     />
-    <Still
+    <Composition
       id="EditorialCutStill"
+      durationInFrames={90}
+      fps={30}
       component={EditorialCut}
       width={1080}
       height={1920}
