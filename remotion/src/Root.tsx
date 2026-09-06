@@ -5,6 +5,7 @@ import { RichSlideVideo } from "./RichSlideVideo";
 import { Thumbnail } from "./Thumbnail";
 import { TalkingChibi } from "./TalkingChibi";
 import { TaidanReel } from "./TaidanReel";
+import { EditorialCover, EditorialCut } from "./EditorialScenes";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -131,6 +132,30 @@ export const RemotionRoot: React.FC = () => {
         kicker: "サンプル",
         footer: "伊勢 聖",
         accentIndex: 0,
+      }}
+    />
+    <Composition
+      id="EditorialCoverStill"
+      component={EditorialCover}
+      durationInFrames={90}
+      fps={30}
+      width={1080}
+      height={1920}
+      defaultProps={{
+        titleEn: ["Winter Night", "Skin Routine"],
+        headline: "乾燥する夜に\nやめた3つのこと",
+      }}
+    />
+    <Composition
+      id="EditorialCutStill"
+      component={EditorialCut}
+      durationInFrames={90}
+      fps={30}
+      width={1080}
+      height={1920}
+      defaultProps={{
+        titleEn: ["Winter Night", "Skin Routine"],
+        headline: "化粧水は\n重ねなくていい",
       }}
     />
     </>
