@@ -578,8 +578,14 @@ export const paletteVars = (theme?: string): React.CSSProperties => {
 
 - [ ] **Step 2: 型エラーがないことを確認する**
 
-Run: `cd /c/Users/isesa/sns-automation/remotion && npx tsc --noEmit --jsx react-jsx --esModuleInterop --skipLibCheck --target es2020 --moduleResolution node src/editorialTheme.ts`
-Expected: 何も出力されず終了コード0。
+Run: `cd /c/Users/isesa/sns-automation/remotion && npx --yes -p typescript@5.6 tsc --noEmit -p . 2>&1 | grep editorialTheme || echo "editorialTheme.ts にエラーなし"`
+Expected: `editorialTheme.ts にエラーなし`。
+
+このリポジトリには着手前から型エラーが5件ある（`RichSlideVideo.tsx` に TS1117 が3件、
+`Root.tsx` に TS2503 と TS2339 が1件ずつ）。したがって `tsc` 全体の終了コードは0にならない。
+確認するのは「自分が触ったファイルにエラーが出ていないこと」だけ。既存のエラーは直さない。
+また TypeScript は `npx --yes -p typescript@5.6` で一時的に取得する。
+**`npm install typescript` をしてはいけない。** パッケージ追加禁止の制約に反する。
 
 - [ ] **Step 3: コミットする**
 
@@ -1095,8 +1101,14 @@ export const MyVideo: React.FC<Props> = ({ scenes, chibi, theme }) => {
 
 - [ ] **Step 7: 型エラーがないことを確認する**
 
-Run: `cd /c/Users/isesa/sns-automation/remotion && npx tsc --noEmit --jsx react-jsx --esModuleInterop --skipLibCheck --target es2020 --moduleResolution node src/MyVideo.tsx`
-Expected: 何も出力されず終了コード0。
+Run: `cd /c/Users/isesa/sns-automation/remotion && npx --yes -p typescript@5.6 tsc --noEmit -p . 2>&1 | grep MyVideo || echo "MyVideo.tsx にエラーなし"`
+Expected: `MyVideo.tsx にエラーなし`。
+
+このリポジトリには着手前から型エラーが5件ある（`RichSlideVideo.tsx` に TS1117 が3件、
+`Root.tsx` に TS2503 と TS2339 が1件ずつ）。`tsc` 全体の終了コードは0にならない。
+確認するのは自分が触ったファイルだけ。既存のエラーは直さない。
+TypeScript は `npx --yes -p typescript@5.6` で一時的に取得する。
+**`npm install typescript` をしてはいけない。**
 
 - [ ] **Step 8: 既定テーマが今までと同じ見た目のままかを確認する**
 
