@@ -4,7 +4,16 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { execFileSync, spawn } = require('child_process');
-const { slotsForTheme, normalizeTitleEn, clampLines, stripEmphasis, pickFromCandidates } = require('./reel-editorial');
+const {
+  slotsForTheme,
+  normalizeTitleEn,
+  clampLines,
+  clampLineChars,
+  stripEmphasis,
+  pickFromCandidates,
+  COVER_MAX_CHARS,
+  CUT_MAX_CHARS,
+} = require('./reel-editorial');
 
 function req(url, options, body) {
   return new Promise((resolve, reject) => {
@@ -57,10 +66,8 @@ function reqBinary(url, options, body) {
   });
 }
 
-// 9シーン固定: diagram(白背景の図解)とcut(4秒の実写)を交互に並べる。0,2,4,6,8がdiagram / 1,3,5,7がcut
+// 9シーン固定。どのスロットがdiagram/cut/coverかはテーマ次第なのでslotsForTheme()が唯一の出どころ。
 const SCENE_COUNT = 9;
-const DIAGRAM_SLOTS = [0, 2, 4, 6, 8];
-const CUT_SLOTS = [1, 3, 5, 7];
 
 // 線画アイコン一覧(remotion/src/LineIcons.tsxと同じ並び)
 const ICON_NAMES = ['person_worried', 'person_calm', 'clock', 'wallet', 'coin', 'yen', 'chart_up', 'chart_bar', 'document', 'document_check', 'pencil', 'book', 'wall', 'flag', 'smartphone', 'cart', 'calendar', 'envelope', 'safe', 'gear', 'check_circle', 'cross_circle', 'piggy', 'lightbulb', 'target', 'hourglass'];
@@ -103,7 +110,7 @@ function buildStructureDoc(diagramLayouts, slots) {
   const hasCover = slots.cover !== null;
   const coverDoc = hasCover
     ? `- coverシーン(scenes[${slots.cover}]): ${directives[0]}。これは動画の表紙で、グリッドに並ぶ顔になる。` +
-      `日本語の見出し(headline)は必ず2行か3行、1行10〜14字、**強調**は使わない。` +
+      `日本語の見出し(headline)は必ず2行か3行、1行8〜10字、**強調**は使わない。` +
       `英語2行(title_en)は2要素の配列で、各要素は英字とスペースのみ12文字以内。内容の飾りなので雰囲気が合っていれば十分。` +
       `ナレーション(narration)は必ず25〜40文字。実写検索キーワード(stockQuery、英語2〜4語)も付ける\n`
     : '';
@@ -119,10 +126,13 @@ function buildStructureDoc(diagramLayouts, slots) {
     })
     .join('\n');
   const cutLead = hasCover ? '直前のシーンの内容' : '直前のdiagramの内容';
+  // 帯の幅が固定なので、coverを出すテーマのときだけ字数の上限も伝える。
+  // 他5アカウント(hasCover=false)の文面は1文字も変えない。
+  const cutLimit = hasCover ? '。headlineは1行11字以内、2行まで' : '';
   const cutDocs = slots.cut
     .map(
       (slot) =>
-        `- cutシーン(scenes[${slot}]): ${cutLead}を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+ナレーション(narration、必ず20〜30文字。単語だけの短い一言にしない)+実写検索キーワード(stockQuery、英語2〜4語)`
+        `- cutシーン(scenes[${slot}]): ${cutLead}を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+ナレーション(narration、必ず20〜30文字。単語だけの短い一言にしない)+実写検索キーワード(stockQuery、英語2〜4語)${cutLimit}`
     )
     .join('\n');
   return `${coverDoc}${diagramDocs}\n${cutDocs}\n\n各diagramのtitleは、上の指示内容そのもの・カテゴリ名(「導入」「まとめ」等)ではなく、そのシーンで実際に話す具体的な内容を表す8〜16字の見出し(体言止めや短い断言)にすること。`;
@@ -229,7 +239,8 @@ async function generateScenario(systemPrompt, theme) {
   const scenes = Array.from({ length: SCENE_COUNT }, (_, i) => {
     const raw = rawScenes[i] || {};
     if (slots.cover !== null && i === slots.cover) {
-      const headline = clampLines(stripEmphasis(String(raw.headline || '').trim()), 3) || 'きょうの話';
+      const headline =
+        clampLineChars(clampLines(stripEmphasis(String(raw.headline || '').trim()), 3), COVER_MAX_CHARS) || 'きょうの話';
       const narration = String(raw.narration || '').trim() || '今日はこんな話をします。';
       return {
         type: 'cover',
@@ -262,7 +273,10 @@ async function generateScenario(systemPrompt, theme) {
     return {
       type: 'cut',
       // editorialの帯は黄色ベタの強調が使えないので記号を外し、2行に収める
-      headline: theme === 'editorial' ? clampLines(stripEmphasis(cutHeadline), 2) : cutHeadline,
+      headline:
+        theme === 'editorial'
+          ? clampLineChars(clampLines(stripEmphasis(cutHeadline), 2), CUT_MAX_CHARS)
+          : cutHeadline,
       narration: String(raw.narration || '').trim() || 'きょうのポイントです。',
       stockQuery: String(raw.stockQuery || '').trim() || 'japan lifestyle',
     };
@@ -374,6 +388,8 @@ async function fetchBrollVideos(scenes, outDir, account) {
       if (found) break;
     }
     if (!found) {
+      // 素材APIは失敗しても[]を返すので、ここで黙ると黒画面のまま投稿されてしまう
+      console.warn(`[broll] scene${sceneIdx}: 実写が見つかりません (試したキーワード: ${keywordChain.join(' / ')})`);
       // 空振り枠は取得済みの映像を再利用
       const have = Object.values(videoBySlot);
       if (have.length > 0) videoBySlot[sceneIdx] = have[Math.floor(Math.random() * have.length)];
@@ -385,6 +401,10 @@ async function fetchBrollVideos(scenes, outDir, account) {
     videoBySlot[sceneIdx] = path.basename(p);
     usedIds.push(found.id);
     excludeIds.add(found.id);
+  }
+  // 1本も取れていないなら表紙も黒のまま。グリッドの顔が黒く出るくらいなら投稿しない。
+  if (Object.keys(videoBySlot).length === 0) {
+    throw new Error('実写素材を1シーンぶんも取得できませんでした(PEXELS/PIXABAYのキーか疎通を確認)。投稿を中止します。');
   }
   fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
   return videoBySlot;
@@ -710,7 +730,13 @@ async function main() {
   console.log(`[${account}] caption:`, scenario.caption);
   console.log(
     `[${account}] scenes:`,
-    scenario.scenes.map((s) => (s.type === 'cut' ? `cut:${s.headline}` : `diagram:${s.layout}:${s.title}`)).join(' / ')
+    scenario.scenes
+      .map((s) => {
+        if (s.type === 'cover') return `cover:${s.headline}`;
+        if (s.type === 'cut') return `cut:${s.headline}`;
+        return `diagram:${s.layout}:${s.title}`;
+      })
+      .join(' / ')
   );
 
   const videoBySlot = await fetchBrollVideos(scenario.scenes, outDir, account);

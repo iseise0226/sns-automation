@@ -764,7 +764,7 @@ export const EditorialCover: React.FC<{ video?: string; titleEn?: string[]; head
             color: "#ffffff",
           }}
         >
-          ✤
+          ✳
         </div>
       </div>
     </>

@@ -5,9 +5,12 @@ const {
   normalizeTitleEn,
   buildFallbackTitleEn,
   clampLines,
+  clampLineChars,
   stripEmphasis,
   pickFromCandidates,
   MIN_BROLL_SECONDS,
+  COVER_MAX_CHARS,
+  CUT_MAX_CHARS,
 } = require('../reel-editorial');
 
 test('slotsForTheme: 既定は0番も図解', () => {
@@ -106,4 +109,28 @@ test('pickFromCandidates: 両ソースが混ざった配列から選べる', () 
 
 test('MIN_BROLL_SECONDSは6', () => {
   assert.strictEqual(MIN_BROLL_SECONDS, 6);
+});
+
+test('clampLineChars: 上限を超えた行は切り捨てる', () => {
+  assert.strictEqual(clampLineChars('あいうえおかきくけこさし', 10), 'あいうえおかきくけこ');
+});
+
+test('clampLineChars: 短い行はそのまま', () => {
+  assert.strictEqual(clampLineChars('あいうえお', 10), 'あいうえお');
+});
+
+test('clampLineChars: 複数行はそれぞれ独立に切り詰める', () => {
+  assert.strictEqual(
+    clampLineChars('あいうえおかきくけこさし\nかきくけこ\nたちつてとなにぬねのはひふへほ', 10),
+    'あいうえおかきくけこ\nかきくけこ\nたちつてとなにぬねの'
+  );
+});
+
+test('clampLineChars: undefinedは空文字', () => {
+  assert.strictEqual(clampLineChars(undefined, 10), '');
+});
+
+test('COVER_MAX_CHARSは10、CUT_MAX_CHARSは11', () => {
+  assert.strictEqual(COVER_MAX_CHARS, 10);
+  assert.strictEqual(CUT_MAX_CHARS, 11);
 });

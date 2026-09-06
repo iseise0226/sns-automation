@@ -4,6 +4,8 @@
 const SCENE_COUNT = 9;
 const MIN_BROLL_SECONDS = 6;
 const TITLE_EN_MAX = 12;
+const COVER_MAX_CHARS = 10;
+const CUT_MAX_CHARS = 11;
 
 const DEFAULT_SLOTS = { cover: null, diagram: [0, 2, 4, 6, 8], cut: [1, 3, 5, 7] };
 const EDITORIAL_SLOTS = { cover: 0, diagram: [2, 4, 6, 8], cut: [1, 3, 5, 7] };
@@ -66,6 +68,15 @@ function clampLines(text, max) {
     .join('\n');
 }
 
+// 全角前提の箱に収める。行数(clampLines)だけでは幅が保証できないので、
+// はみ出した分は縮小せずに切り捨てる。
+function clampLineChars(text, maxChars) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => line.slice(0, maxChars))
+    .join('\n');
+}
+
 // テラコッタのベタ箱の上では黄色ベタの強調が使えないので、記号だけ外す。
 function stripEmphasis(text) {
   return String(text || '').replace(/\*\*/g, '');
@@ -86,10 +97,13 @@ module.exports = {
   SCENE_COUNT,
   MIN_BROLL_SECONDS,
   TITLE_EN_MAX,
+  COVER_MAX_CHARS,
+  CUT_MAX_CHARS,
   slotsForTheme,
   buildFallbackTitleEn,
   normalizeTitleEn,
   clampLines,
+  clampLineChars,
   stripEmphasis,
   pickFromCandidates,
 };
