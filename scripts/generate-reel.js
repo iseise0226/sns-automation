@@ -118,10 +118,11 @@ function buildStructureDoc(diagramLayouts, slots) {
       return `- diagramシーン(scenes[${slot}]): ${directive}。points${d.pointCount}個。各pointは{text(2行以内・具体的な一言), icon}${d.layout === 'flow3' ? '、note(補足1行、最後のpointは**強調**可)' : ''}。ナレーション(narration)は必ず35〜50文字、単語だけの短い一言にしない。背景にうっすら流す実写のstockQuery(英語2〜4語)も付ける`;
     })
     .join('\n');
+  const cutLead = hasCover ? '直前のシーンの内容' : '直前のdiagramの内容';
   const cutDocs = slots.cut
     .map(
       (slot) =>
-        `- cutシーン(scenes[${slot}]): 直前のシーンの内容を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+ナレーション(narration、必ず20〜30文字。単語だけの短い一言にしない)+実写検索キーワード(stockQuery、英語2〜4語)`
+        `- cutシーン(scenes[${slot}]): ${cutLead}を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+ナレーション(narration、必ず20〜30文字。単語だけの短い一言にしない)+実写検索キーワード(stockQuery、英語2〜4語)`
     )
     .join('\n');
   return `${coverDoc}${diagramDocs}\n${cutDocs}\n\n各diagramのtitleは、上の指示内容そのもの・カテゴリ名(「導入」「まとめ」等)ではなく、そのシーンで実際に話す具体的な内容を表す8〜16字の見出し(体言止めや短い断言)にすること。`;
