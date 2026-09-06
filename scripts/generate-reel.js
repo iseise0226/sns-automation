@@ -406,6 +406,14 @@ async function fetchBrollVideos(scenes, outDir, account) {
   if (Object.keys(videoBySlot).length === 0) {
     throw new Error('実写素材を1シーンぶんも取得できませんでした(PEXELS/PIXABAYのキーか疎通を確認)。投稿を中止します。');
   }
+  // ループ中の再利用は「それまでに取れた分」からしか選べないので、
+  // 先頭シーンが空振りしたときだけは埋まらない。最後にもう一度ならす。
+  const fetched = Object.values(videoBySlot);
+  for (let sceneIdx = 0; sceneIdx < SCENE_COUNT; sceneIdx++) {
+    if (videoBySlot[sceneIdx]) continue;
+    videoBySlot[sceneIdx] = fetched[Math.floor(Math.random() * fetched.length)];
+    console.warn(`[broll] scene${sceneIdx}: 取得済みの映像で埋めました`);
+  }
   fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
   return videoBySlot;
 }
