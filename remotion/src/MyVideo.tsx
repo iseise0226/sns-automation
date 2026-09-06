@@ -13,32 +13,37 @@ import {
 import { loadFont as loadMaru } from "@remotion/google-fonts/ZenMaruGothic";
 import { ChibiOverlay, ChibiPose } from "./ChibiOverlay";
 import { LineIcon } from "./LineIcons";
+import { paletteVars } from "./editorialTheme";
+import { EditorialCover, EditorialCut } from "./EditorialScenes";
 
 // YouTube(RichSlideVideo.tsx)と同じデザイン言語に統一(2026-07-25)。
 // 白背景=線画アイコンの図解3種(flow3/iconsteps/reject)、実写=4秒のcut、で交互に見せる。
 const { fontFamily: MARU } = loadMaru();
 
-const INK = "#1a1a1a";
-const PAPER = "#ffffff";
-const DARK = "#2b2b2b";
-const RED = "#d92b2b";
-const RED_TEXT = "#c62222";
-const NAVY = "#16202e";
-const YELLOW_MARK = "#ffe94d";
-const YELLOW_SOLID = "#ffe500";
+// 実際の値は editorialTheme.ts の PALETTES にあり、MyVideoのルートで流し込む
+const INK = "var(--ink)";
+const PAPER = "var(--paper)";
+const DARK = "var(--dark)";
+const RED = "var(--red)";
+const RED_TEXT = "var(--red-text)";
+const NAVY = "var(--navy)";
+const YELLOW_MARK = "var(--yellow-mark)";
+const YELLOW_SOLID = "var(--yellow-solid)";
+const VEIL = "var(--veil)";
 
 const FPS = 30;
 
 export type Point = { text: string; icon?: string; note?: string };
 
 export type Scene = {
-  type: "diagram" | "cut";
+  type: "diagram" | "cut" | "cover";
   layout?: "flow3" | "iconsteps" | "reject"; // diagram型のみ
   title?: string; // diagram型の大見出し(**強調**可)
   points?: Point[]; // diagram型の中身
-  headline?: string; // cut型の大きな一文(**強調**可)
+  headline?: string; // cut/cover型の大きな一文(**強調**可)
+  titleEn?: string[]; // cover/cut型の英語2行(editorialテーマのみ)
   narration: string; // 字幕バーの文言(=音声原稿)
-  video?: string; // cut型の実写(public相対)
+  video?: string; // 実写(public相対)
   audio: string;
   durationInSeconds: number;
   pose?: string;
@@ -48,6 +53,7 @@ export type Scene = {
 type Props = {
   scenes: Scene[];
   chibi?: boolean;
+  theme?: string; // "editorial" のとき配色と表紙/実写カットの型が変わる
 };
 
 // ---- テキスト装飾ヘルパー ----
@@ -498,7 +504,7 @@ const DiagramSceneView: React.FC<{ scene: Scene; frame: number; fps: number; sub
             />
           </div>
           {/* 線画アイコンと黒文字を読ませるための白ベール。実写は「動く紙」くらいの存在感にする */}
-          <AbsoluteFill style={{ backgroundColor: "rgba(255,255,255,0.7)" }} />
+          <AbsoluteFill style={{ backgroundColor: VEIL }} />
         </>
       ) : null}
       <AbsoluteFill style={{ flexDirection: "column", alignItems: "center", padding: "120px 70px 280px", justifyContent: "center" }}>
@@ -520,10 +526,11 @@ const DiagramSceneView: React.FC<{ scene: Scene; frame: number; fps: number; sub
 
 const FADE_FRAMES = 8;
 
-const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: boolean }> = ({
+const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: boolean; theme?: string }> = ({
   scene,
   durationInFrames,
   chibi,
+  theme,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -535,14 +542,28 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
   const subOpacity = interpolate(frame, [10, 18], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const editorial = theme === "editorial";
+  const onPhoto = scene.type === "cut" || scene.type === "cover";
 
   return (
-    <AbsoluteFill style={{ opacity, backgroundColor: scene.type === "cut" ? "#000" : PAPER }}>
+    <AbsoluteFill style={{ opacity, backgroundColor: onPhoto ? "#000" : PAPER }}>
       {scene.audio ? <Audio src={staticFile(scene.audio)} /> : null}
       {scene.se ? <Audio src={staticFile(`se/${scene.se}.mp3`)} volume={0.55} /> : null}
 
-      {scene.type === "cut" ? (
-        <CutSceneView scene={scene} frame={frame} fps={fps} subOpacity={subOpacity} />
+      {scene.type === "cover" ? (
+        <>
+          <EditorialCover video={scene.video} titleEn={scene.titleEn} headline={scene.headline} />
+          <CaptionBar text={scene.narration} opacity={subOpacity} />
+        </>
+      ) : scene.type === "cut" ? (
+        editorial ? (
+          <>
+            <EditorialCut video={scene.video} titleEn={scene.titleEn} headline={scene.headline} />
+            <CaptionBar text={scene.narration} opacity={subOpacity} />
+          </>
+        ) : (
+          <CutSceneView scene={scene} frame={frame} fps={fps} subOpacity={subOpacity} />
+        )
       ) : (
         <DiagramSceneView scene={scene} frame={frame} fps={fps} subOpacity={subOpacity} />
       )}
@@ -552,7 +573,7 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
   );
 };
 
-export const MyVideo: React.FC<Props> = ({ scenes, chibi }) => {
+export const MyVideo: React.FC<Props> = ({ scenes, chibi, theme }) => {
   let startFrame = 0;
   const items = scenes.map((scene, i) => {
     const durationInFrames = Math.round(scene.durationInSeconds * FPS);
@@ -560,13 +581,13 @@ export const MyVideo: React.FC<Props> = ({ scenes, chibi }) => {
     startFrame += durationInFrames;
     return (
       <Sequence key={i} from={from} durationInFrames={durationInFrames}>
-        <SceneView scene={scene} durationInFrames={durationInFrames} chibi={chibi} />
+        <SceneView scene={scene} durationInFrames={durationInFrames} chibi={chibi} theme={theme} />
       </Sequence>
     );
   });
 
   return (
-    <AbsoluteFill style={{ backgroundColor: PAPER }}>
+    <AbsoluteFill style={{ backgroundColor: PAPER, ...paletteVars(theme) }}>
       <Audio src={staticFile("bgm.mp3")} loop volume={0.12} />
       {items}
     </AbsoluteFill>
