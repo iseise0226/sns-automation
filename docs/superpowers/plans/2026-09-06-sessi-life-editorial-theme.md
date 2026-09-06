@@ -885,17 +885,19 @@ Expected: エラーなし。
 
 ```bash
 cd /c/Users/isesa/sns-automation/remotion
-npx remotion still src/index.ts EditorialCoverStill ../tmp_preview/editorial_cover.png
+npx remotion still src/index.ts EditorialCoverStill ../tmp_preview/editorial_cover.png --frame=45
 ```
 
 Expected: `tmp_preview/editorial_cover.png` が 1080×1920 で生成される。
-B-roll 無しなので、暖色のベタ地の上に白線・セリフ体2行・テラコッタ箱・星が出ていること。
+`--frame=45` なので入りのアニメーションは終わっていて、文字が完全に出ている。
+このプレビューには背景動画を渡していないため、地は暗いままになる。それでよい。
+ここで見るのは配置と文字の収まりであって、色の最終確認は Task 7 で実素材を入れてから行う。
 
 - [ ] **Step 5: 実写カットの静止画を書き出す**
 
 ```bash
 cd /c/Users/isesa/sns-automation/remotion
-npx remotion still src/index.ts EditorialCutStill ../tmp_preview/editorial_cut.png
+npx remotion still src/index.ts EditorialCutStill ../tmp_preview/editorial_cut.png --frame=45
 ```
 
 Expected: `tmp_preview/editorial_cut.png` が生成される。
