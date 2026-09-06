@@ -204,7 +204,7 @@ test('MIN_BROLL_SECONDSは6', () => {
 
 - [ ] **Step 2: テストを実行して失敗を確認する**
 
-Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/`
+Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/reel-editorial.test.js`
 Expected: FAIL。`Cannot find module '../reel-editorial'` で全テストが落ちる。
 
 - [ ] **Step 3: 実装を書く**
@@ -311,7 +311,7 @@ module.exports = {
 
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
-Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/`
+Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/reel-editorial.test.js`
 Expected: PASS。出力に `# fail 0` が出ること。
 
 - [ ] **Step 5: コミットする**
@@ -455,7 +455,7 @@ Expected: `pexels: true pixabay: true`。読めない場合はここで止めて
 
 - [ ] **Step 7: 純粋関数のテストが引き続き通ることを確認する**
 
-Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/`
+Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/reel-editorial.test.js`
 Expected: PASS。`# fail 0`。
 
 - [ ] **Step 8: コミットする**
@@ -1434,7 +1434,7 @@ Expected: 何も出力されない。残っていたら Step 3 と Step 7 に戻
 
 - [ ] **Step 10: 純粋関数のテストが引き続き通ることを確認する**
 
-Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/`
+Run: `cd /c/Users/isesa/sns-automation && node --test scripts/test/reel-editorial.test.js`
 Expected: PASS。`# fail 0`。
 
 - [ ] **Step 11: コミットする**
