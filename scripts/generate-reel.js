@@ -159,7 +159,8 @@ diagramシーンは白背景に線画アイコンを置いた図解、cutシー�
 // 連続実行すると簡単に429になる。待って再試行し、それでもダメならOpenAIに逃がす。
 // 最終的に台本が取れなかった場合は例外を投げる(既定文言だけの動画を投稿してしまわないため)。
 async function callGroqWithFallback(messages, maxTokens) {
-  const body = JSON.stringify({ model: 'llama-3.3-70b-versatile', messages, max_tokens: maxTokens, response_format: { type: 'json_object' } });
+  // llama-3.3-70b-versatileがGroq側で廃止されたため2026-09-07にopenai/gpt-oss-120bへ変更
+  const body = JSON.stringify({ model: 'openai/gpt-oss-120b', messages, max_tokens: maxTokens, response_format: { type: 'json_object' } });
   let lastErr = '';
 
   for (let attempt = 1; attempt <= 3; attempt++) {
