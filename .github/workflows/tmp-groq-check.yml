@@ -1,0 +1,14 @@
+name: TEMP Groq model check
+on:
+  workflow_dispatch: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List available Groq models
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          curl -s https://api.groq.com/openai/v1/models \
+            -H "Authorization: Bearer $GROQ_API_KEY" | \
+            node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const j=JSON.parse(d);(j.data||[]).forEach(m=>console.log(m.id));if(j.error)console.log('ERROR:',JSON.stringify(j.error));});"
