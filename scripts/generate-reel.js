@@ -222,18 +222,31 @@ async function generateScenario(systemPrompt, theme) {
     },
   ];
   // 9シーン分(各最大4ポイント×text/icon/note)の詳細なJSONを出力させるため、切れないよう余裕を持たせる
-  const content = await callGroqWithFallback(messages, 5000);
+  // シーン数が足りない出力はまれに起きるので、既定文言だけの中身のない動画を投稿する前に2回まで頼み直す
+  let rawScenes = [];
   let data = {};
-  try {
-    data = JSON.parse(content || '{}');
-  } catch (e) {
-    console.error('シナリオJSONのパースに失敗:', e.message, '| raw:', String(content).slice(0, 500));
+  let lastContent = '';
+  const SCENARIO_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= SCENARIO_ATTEMPTS; attempt++) {
+    const content = await callGroqWithFallback(messages, 5000);
+    lastContent = content;
+    data = {};
+    try {
+      data = JSON.parse(content || '{}');
+    } catch (e) {
+      console.error(`シナリオJSONのパースに失敗(試行${attempt}/${SCENARIO_ATTEMPTS}):`, e.message, '| raw:', String(content).slice(0, 500));
+    }
+    if (Array.isArray(data.scenes) && data.scenes.length === SCENE_COUNT) {
+      rawScenes = data.scenes;
+      break;
+    }
+    console.warn(
+      `台本のscenesが期待の${SCENE_COUNT}個ではありません(試行${attempt}/${SCENARIO_ATTEMPTS}、実際:${Array.isArray(data.scenes) ? data.scenes.length : 'なし'})`
+    );
   }
-  // シーン数が足りない場合、既定文言だけの中身のない動画を投稿してしまわないよう中止する
-  const rawScenes = Array.isArray(data.scenes) && data.scenes.length === SCENE_COUNT ? data.scenes : [];
   if (!rawScenes.length) {
     throw new Error(
-      `台本のscenesが期待の${SCENE_COUNT}個ではありません(実際:${Array.isArray(data.scenes) ? data.scenes.length : 'なし'})。投稿を中止します。raw: ${String(content).slice(0, 500)}`
+      `台本のscenesが${SCENARIO_ATTEMPTS}回とも期待の${SCENE_COUNT}個になりませんでした。投稿を中止します。raw: ${String(lastContent).slice(0, 500)}`
     );
   }
 
