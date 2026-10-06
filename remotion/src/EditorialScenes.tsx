@@ -11,6 +11,7 @@ import {
 import { loadFont as loadMaru } from "@remotion/google-fonts/ZenMaruGothic";
 import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
 import { useEditorial } from "./editorialTheme";
+import { LineIcon } from "./LineIcons";
 import { loadFont as loadMincho } from "@remotion/google-fonts/ShipporiMincho";
 
 const { fontFamily: MINCHO } = loadMincho("normal", { weights: ["800"] });
@@ -299,6 +300,106 @@ export const MinchoTelop: React.FC<{ video?: string; headline?: string; vertical
             {renderGold(line, E.GOLD)}
           </div>
         ))}
+      </div>
+    </>
+  );
+};
+
+// 番号付き解説カード(1枚=1ポイント)。実写の上に濃い箱を置き、番号・見出し・アイコン・一言・補足の順に積む。
+export const NumberedCard: React.FC<{
+  video?: string;
+  num?: string;
+  title?: string;
+  text?: string;
+  note?: string;
+  icon?: string;
+}> = ({ video, num, title, text, note, icon }) => {
+  const E = useEditorial();
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const card = spring({ frame: frame - 3, fps, config: { damping: 15, stiffness: 140, mass: 0.7 } });
+  const numIn = spring({ frame: frame - 10, fps, config: { damping: 200, stiffness: 90 } });
+  const iconIn = spring({ frame: frame - 18, fps, config: { damping: 11, stiffness: 160, mass: 0.6 } });
+  const textIn = interpolate(frame, [26, 38], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const noteIn = interpolate(frame, [38, 50], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return (
+    <>
+      <Graded video={video} zoomTo={1.1} />
+      <div
+        style={{
+          position: "absolute",
+          left: 70,
+          right: 70,
+          top: 300,
+          padding: "52px 56px 58px",
+          background: `${E.WARM_INK}eb`,
+          borderRadius: 18,
+          border: `2px solid ${E.GOLD}`,
+          opacity: card,
+          transform: `translateY(${(1 - card) * 40}px) scale(${0.96 + 0.04 * card})`,
+          textAlign: "center",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 28, opacity: numIn, transform: `translateX(${(1 - numIn) * -40}px)` }}>
+          <div
+            style={{
+              fontFamily: SERIF,
+              fontStyle: "italic",
+              fontWeight: 600,
+              fontSize: 150,
+              lineHeight: 1,
+              color: E.GOLD,
+            }}
+          >
+            {num}
+          </div>
+          <div style={{ flex: 1, height: 3, background: E.GOLD, opacity: 0.8 }} />
+        </div>
+        <div style={{ marginTop: 18, fontFamily: MARU, fontWeight: 900, fontSize: 78, lineHeight: 1.25, color: "#ffffff", textAlign: "left" }}>
+          {lines(title, 2).map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
+        </div>
+        <div
+          style={{
+            margin: "34px auto 0",
+            width: 220,
+            height: 220,
+            borderRadius: "50%",
+            border: `4px solid ${E.GOLD}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transform: `scale(${iconIn})`,
+          }}
+        >
+          <LineIcon name={icon} size={130} color={E.GOLD} strokeWidth={3.2} />
+        </div>
+        <div style={{ marginTop: 34, opacity: textIn }}>
+          {lines(text, 2).map((l, i) => (
+            <div key={i} style={{ fontFamily: MARU, fontWeight: 800, fontSize: 56, lineHeight: 1.5, color: "#ffffff" }}>
+              {l}
+            </div>
+          ))}
+        </div>
+        {note ? (
+          <div style={{ marginTop: 28, opacity: noteIn }}>
+            <span
+              style={{
+                display: "inline-block",
+                background: E.TERRA,
+                borderRadius: 999,
+                padding: "10px 36px",
+                fontFamily: MARU,
+                fontWeight: 800,
+                fontSize: 40,
+                color: "#ffffff",
+              }}
+            >
+              {note.replace(/\*\*/g, "")}
+            </span>
+          </div>
+        ) : null}
       </div>
     </>
   );

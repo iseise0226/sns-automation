@@ -14,7 +14,7 @@ import { loadFont as loadMaru } from "@remotion/google-fonts/ZenMaruGothic";
 import { ChibiOverlay, ChibiPose } from "./ChibiOverlay";
 import { LineIcon } from "./LineIcons";
 import { paletteVars, isEditorialTheme, editorialFor, EditorialContext } from "./editorialTheme";
-import { EditorialCover, EditorialCut, MinchoTelop } from "./EditorialScenes";
+import { EditorialCover, EditorialCut, MinchoTelop, NumberedCard } from "./EditorialScenes";
 
 // YouTube(RichSlideVideo.tsx)と同じデザイン言語に統一(2026-07-25)。
 // 白背景=線画アイコンの図解3種(flow3/iconsteps/reject)、実写=4秒のcut、で交互に見せる。
@@ -37,7 +37,8 @@ export type Point = { text: string; icon?: string; note?: string };
 
 export type Scene = {
   type: "diagram" | "cut" | "cover";
-  layout?: "flow3" | "iconsteps" | "reject"; // diagram型のみ
+  layout?: "flow3" | "iconsteps" | "reject" | "numcard"; // diagram型のみ。numcardは番号付き解説カード(editorial-card/leaf)
+  num?: string; // numcardの番号("01"など)
   title?: string; // diagram型の大見出し(**強調**可)
   points?: Point[]; // diagram型の中身
   headline?: string; // cut/cover型の大きな一文(**強調**可)
@@ -545,7 +546,8 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
   const subOpacity = interpolate(frame, [10, 18], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const editorial = isEditorialTheme(theme);
   const telop = theme === "editorial-ink";
-  const onPhoto = scene.type === "cut" || scene.type === "cover";
+  const numcard = scene.type === "diagram" && scene.layout === "numcard";
+  const onPhoto = scene.type === "cut" || scene.type === "cover" || numcard;
 
   return (
     <AbsoluteFill style={{ opacity, backgroundColor: onPhoto ? "#000" : PAPER }}>
@@ -571,6 +573,18 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
         ) : (
           <CutSceneView scene={scene} frame={frame} fps={fps} subOpacity={subOpacity} />
         )
+      ) : numcard ? (
+        <>
+          <NumberedCard
+            video={scene.video}
+            num={scene.num}
+            title={scene.title}
+            text={scene.points?.[0]?.text}
+            note={scene.points?.[0]?.note}
+            icon={scene.points?.[0]?.icon}
+          />
+          <CaptionBar text={scene.narration} opacity={subOpacity} />
+        </>
       ) : (
         <DiagramSceneView scene={scene} frame={frame} fps={fps} subOpacity={subOpacity} />
       )}
@@ -586,7 +600,11 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
             bottom={scene.type === "cover" ? 1400 : 1010}
           />
         ) : (
-          <ChibiOverlay audioSrc={scene.audio} pose={scene.pose as ChibiPose | undefined} />
+          <ChibiOverlay
+            audioSrc={scene.audio}
+            pose={scene.pose as ChibiPose | undefined}
+            {...(theme === "editorial-leaf" ? { size: 580 } : {})}
+          />
         )
       ) : null}
     </AbsoluteFill>

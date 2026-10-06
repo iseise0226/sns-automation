@@ -72,12 +72,31 @@ const INK: EditorialValues = {
   GOLD_SOLID: "#e8cf73",
 };
 
-export type EditorialThemeName = "editorial" | "editorial-navy" | "editorial-ink";
+// 健康・食(ise_kenkou_otaku)向け。深い緑と金で、清潔感と落ち着き
+const LEAF: EditorialValues = {
+  filter: "saturate(0.9) contrast(1) brightness(0.95)",
+  warm: "rgba(40,70,56,0.26)",
+  topFade: "linear-gradient(180deg, rgba(14,34,26,0.46) 0%, rgba(14,34,26,0) 38%)",
+  bottomFade: "linear-gradient(180deg, rgba(10,26,20,0) 70%, rgba(10,26,20,0.4) 100%)",
+  TERRA: "#3f7a5f",
+  GOLD: "#f0e08e",
+  LINE: "rgba(255,255,255,0.85)",
+  CREAM: "#eef2ec",
+  CREAM_VEIL: "rgba(238,242,236,0.74)",
+  WARM_INK: "#1d3328",
+  WARM_RED: "#3f7a5f",
+  WARM_RED_TEXT: "#356650",
+  GOLD_SOLID: "#e8d479",
+};
+
+export type EditorialThemeName = "editorial" | "editorial-navy" | "editorial-ink" | "editorial-card" | "editorial-leaf";
 
 export const EDITORIAL_VARIANTS: Record<EditorialThemeName, EditorialValues> = {
   editorial: EDITORIAL,
   "editorial-navy": NAVY,
   "editorial-ink": INK,
+  "editorial-card": EDITORIAL,
+  "editorial-leaf": LEAF,
 };
 
 export const isEditorialTheme = (theme?: string): theme is EditorialThemeName =>
@@ -130,6 +149,8 @@ export const PALETTES: Record<PaletteName, Palette> = {
   editorial: paletteOf(EDITORIAL),
   "editorial-navy": paletteOf(NAVY),
   "editorial-ink": paletteOf(INK),
+  "editorial-card": paletteOf(EDITORIAL),
+  "editorial-leaf": paletteOf(LEAF),
 };
 
 // MyVideoのルートに流し込むCSS変数。子孫の var(--ink) 等がこれを拾う。

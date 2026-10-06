@@ -164,3 +164,11 @@ test('clampVertical: 句読点と改行を除き8字に収める', () => {
   assert.strictEqual(clampVertical('静かに、\n整える時間を。'), '静かに整える時間');
   assert.strictEqual(clampVertical(undefined), '');
 });
+
+test('isCardTheme: card/leaf only', () => {
+  const { isCardTheme } = require('../reel-editorial');
+  assert.equal(isCardTheme('editorial-card'), true);
+  assert.equal(isCardTheme('editorial-leaf'), true);
+  assert.equal(isCardTheme('editorial'), false);
+  assert.equal(isCardTheme(undefined), false);
+});

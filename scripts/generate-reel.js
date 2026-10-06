@@ -7,6 +7,7 @@ const { execFileSync, spawn } = require('child_process');
 const {
   slotsForTheme,
   isEditorialTheme,
+  isCardTheme,
   clampMarkedLines,
   VERTICAL_MAX,
   clampVertical,
@@ -78,7 +79,9 @@ const ICON_NAMES = ['person_worried', 'person_calm', 'clock', 'wallet', 'coin', 
 const ICON_DOC = 'person_worried(悩む人)/person_calm(穏やかな人)/clock(時計)/wallet(財布)/coin(コイン)/yen(お金)/chart_up(右肩上がり)/chart_bar(棒グラフ)/document(書類)/document_check(チェック済み書類)/pencil(鉛筆)/book(本)/wall(壁)/flag(旗)/smartphone(スマホ)/cart(買い物カゴ)/calendar(カレンダー)/envelope(封筒・給料)/safe(金庫・貯金)/gear(歯車・自動)/check_circle(チェック)/cross_circle(バツ)/piggy(貯金箱)/lightbulb(気づき)/target(目標)/hourglass(砂時計)';
 
 // diagramスロットのlayoutと必要ポイント数を、枠数ぶん偏りなく事前に割り当てる(直前と同じlayoutは避ける)
-function assignDiagramLayouts(slotCount) {
+function assignDiagramLayouts(slotCount, theme) {
+  // 番号カードのテーマは図解を使わず、全diagramスロットを1ポイントのカードにする
+  if (isCardTheme(theme)) return Array.from({ length: slotCount }, () => ({ layout: 'numcard', pointCount: 1 }));
   // 試し撮り用: WF4_LAYOUTS="flow3:3,iconsteps:4" のように固定できる
   if (process.env.WF4_LAYOUTS) {
     const fixed = process.env.WF4_LAYOUTS.split(',').map((t) => {
@@ -131,6 +134,12 @@ function buildStructureDoc(diagramLayouts, slots, theme) {
     .map((d, i) => {
       const slot = slots.diagram[i];
       const directive = diagramDirectives[i] || diagramDirectives[diagramDirectives.length - 1];
+      if (d.layout === 'numcard') {
+        const isLast = i === diagramLayouts.length - 1;
+        return isLast
+          ? `- diagramシーン(scenes[${slot}]): 内容全体を踏まえた今日の一歩を示す。これは最後のまとめカード。titleは「保存して見返す」など保存を促す見出し(10字以内)。pointsは1個だけ、textは今日の一歩を言い切る(2行以内・1行12字以内)、iconを付け、noteは一言の背中押し(12字以内)。ナレーション(narration)は必ず30〜45文字で、聞いている人に「あなた」と語りかけて保存をやさしく促す。背景に流す実写のstockQuery(英語2〜4語)も付ける`
+          : `- diagramシーン(scenes[${slot}]): 今日のテーマで、聞いている人がすぐ実践できる具体的なポイントを示す(他の番号と重ならない内容)。これは番号付き解説カード(${String(i + 1).padStart(2, '0')}番目のポイント)で1枚=1ポイント。titleはそのポイントの名前(8字以内の体言止め)。pointsは1個だけ: textは具体的な行動や事実を言い切る(2行以内・1行12字以内)、iconを付け、noteは理由やコツの一言(14字以内)。ナレーション(narration)は必ず30〜45文字で、聞いている人に「あなた」と語りかける。背景に流す実写のstockQuery(英語2〜4語)も付ける`;
+      }
       if (d.layout === 'reject') {
         return `- diagramシーン(scenes[${slot}]): ${directive}。points2個。1個目は「これは○○の話ではありません」という否定+icon+note、2個目は本当に伝えたいこと(**強調**1箇所)+icon。ナレーション(narration)は必ず35〜50文字。背景にうっすら流す実写のstockQuery(英語2〜4語)も付ける`;
       }
@@ -174,7 +183,16 @@ diagramシーンは白背景に線画アイコンを置いた図解、cutシー�
 - テンプレート的な決まり文句の繰り返しを避け、毎回具体的で新鮮な表現を心がけること`;
 
 // diagramの無いテーマ(editorial-ink)用。図解の説明と文字数を差し替える。
+const VIEWER_DIRECTED_RULE =
+  '- 【最重要】聞いている人が「これは自分の話だ」と感じるように、視聴者に直接話しかける。主語は「あなた」、文末は「〜ていませんか」「〜じゃないですか」「〜ですよね」のような問いかけと言い切りにする。語り手自身の体験談(僕は〜/私は〜)は9シーン全体で多くても1シーンだけ。ほかは「誰かの話」ではなく、聞いている人の今の状況・気持ちを言い当てる\n';
+
 function pasonaFor(theme) {
+  if (isCardTheme(theme)) {
+    return PASONA_STRUCTURE
+      .replace('diagramシーンは白背景に線画アイコンを置いた図解、', 'diagramシーンは実写の上に置く番号付き解説カード(1枚につき1ポイント、最後だけ保存を促すまとめカード)、')
+      .replace(/【重要】各diagramの構成リスト[\s\S]*?\n\n/, '')
+      .replace(/- 必ずどこかで語り手自身の体験[^\n]*\n/, VIEWER_DIRECTED_RULE);
+  }
   if (theme !== 'editorial-ink') return PASONA_STRUCTURE;
   return PASONA_STRUCTURE
     .replace(
@@ -236,7 +254,7 @@ async function callGroqWithFallback(messages, maxTokens) {
 
 async function generateScenario(systemPrompt, theme) {
   const slots = slotsForTheme(theme);
-  const diagramLayouts = assignDiagramLayouts(slots.diagram.length);
+  const diagramLayouts = assignDiagramLayouts(slots.diagram.length, theme);
   const structureDoc = buildStructureDoc(diagramLayouts, slots, theme);
   const coverShape =
     slots.cover === null
@@ -312,9 +330,16 @@ async function generateScenario(systemPrompt, theme) {
         }))
         .filter((p) => p.text)
         .slice(0, layoutInfo.layout === 'iconsteps' ? 4 : layoutInfo.pointCount);
+      const diagramIdx = slots.diagram.indexOf(i);
       return {
         type: 'diagram',
         layout: layoutInfo.layout,
+        num:
+          layoutInfo.layout === 'numcard'
+            ? diagramIdx < slots.diagram.length - 1
+              ? String(diagramIdx + 1).padStart(2, '0')
+              : 'Save'
+            : undefined,
         title: String(raw.title || '').trim() || 'きょうの話',
         points,
         narration: String(raw.narration || '').trim() || '今日はこんな話をします。',
@@ -597,6 +622,7 @@ function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, 
     return {
       type: sc.type,
       layout: sc.layout,
+      num: sc.num,
       title: sc.title,
       points: sc.points,
       headline: sc.headline,

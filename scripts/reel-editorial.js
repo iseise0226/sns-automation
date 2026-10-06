@@ -14,9 +14,14 @@ const EDITORIAL_SLOTS = { cover: 0, diagram: [2, 4, 6, 8], cut: [1, 3, 5, 7] };
 // 明朝の大テロップ型: 図解なし。表紙の後ろは全部テロップのカット
 const INK_SLOTS = { cover: 0, diagram: [], cut: [1, 2, 3, 4, 5, 6, 7, 8] };
 
-const EDITORIAL_THEMES = ['editorial', 'editorial-navy', 'editorial-ink'];
+const EDITORIAL_THEMES = ['editorial', 'editorial-navy', 'editorial-ink', 'editorial-card', 'editorial-leaf'];
 function isEditorialTheme(theme) {
   return EDITORIAL_THEMES.includes(theme);
+}
+
+// 図解の代わりに「番号付き解説カード(1枚=1ポイント)」を使うテーマ
+function isCardTheme(theme) {
+  return theme === 'editorial-card' || theme === 'editorial-leaf';
 }
 
 // テーマごとのスロット配分。合計は必ずSCENE_COUNT(9)になる。
@@ -130,6 +135,7 @@ module.exports = {
   CUT_MAX_CHARS,
   slotsForTheme,
   isEditorialTheme,
+  isCardTheme,
   clampMarkedLines,
   clampVertical,
   VERTICAL_MAX,
