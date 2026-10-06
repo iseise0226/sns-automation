@@ -10,7 +10,10 @@ import {
 } from "remotion";
 import { loadFont as loadMaru } from "@remotion/google-fonts/ZenMaruGothic";
 import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
-import { EDITORIAL } from "./editorialTheme";
+import { useEditorial } from "./editorialTheme";
+import { loadFont as loadMincho } from "@remotion/google-fonts/ShipporiMincho";
+
+const { fontFamily: MINCHO } = loadMincho("normal", { weights: ["800"] });
 
 const { fontFamily: MARU } = loadMaru();
 const { fontFamily: SERIF } = loadPlayfair();
@@ -23,6 +26,7 @@ const lines = (text: string | undefined, max: number) =>
 
 // B-rollに固定のグレーディングをかける層。どの素材でも同じ色に着地させる
 const Graded: React.FC<{ video?: string; zoomTo: number }> = ({ video, zoomTo }) => {
+  const EDITORIAL = useEditorial();
   const frame = useCurrentFrame();
   const zoom = interpolate(frame, [0, 999], [1, zoomTo], { extrapolateRight: "clamp" });
   return (
@@ -50,6 +54,7 @@ export const EditorialCover: React.FC<{ video?: string; titleEn?: string[]; head
   titleEn,
   headline,
 }) => {
+  const EDITORIAL = useEditorial();
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const en = spring({ frame: frame - 6, fps, config: { damping: 200, stiffness: 100 } });
@@ -151,6 +156,7 @@ export const EditorialCut: React.FC<{ video?: string; titleEn?: string[]; headli
   titleEn,
   headline,
 }) => {
+  const EDITORIAL = useEditorial();
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const s = spring({ frame: frame - 4, fps, config: { damping: 14, stiffness: 150, mass: 0.6 } });
@@ -211,6 +217,88 @@ export const EditorialCut: React.FC<{ video?: string; titleEn?: string[]; headli
             </div>
           ))}
         </div>
+      </div>
+    </>
+  );
+};
+
+// 明朝の大テロップ(satoshi_mindset)。暗く落とした実写の上に、言い切りの一文を大きく置く。
+// 右上に縦書きの一言(内省の余白)。強調語(**…**)だけ金色。
+const renderGold = (text: string, gold: string) =>
+  text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
+    p.startsWith("**") && p.endsWith("**") ? (
+      <span key={i} style={{ color: gold }}>
+        {p.slice(2, -2)}
+      </span>
+    ) : (
+      <span key={i}>{p}</span>
+    )
+  );
+
+export const MinchoTelop: React.FC<{ video?: string; headline?: string; vertical?: string }> = ({
+  video,
+  headline,
+  vertical,
+}) => {
+  const E = useEditorial();
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const pop = spring({ frame: frame - 3, fps, config: { damping: 13, stiffness: 170, mass: 0.7 } });
+  const vert = spring({ frame: frame - 16, fps, config: { damping: 200, stiffness: 90 } });
+  const flash = interpolate(frame, [0, 4], [0.55, 0], { extrapolateRight: "clamp" });
+  const outline = "0 0 6px rgba(0,0,0,0.9), 0 0 14px rgba(0,0,0,0.65), 4px 4px 0 rgba(0,0,0,0.55)";
+  return (
+    <>
+      <Graded video={video} zoomTo={1.1} />
+      <AbsoluteFill style={{ backgroundColor: "#ffffff", opacity: flash }} />
+      {vertical ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 92,
+            top: 180,
+            height: 640,
+            writingMode: "vertical-rl",
+            fontFamily: MINCHO,
+            fontWeight: 800,
+            fontSize: 54,
+            letterSpacing: "0.32em",
+            color: "rgba(255,255,255,0.92)",
+            textShadow: outline,
+            opacity: vert,
+            transform: `translateY(${(1 - vert) * -20}px)`,
+          }}
+        >
+          {vertical}
+        </div>
+      ) : null}
+      <div
+        style={{
+          position: "absolute",
+          left: 60,
+          right: 60,
+          top: 1010,
+          textAlign: "center",
+          opacity: pop,
+          transform: `scale(${0.9 + 0.1 * pop})`,
+        }}
+      >
+        {lines(headline, 2).map((line, i) => (
+          <div
+            key={i}
+            style={{
+              fontFamily: MINCHO,
+              fontWeight: 800,
+              fontSize: 128,
+              lineHeight: 1.22,
+              color: "#ffffff",
+              textShadow: outline,
+              letterSpacing: "0.02em",
+            }}
+          >
+            {renderGold(line, E.GOLD)}
+          </div>
+        ))}
       </div>
     </>
   );

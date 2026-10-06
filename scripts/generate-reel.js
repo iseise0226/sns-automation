@@ -6,6 +6,10 @@ const https = require('https');
 const { execFileSync, spawn } = require('child_process');
 const {
   slotsForTheme,
+  isEditorialTheme,
+  clampMarkedLines,
+  VERTICAL_MAX,
+  clampVertical,
   normalizeTitleEn,
   clampLines,
   clampLineChars,
@@ -75,6 +79,14 @@ const ICON_DOC = 'person_worried(悩む人)/person_calm(穏やかな人)/clock(�
 
 // diagramスロットのlayoutと必要ポイント数を、枠数ぶん偏りなく事前に割り当てる(直前と同じlayoutは避ける)
 function assignDiagramLayouts(slotCount) {
+  // 試し撮り用: WF4_LAYOUTS="flow3:3,iconsteps:4" のように固定できる
+  if (process.env.WF4_LAYOUTS) {
+    const fixed = process.env.WF4_LAYOUTS.split(',').map((t) => {
+      const [layout, n] = t.split(':');
+      return { layout, pointCount: Number(n) };
+    });
+    if (fixed.length >= slotCount) return fixed.slice(0, slotCount);
+  }
   const options = [
     { layout: 'iconsteps', pointCount: 4 },
     { layout: 'flow3', pointCount: 3 },
@@ -97,7 +109,7 @@ function assignDiagramLayouts(slotCount) {
   return result;
 }
 
-function buildStructureDoc(diagramLayouts, slots) {
+function buildStructureDoc(diagramLayouts, slots, theme) {
   // 「フェーズ名」のような名詞ラベルを渡すとAIがそれをそのままtitleにコピーしてしまうため、
   // 必ず具体的な指示文(動詞で終わる文)にする
   const directives = [
@@ -129,13 +141,19 @@ function buildStructureDoc(diagramLayouts, slots) {
   // 帯の幅が固定なので、coverを出すテーマのときだけ字数の上限も伝える。
   // 他5アカウント(hasCover=false)の文面は1文字も変えない。
   const cutLimit = hasCover ? '。headlineは1行11字以内、2行まで' : '';
+  const inkTheme = theme === 'editorial-ink';
   const cutDocs = slots.cut
     .map(
-      (slot) =>
+      (slot) => inkTheme
+        ? `- cutシーン(scenes[${slot}]): 直前までの話を一言で言い切る大きな見出し(headline、1行8字以内・最大2行、強調したい語を**で囲むのは1箇所だけ)+縦書きで添える余韻の一言(vertical、8字以内、句読点なし、見出しの繰り返しにしない独白)+ナレーション(narration、必ず12〜22文字。体験や本音を言い切る)+実写検索キーワード(stockQuery、英語2〜4語)`
+        :
         `- cutシーン(scenes[${slot}]): ${cutLead}を一言で言い切る強い見出し(headline、改行可、**強調**1箇所)+ナレーション(narration、必ず20〜30文字。単語だけの短い一言にしない)+実写検索キーワード(stockQuery、英語2〜4語)${cutLimit}`
     )
     .join('\n');
-  return `${coverDoc}${diagramDocs}\n${cutDocs}\n\n各diagramのtitleは、上の指示内容そのもの・カテゴリ名(「導入」「まとめ」等)ではなく、そのシーンで実際に話す具体的な内容を表す8〜16字の見出し(体言止めや短い断言)にすること。`;
+  const titleNote = slots.diagram.length
+    ? '\n\n各diagramのtitleは、上の指示内容そのもの・カテゴリ名(「導入」「まとめ」等)ではなく、そのシーンで実際に話す具体的な内容を表す8〜16字の見出し(体言止めや短い断言)にすること。'
+    : '';
+  return `${coverDoc}${diagramDocs}\n${cutDocs}${titleNote}`;
 }
 
 const PASONA_STRUCTURE = `台本はscenes[0]〜scenes[8]の9シーン構成で、1つのストーリーとして繋がるように書いてください。
@@ -154,6 +172,23 @@ diagramシーンは白背景に線画アイコンを置いた図解、cutシー�
 - 教科書のような一般論だけのシーンを作らない。必ず具体的な場面・数字・固有の細部（時間帯、場所、誰の一言か等）を入れる
 - 最後のdiagramシーン(scenes[8])で、保存・フォローをやさしく促す一言を添える。「フォローしてね」という定型文をそのまま使わず、毎回違う言い回しで表現すること
 - テンプレート的な決まり文句の繰り返しを避け、毎回具体的で新鮮な表現を心がけること`;
+
+// diagramの無いテーマ(editorial-ink)用。図解の説明と文字数を差し替える。
+function pasonaFor(theme) {
+  if (theme !== 'editorial-ink') return PASONA_STRUCTURE;
+  return PASONA_STRUCTURE
+    .replace(
+      /diagramシーンは白背景に線画アイコンを置いた図解、cutシーンは実写に一言だけ乗せる4秒のハイライトです。\nアイコンに使える名前: .*\n/,
+      'scenes[0]は表紙、scenes[1]〜scenes[8]は暗く落とした実写に大きな一文を乗せ、短く言い切るテロップシーンです(図解はありません)。1シーンは3〜4秒で次へ切り替わるテンポにします。\n'
+    )
+    .replace(/【重要】各diagramの構成リスト[\s\S]*?\n\n/, '')
+    .replace('各シーンのnarration(読み上げ)は30〜45文字(diagram)/15〜25文字(cut)。', '各シーンのnarration(読み上げ)は表紙25〜40文字、それ以外は12〜22文字。')
+    .replace('最後のdiagramシーン(scenes[8])', '最後のシーン(scenes[8])')
+    .replace(
+      /- 必ずどこかで語り手自身の体験[^\n]*\n/,
+      '- 【最重要】聞いている人が「これは自分の話だ」と感じるように、視聴者に直接話しかける。主語は「あなた」、文末は「〜ていませんか」「〜じゃないですか」「〜ですよね」のような問いかけと言い切りにする。語り手自身の体験談(僕は〜)は9シーン全体で多くても1シーンだけ。ほかは「誰かの話」ではなく、聞いている人の今の状況・気持ちを言い当てる\n'
+    );
+}
 
 // Groqは1分あたりのトークン上限(TPM)が厳しく、1リクエストで約8千トークン使うため
 // 連続実行すると簡単に429になる。待って再試行し、それでもダメならOpenAIに逃がす。
@@ -202,19 +237,19 @@ async function callGroqWithFallback(messages, maxTokens) {
 async function generateScenario(systemPrompt, theme) {
   const slots = slotsForTheme(theme);
   const diagramLayouts = assignDiagramLayouts(slots.diagram.length);
-  const structureDoc = buildStructureDoc(diagramLayouts, slots);
+  const structureDoc = buildStructureDoc(diagramLayouts, slots, theme);
   const coverShape =
     slots.cover === null
       ? ''
       : `coverは{"headline":"...","title_en":["...","..."],"narration":"...","stockQuery":"..."}、`;
-  const jsonShape = `{"caption":"投稿文","scenes":[9個。${coverShape}diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"..."}、cutは{"headline":"...","narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`;
+  const jsonShape = `{"caption":"投稿文","scenes":[9個。${coverShape}diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"..."}、cutは{"headline":"...",${theme === 'editorial-ink' ? '"vertical":"...",' : ''}"narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
       content:
-        `テーマを1つ選び、${PASONA_STRUCTURE}\n\n各シーンの構成(必ずこの通りに埋めること):\n${structureDoc}\n\n` +
+        `テーマを1つ選び、${pasonaFor(theme)}\n\n各シーンの構成(必ずこの通りに埋めること):\n${structureDoc}\n\n` +
         `さらに各シーンで画面に映る解説キャラクターのポーズを次の候補から1つずつ選んでください: "default"(口パクで喋る・基本), "arms_crossed"(腕組み・問題提起), "thinking"(考える・悩み), "explaining"(説明), "pointing_left"(指差し・注目), "guts"(ガッツポーズ・励まし), "thumbs_up"(いいね・肯定), "bowing"(お辞儀・挨拶)。半分以上のシーンは"default"にして、内容に特に合う場面だけ他のポーズを使うこと。` +
         `さらに、ナレーションの内容に効果音がハマるシーンだけ、次の候補から1つ選んでください（合う場面が無いシーンはnullのままでよい。目安は9シーン中2〜3個程度）: "kakan_impact"(コツンと軽い衝撃・失敗や気づき), "cancel"(否定・やめる・キャンセル), "kira_sparkle"(キラッと閃き・良いこと), "chiin_disappointment"(チーン・がっかり・落ち込み), "don_impact"(ドンと強い決意・インパクト), "pa_switch"(パッと場面転換・切り替え), "papa_quick_switch"(テンポよく2段階の切り替え), "register_payment"(お金・購入・レジ), "small_punch"(軽いツッコミ), "kotsuzumi_japanese"(和風の間・情緒), "hyoshigi1_japanese"(拍子木・和風の場面転換1), "hyoshigi2_japanese"(拍子木・和風の場面転換2), "decide1_button"(決定・確定1), "decide2_button"(決定・確定2), "suzu1_bell"(鈴・キラキラした気づき), "suzu2_bell_ring"(鈴・お知らせ・合図)。` +
         `このscenes(diagramはtitle/narration/points/stockQuery、cutはheadline/narration/stockQuery)・ポーズ・効果音とInstagramキャプションをJSONで返してください。キャプションはPREP法（結論→理由→具体例→結論の再提示）の構成で5～8行程度で書き、最後にテーマに合ったハッシュタグを５個つけてくださいをJSONで返してください。` +
@@ -228,7 +263,10 @@ async function generateScenario(systemPrompt, theme) {
   let lastContent = '';
   const SCENARIO_ATTEMPTS = 3;
   for (let attempt = 1; attempt <= SCENARIO_ATTEMPTS; attempt++) {
-    const content = await callGroqWithFallback(messages, 5000);
+    // 試し撮り用: WF4_RAW_FILEがあればLLMを呼ばずそのJSONを台本として使う(以降の整形は本番と同じ)
+    const content = process.env.WF4_RAW_FILE
+      ? fs.readFileSync(process.env.WF4_RAW_FILE, 'utf-8')
+      : await callGroqWithFallback(messages, 5000);
     lastContent = content;
     data = {};
     try {
@@ -284,13 +322,16 @@ async function generateScenario(systemPrompt, theme) {
       };
     }
     const cutHeadline = String(raw.headline || '').trim() || 'きょうのポイント';
+    const ink = theme === 'editorial-ink';
     return {
       type: 'cut',
-      // editorialの帯は黄色ベタの強調が使えないので記号を外し、2行に収める
-      headline:
-        theme === 'editorial'
+      // editorialの帯は黄色ベタの強調が使えないので記号を外し、2行に収める。inkは金の強調を1箇所残す
+      headline: ink
+        ? clampMarkedLines(cutHeadline, 2, 10)
+        : isEditorialTheme(theme)
           ? clampLineChars(clampLines(stripEmphasis(cutHeadline), 2), CUT_MAX_CHARS)
           : cutHeadline,
+      vertical: ink ? clampVertical(raw.vertical) : undefined,
       narration: String(raw.narration || '').trim() || 'きょうのポイントです。',
       stockQuery: String(raw.stockQuery || '').trim() || 'japan lifestyle',
     };
@@ -361,7 +402,7 @@ async function listPixabayVideos(keyword) {
     const res = await req(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(keyword)}&per_page=30`, {});
     return (res.json?.hits || [])
       .map((v) => {
-        const f = (v.videos && (v.videos.medium || v.videos.small || v.videos.large)) || null;
+        const f = (v.videos && (process.env.WF4_DRYRUN ? v.videos.small || v.videos.medium || v.videos.large : v.videos.medium || v.videos.small || v.videos.large)) || null;
         if (!f || !f.url) return null;
         return { id: `pb_${v.id}`, url: f.url, duration: Number(v.duration) || 0 };
       })
@@ -377,20 +418,22 @@ async function listPixabayVideos(keyword) {
 async function fetchBrollVideos(scenes, outDir, account) {
   const ledgerDir = path.join(__dirname, '..', 'data', 'wf4_used_ids');
   const usedIdsPath = path.join(ledgerDir, `${account}.json`);
-  fs.mkdirSync(ledgerDir, { recursive: true });
+  if (!process.env.WF4_DRYRUN) fs.mkdirSync(ledgerDir, { recursive: true });
   let usedIds = [];
   try {
     usedIds = JSON.parse(fs.readFileSync(usedIdsPath, 'utf-8'));
   } catch (e) {}
-  const excludeIds = new Set(usedIds);
-  for (const f of fs.readdirSync(ledgerDir)) {
+  const excludeIds = new Set(process.env.WF4_DRYRUN ? [] : usedIds);
+  for (const f of process.env.WF4_DRYRUN ? [] : fs.readdirSync(ledgerDir)) {
     if (!f.endsWith('.json')) continue;
     try {
       for (const id of JSON.parse(fs.readFileSync(path.join(ledgerDir, f), 'utf-8'))) excludeIds.add(id);
     } catch (e) {}
   }
 
-  const fallbackPool = ['japan lifestyle', 'calm nature', 'daily life moment'];
+  const fallbackPool = process.env.WF4_DRYRUN
+    ? ['nature', 'city night', 'coffee', 'sunset', 'street', 'window', 'autumn', 'sunrise', 'rain']
+    : ['japan lifestyle', 'calm nature', 'daily life moment'];
   const videoBySlot = {};
   for (let sceneIdx = 0; sceneIdx < SCENE_COUNT; sceneIdx++) {
     const keywordChain = [scenes[sceneIdx].stockQuery, ...fallbackPool].filter(Boolean);
@@ -412,6 +455,12 @@ async function fetchBrollVideos(scenes, outDir, account) {
     const buf = await reqBinary(found.url, {});
     const p = path.join(outDir, `video${sceneIdx + 1}.mp4`);
     fs.writeFileSync(p, buf);
+    if (process.env.WF4_DRYRUN) {
+      // Remotionのフレーム取得が失敗しない形(キーフレーム密・30fps・720幅・音声なし)へ
+      const tmp = p.replace(/\.mp4$/, '_n.mp4');
+      execFileSync('ffmpeg', ['-y', '-v', 'error', '-i', p, '-t', '12', '-vf', 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280', '-r', '30', '-g', '15', '-bf', '0', '-an', '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', tmp]);
+      fs.renameSync(tmp, p);
+    }
     videoBySlot[sceneIdx] = path.basename(p);
     usedIds.push(found.id);
     excludeIds.add(found.id);
@@ -428,7 +477,7 @@ async function fetchBrollVideos(scenes, outDir, account) {
     videoBySlot[sceneIdx] = fetched[Math.floor(Math.random() * fetched.length)];
     console.warn(`[broll] scene${sceneIdx}: 取得済みの映像で埋めました`);
   }
-  fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
+  if (!process.env.WF4_DRYRUN) fs.writeFileSync(usedIdsPath, JSON.stringify(usedIds.slice(-200)), 'utf-8');
   return videoBySlot;
 }
 
@@ -544,13 +593,14 @@ function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, 
     const audioDur = audio ? getAudioDuration(audioPaths[i]) : null;
     // coverは4.5秒、cutは4秒に寄せる。diagramは音声長+図解を読む余白
     const minDuration =
-      sc.type === 'cover' ? 4.5 : sc.type === 'cut' ? 4.0 : (sc.points || []).length >= 3 ? 7.0 : 5.5;
+      sc.type === 'cover' ? 4.5 : sc.type === 'cut' ? (theme === 'editorial-ink' ? 3.2 : 4.0) : (sc.points || []).length >= 3 ? 7.0 : 5.5;
     return {
       type: sc.type,
       layout: sc.layout,
       title: sc.title,
       points: sc.points,
       headline: sc.headline,
+      vertical: sc.vertical,
       titleEn: sc.titleEn,
       narration: sc.narration || '',
       video: videoBySlot[i] || undefined,
@@ -588,7 +638,7 @@ function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, 
   const videoPath = path.join(outDir, 'video.mp4');
   execFileSync(
     'npx',
-    ['remotion', 'render', 'src/index.ts', 'MyVideo', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`],
+    ['remotion', 'render', 'src/index.ts', 'MyVideo', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`, ...(process.env.WF4_DRYRUN ? ['--concurrency=2'] : [])],
     // 実写背景12本×約1分の構成でレンダリングが重いため余裕を持たせる
     { cwd: remotionDir, timeout: 600000, shell: true, stdio: 'inherit' }
   );
@@ -733,8 +783,10 @@ async function main() {
     console.error('usage: node generate-reel.js <account>');
     process.exit(1);
   }
-  const persona = require('../data/wf4_accounts.json')[account];
-  if (!persona) throw new Error(`unknown account: ${account}`);
+  const persona = { ...require('../data/wf4_accounts.json')[account] };
+  if (!persona.igUserId) throw new Error(`unknown account: ${account}`);
+  // 試し撮り用: WF4_THEMEでテーマを上書き(本番設定ファイルは触らない)
+  if (process.env.WF4_THEME) persona.theme = process.env.WF4_THEME;
   const intervalDays = persona.intervalDays || DEFAULT_INTERVAL_DAYS;
 
   if (!process.env.WF4_FORCE && !shouldRunToday(account, intervalDays)) {
@@ -745,7 +797,7 @@ async function main() {
   await ensureVoicevoxEngine();
 
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const outDir = path.resolve('wf4_media', account, today);
+  const outDir = path.resolve(process.env.WF4_DRYRUN ? 'wf4_preview' : 'wf4_media', account, today);
   fs.mkdirSync(outDir, { recursive: true });
 
   const scenario = await generateScenario(persona.system, persona.theme);
@@ -777,6 +829,11 @@ async function main() {
     persona.theme
   );
   console.log(`[${account}] video rendered:`, videoPath);
+
+  if (process.env.WF4_DRYRUN) {
+    console.log(`[${account}] DRYRUN: 投稿せず終了。動画:`, videoPath);
+    return;
+  }
 
   // マインド系アカウントはキャプション末尾にLINE誘導を固定で追加
   const caption = persona.ctaLine ? scenario.caption + persona.ctaLine : scenario.caption;

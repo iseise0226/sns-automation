@@ -42,6 +42,7 @@ export type ChibiOverlayProps = {
   hasHalf?: boolean; // 口の半開き画像を持っているか(あかりは持っていないのでfalse)
   dim?: boolean; // 話していない側を少し暗く・小さくする(対談のターン切り替え用)
   bottom?: number; // 下端位置(px)。字幕バーの高さに合わせて呼び出し側で調整
+  center?: boolean; // trueなら画面中央に立たせる(sideは無視)
 };
 
 export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({
@@ -53,6 +54,7 @@ export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({
   hasHalf = true,
   dim = false,
   bottom = 300,
+  center = false,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -88,7 +90,7 @@ export const ChibiOverlay: React.FC<ChibiOverlayProps> = ({
       <div
         style={{
           position: "absolute",
-          [side]: 18,
+          ...(center ? { left: `calc(50% - ${width / 2}px)` } : { [side]: 18 }),
           // 下部字幕(黒帯)と重ならないように、字幕エリアの上に立たせる
           bottom,
           width,

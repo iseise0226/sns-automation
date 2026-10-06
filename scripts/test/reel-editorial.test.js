@@ -134,3 +134,33 @@ test('COVER_MAX_CHARSは10、CUT_MAX_CHARSは11', () => {
   assert.strictEqual(COVER_MAX_CHARS, 10);
   assert.strictEqual(CUT_MAX_CHARS, 11);
 });
+
+test('slotsForTheme: editorial-navyはeditorialと同じ配分', () => {
+  assert.deepStrictEqual(slotsForTheme('editorial-navy'), slotsForTheme('editorial'));
+});
+
+test('slotsForTheme: editorial-inkは表紙+カット8枠で図解なし・合計9', () => {
+  const s = slotsForTheme('editorial-ink');
+  assert.strictEqual(s.cover, 0);
+  assert.deepStrictEqual(s.diagram, []);
+  assert.deepStrictEqual(s.cut, [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.strictEqual(s.diagram.length + s.cut.length + 1, 9);
+});
+
+test('clampMarkedLines: 強調を1箇所残して2行・字数に収める', () => {
+  const { clampMarkedLines } = require('../reel-editorial');
+  assert.strictEqual(clampMarkedLines('頑張りすぎは\n**才能**の裏返し\n三行目', 2, 10), '頑張りすぎは\n才能の裏返し'.replace('才能', '**才能**'));
+  assert.strictEqual(clampMarkedLines('あいうえおかきくけこさしすせそ', 2, 10), 'あいうえおかきくけこ');
+});
+
+test('clampMarkedLines: 強調語が切り捨てられたら強調は外す', () => {
+  const { clampMarkedLines } = require('../reel-editorial');
+  assert.strictEqual(clampMarkedLines('あいうえおかきくけこ**さし**', 2, 10), 'あいうえおかきくけこ');
+});
+
+test('clampVertical: 句読点と改行を除き8字に収める', () => {
+  const { clampVertical, VERTICAL_MAX } = require('../reel-editorial');
+  assert.strictEqual(VERTICAL_MAX, 8);
+  assert.strictEqual(clampVertical('静かに、\n整える時間を。'), '静かに整える時間');
+  assert.strictEqual(clampVertical(undefined), '');
+});

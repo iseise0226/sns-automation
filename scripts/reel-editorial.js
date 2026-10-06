@@ -7,14 +7,43 @@ const TITLE_EN_MAX = 12;
 const COVER_MAX_CHARS = 10;
 const CUT_MAX_CHARS = 11;
 
+const VERTICAL_MAX = 8;
+
 const DEFAULT_SLOTS = { cover: null, diagram: [0, 2, 4, 6, 8], cut: [1, 3, 5, 7] };
 const EDITORIAL_SLOTS = { cover: 0, diagram: [2, 4, 6, 8], cut: [1, 3, 5, 7] };
+// 明朝の大テロップ型: 図解なし。表紙の後ろは全部テロップのカット
+const INK_SLOTS = { cover: 0, diagram: [], cut: [1, 2, 3, 4, 5, 6, 7, 8] };
+
+const EDITORIAL_THEMES = ['editorial', 'editorial-navy', 'editorial-ink'];
+function isEditorialTheme(theme) {
+  return EDITORIAL_THEMES.includes(theme);
+}
 
 // テーマごとのスロット配分。合計は必ずSCENE_COUNT(9)になる。
 // 呼び出し側が配列を壊しても定数に影響しないよう毎回コピーを返す。
 function slotsForTheme(theme) {
-  const s = theme === 'editorial' ? EDITORIAL_SLOTS : DEFAULT_SLOTS;
+  const s = theme === 'editorial-ink' ? INK_SLOTS : isEditorialTheme(theme) ? EDITORIAL_SLOTS : DEFAULT_SLOTS;
   return { cover: s.cover, diagram: [...s.diagram], cut: [...s.cut] };
+}
+
+// 強調(**…**)は最初の1箇所だけ残し、行数・1行の字数に収める。収めた結果に強調語が残らなければ強調は捨てる。
+function clampMarkedLines(text, maxLines, maxChars) {
+  const raw = String(text || '');
+  const m = raw.match(/\*\*([^*]+)\*\*/);
+  const plain = String(stripEmphasis(raw))
+    .split('\n')
+    .slice(0, maxLines)
+    .map((line) => line.slice(0, maxChars))
+    .join('\n');
+  if (!m || !plain.includes(m[1])) return plain;
+  return plain.replace(m[1], `**${m[1]}**`);
+}
+
+// 縦書きの一言。句読点・改行・強調記号を除いて字数に収める。
+function clampVertical(v) {
+  return String(v == null ? '' : v)
+    .replace(/[\s\n*、。，．,.!！?？]/g, '')
+    .slice(0, VERTICAL_MAX);
 }
 
 // 表紙の英語2行の予備。AIが構造を外したときに必ずここへ落ちる。
@@ -100,6 +129,10 @@ module.exports = {
   COVER_MAX_CHARS,
   CUT_MAX_CHARS,
   slotsForTheme,
+  isEditorialTheme,
+  clampMarkedLines,
+  clampVertical,
+  VERTICAL_MAX,
   buildFallbackTitleEn,
   normalizeTitleEn,
   clampLines,

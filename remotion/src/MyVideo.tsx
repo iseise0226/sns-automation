@@ -13,8 +13,8 @@ import {
 import { loadFont as loadMaru } from "@remotion/google-fonts/ZenMaruGothic";
 import { ChibiOverlay, ChibiPose } from "./ChibiOverlay";
 import { LineIcon } from "./LineIcons";
-import { paletteVars } from "./editorialTheme";
-import { EditorialCover, EditorialCut } from "./EditorialScenes";
+import { paletteVars, isEditorialTheme, editorialFor, EditorialContext } from "./editorialTheme";
+import { EditorialCover, EditorialCut, MinchoTelop } from "./EditorialScenes";
 
 // YouTube(RichSlideVideo.tsx)と同じデザイン言語に統一(2026-07-25)。
 // 白背景=線画アイコンの図解3種(flow3/iconsteps/reject)、実写=4秒のcut、で交互に見せる。
@@ -41,6 +41,7 @@ export type Scene = {
   title?: string; // diagram型の大見出し(**強調**可)
   points?: Point[]; // diagram型の中身
   headline?: string; // cut/cover型の大きな一文(**強調**可)
+  vertical?: string; // editorial-inkのcutだけ。右上に縦書きで出す一言
   titleEn?: string[]; // cover/cut型の英語2行(editorialテーマのみ)
   narration: string; // 字幕バーの文言(=音声原稿)
   video?: string; // 実写(public相対)
@@ -542,7 +543,8 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
   const subOpacity = interpolate(frame, [10, 18], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const editorial = theme === "editorial";
+  const editorial = isEditorialTheme(theme);
+  const telop = theme === "editorial-ink";
   const onPhoto = scene.type === "cut" || scene.type === "cover";
 
   return (
@@ -556,7 +558,12 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
           <CaptionBar text={scene.narration} opacity={subOpacity} />
         </>
       ) : scene.type === "cut" ? (
-        editorial ? (
+        telop ? (
+          <>
+            <MinchoTelop video={scene.video} headline={scene.headline} vertical={scene.vertical} />
+            <CaptionBar text={scene.narration} opacity={subOpacity} />
+          </>
+        ) : editorial ? (
           <>
             <EditorialCut video={scene.video} titleEn={scene.titleEn} headline={scene.headline} />
             <CaptionBar text={scene.narration} opacity={subOpacity} />
@@ -568,7 +575,20 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
         <DiagramSceneView scene={scene} frame={frame} fps={fps} subOpacity={subOpacity} />
       )}
 
-      {chibi && scene.audio ? <ChibiOverlay audioSrc={scene.audio} pose={scene.pose as ChibiPose | undefined} /> : null}
+      {chibi && scene.audio ? (
+        telop ? (
+          // 明朝テロップ型: 文字(下)と縦書き(右上)に重ならない画面中央やや上に大きく立たせる。表紙は箱の上
+          <ChibiOverlay
+            audioSrc={scene.audio}
+            pose={scene.pose as ChibiPose | undefined}
+            center
+            size={scene.type === "cover" ? 480 : 800}
+            bottom={scene.type === "cover" ? 1400 : 1010}
+          />
+        ) : (
+          <ChibiOverlay audioSrc={scene.audio} pose={scene.pose as ChibiPose | undefined} />
+        )
+      ) : null}
     </AbsoluteFill>
   );
 };
@@ -587,9 +607,11 @@ export const MyVideo: React.FC<Props> = ({ scenes, chibi, theme }) => {
   });
 
   return (
-    <AbsoluteFill style={{ backgroundColor: PAPER, ...paletteVars(theme) }}>
-      <Audio src={staticFile("bgm.mp3")} loop volume={0.12} />
-      {items}
-    </AbsoluteFill>
+    <EditorialContext.Provider value={editorialFor(theme)}>
+      <AbsoluteFill style={{ backgroundColor: PAPER, ...paletteVars(theme) }}>
+        <Audio src={staticFile("bgm.mp3")} loop volume={0.12} />
+        {items}
+      </AbsoluteFill>
+    </EditorialContext.Provider>
   );
 };
