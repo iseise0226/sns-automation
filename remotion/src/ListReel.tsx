@@ -158,7 +158,7 @@ export const ListReel: React.FC<ListReelProps> = ({ title, label, items, footer,
       <AbsoluteFill
         style={{
           background:
-            "linear-gradient(180deg, rgba(10,14,30,0.22) 0%, rgba(10,14,30,0.49) 50%, rgba(10,14,30,0.22) 100%)",
+            "linear-gradient(180deg, rgba(10,14,30,0.3) 0%, rgba(10,14,30,0.56) 50%, rgba(10,14,30,0.3) 100%)",
         }}
       />
       <Sequence durationInFrames={slide}>

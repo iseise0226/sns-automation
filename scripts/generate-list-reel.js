@@ -28,6 +28,24 @@ const MOODS = {
   あたたか: 'ぬくもり。感謝・自分を認める・人とのつながりの話',
 };
 
+// 背景はAIに自由に選ばせると、葦や木の葉のような細かく明るい映像で文字が読めなくなる(2026-10-08の試し撮り)。
+// 文字が乗せやすい「広くて模様の少ない景色」の検索語を雰囲気ごとに決めておき、ここから選ぶ。
+const BG_QUERIES = {
+  穏やか: ['calm sea horizon', 'quiet lake mist', 'sky clouds slow', 'calm ocean waves sunset', 'mountain lake still water'],
+  切ない: ['rain on window', 'grey sea waves', 'cloudy sky timelapse', 'foggy lake', 'rainy street night bokeh'],
+  前向き: ['sunrise sky clouds', 'sunrise ocean', 'morning sky timelapse', 'sun rays clouds', 'golden hour sea'],
+  夜: ['night city lights bokeh', 'moon night sky clouds', 'night sea moonlight', 'starry night sky', 'rain window night'],
+  あたたか: ['sunset ocean waves', 'golden sunset sky', 'candle light dark', 'warm sunset lake', 'evening sky orange'],
+};
+
+// 毎回同じ切り口にならないよう、話題の方向をコード側で1つ選んで渡す
+const TOPIC_SEEDS = [
+  '休み方・休めない', 'お金や売上の不安', '自信をなくしたとき', '人と比べてしまう', '決断できない・迷い',
+  '眠れない夜・考えすぎ', '50代からの生き方・年齢の焦り', '手放す・やめる勇気', '自分を責めるくせ', '頑張りすぎ・無理の限界',
+  '家族との時間・後悔', 'お客様や人間関係の疲れ', '本当は変わりたい', '心が回復してきたサイン', '言われて救われた言葉',
+  '孤独・ひとりで決める重さ', 'がんばっている人ほど陥るくせ', 'うまくいかない時期の過ごし方',
+];
+
 function req(url, options = {}, body) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -98,36 +116,47 @@ function readJson(p, fallback) {
   }
 }
 
-const SAMPLE = {
+// 2026-10-08にユーザーが承認した試作の台本。AIへの「良い例」として渡す
+const GOOD_EXAMPLE = {
   title: ['知っておきたい', 'ひとりで抱えすぎている人の', '5つのサイン'],
   label: 'ひとりで抱えすぎている人の5つのサイン',
   items: [
-    {
-      text: '休みの日も仕事のことを考えている',
-      short: '頭が休めていないと、疲れは抜けません',
-      head: ['休みの日も', '仕事のことを考えている'],
-      body: ['体を休めても、', '頭が働き続けていると', '疲れは抜けません。', '「何もしない時間」も', '大事な仕事のひとつです。'],
-    },
+    { text: '休みの日も仕事のことを考えている', short: '頭が休めていないと、疲れは抜けません', head: ['休みの日も', '仕事のことを考えている'], body: ['体を休めても、', '頭が働き続けていると', '疲れは抜けません。', '「何もしない時間」も', '大事な仕事のひとつです。'] },
+    { text: '「大丈夫」が口ぐせになっている', short: '本当は誰かに気づいてほしいサインかも', head: ['「大丈夫」が', '口ぐせになっている'], body: ['本当は誰かに', '気づいてほしい', 'サインかもしれません。', '「大丈夫じゃない」と', '言えるのも強さです。'] },
+    { text: '頼むより自分でやる方が早いと思う', short: '早さと引き換えに、心の余白を削っています', head: ['頼むより', '自分でやる方が早いと思う'], body: ['たしかに早いかもしれません。', 'でもその早さと引き換えに、', '心の余白を', '少しずつ削っています。'] },
+    { text: '小さなミスで自分を責めてしまう', short: 'それだけ真剣に向き合ってきた証拠です', head: ['小さなミスで', '自分を責めてしまう'], body: ['それだけ真剣に', '向き合ってきた証拠です。', '責める前に、', '「よくやってるよ」と', '声をかけてあげてください。'] },
+    { text: '弱音を吐ける相手が思い浮かばない', short: '話すだけで、心は半分軽くなります', head: ['弱音を吐ける相手が', '思い浮かばない'], body: ['話すだけで、', '心は半分軽くなります。', 'ひとりで抱えなくていい。', 'そのために、', '僕はここにいます。'] },
   ],
 };
 
-function buildPrompt(pastTitles) {
+function buildPrompt(pastTitles, topicSeed) {
   const moodDoc = Object.entries(MOODS)
     .map(([k, v]) => `${k}(${v})`)
     .join(' / ');
   return `インスタのリール用に「長押しして止めて読む」リスト型の台本を1本作ってください。
+今回の話題の方向: 「${topicSeed}」
 
 【形式】
-- 一覧の1枚目: タイトル3行(1行目は「知っておきたい」「実は多い」「気づいてほしい」など短い前置き、2行目が誰の話か、3行目が「5つのサイン」「5つの習慣」「5つの言葉」など)。
-- 続けて${ITEM_COUNT}項目を1枚ずつ解説する。
-- 各項目: text(一覧に出す1行・16字以内)、short(一覧で項目の下に出す一言・19字以内)、head(解説スライドの見出し。textを自然な位置で1〜2行に分けたもの。1行12字以内)、body(解説の本文。3〜5行、1行14字以内、句読点で自然に改行。読んだ人の心が少し軽くなる言葉で締める)。
-- 最後の項目のbodyは「ひとりで抱えなくていい」のように、相談してもいいと思える一言で終える(売り込みはしない)。
+- title: 一覧の1枚目のタイトル3行。1行目は短い前置き(「知っておきたい」「実は多い」「気づいてほしい」「覚えておいてほしい」など)、2行目が誰の・何の話か、3行目が「5つのサイン」「5つの習慣」「5つの言葉」「5つのこと」など。
 - label: 解説スライドの上に小さく出す見出し(タイトル2行目+3行目をつなげたもの、22字以内)。
+- items: ちょうど${ITEM_COUNT}個。各項目は次の4つ:
+  - text: 一覧に出す1行。読んだ人が「自分のことだ」と思う具体的な場面や行動を、文として自然な日本語で(16字以内)。
+  - short: 一覧で項目の下に出す一言(19字以内)。textの言い換えではなく、意味づけや気づきを書く。
+  - head: 解説スライドの見出し。textを意味の切れ目で1〜2行に分けたもの(1行12字以内)。
+  - body: 解説の本文。2文でできた文章を、意味の切れ目で4〜5行に分けたもの(1行14字以内)。
+    1文目で「なぜそうなるのか」を受け止め(責めない)、2文目で心が少し軽くなる見方や許しを伝える。
+    行は文の途中で区切るだけで、体言止めの箇条書きや、行ごとにバラバラの短文にしない。
+- 最後の項目のbodyは、ひとりで抱えなくていい・誰かに話していい、と思える一言で終える(売り込みはしない)。
 
-【中身】
-- 読む人は40〜50代の経営者・個人事業主・ひとりで頑張っている人。自分ごととして「当てはまる」と思える具体的な場面を書く。
-- 上から教えず、同じ経験をしてきた人として寄り添う語り口。語り手(僕)の話は入れない。
-- 下の「最近使ったタイトル」とテーマがかぶらないこと。
+【良い例(この質を目指す。言い回しは真似しない)】
+${JSON.stringify(GOOD_EXAMPLE)}
+
+【中身のルール】
+- 読む人は40〜50代の経営者・個人事業主・ひとりで頑張っている人。
+- 上から教えず、同じ経験をしてきた人として寄り添う。「〜しよう」「〜すべき」の指示や説教はしない。
+- 語り手(僕)の話は入れない。部下・スタッフ・社員の話は出さない(ひとりでやっている人向け)。
+- 文法の誤り(助詞の抜けや「〜を感じる」の取り違えなど)がないか、出す前に1行ずつ読み直す。
+- 下の「最近使ったタイトル」と話題がかぶらないこと。
 
 【投稿文 caption】
 - 1行目は「当てはまるものはありましたか？」など問いかけ。
@@ -135,15 +164,13 @@ function buildPrompt(pastTitles) {
 - 本文のあと「⸻」の行、その下に「今日のリール投稿は」とタイトル3行を…で囲んで載せ、最後にハッシュタグ3つ(#自己啓発 を含む)。
 - LINEやプロフィールへの誘導文は書かない(あとで自動で付け足す)。
 
-【背景と曲】
-- mood: 内容に合う曲の雰囲気を次から1つ: ${moodDoc}
-- stockQuery: 背景の縦動画をPexelsで探す英語キーワード(3〜4語)。人物の顔が映らない、文字が読める落ち着いた風景にする(例: "sunset ocean waves", "rain on window night", "morning forest light", "quiet lake mist", "city lights night bokeh")。内容とmoodに合わせて毎回変える。
+【曲の雰囲気】
+- mood: 内容に合うものを次から1つ: ${moodDoc}
 
 【最近使ったタイトル(かぶらないこと)】
 ${pastTitles.length ? pastTitles.map((t) => '- ' + t).join('\n') : '- (なし)'}
 
-JSONだけを返す: {"title":["..","..",".."],"label":"..","items":[{"text":"..","short":"..","head":[".."],"body":[".."]}],"caption":"..","mood":"..","stockQuery":".."}
-itemsはちょうど${ITEM_COUNT}個。例(1項目ぶん): ${JSON.stringify(SAMPLE)}`;
+JSONだけを返す: {"title":["..","..",".."],"label":"..","items":[{"text":"..","short":"..","head":[".."],"body":[".."]}],"caption":"..","mood":".."}`;
 }
 
 const strs = (v) => (Array.isArray(v) ? v : [v]).map((s) => String(s || '').trim()).filter(Boolean);
@@ -166,11 +193,14 @@ function validate(d) {
   });
   if (!String(d.caption || '').trim()) errs.push('captionがない');
   if (!MOODS[d.mood]) d.mood = '穏やか';
-  d.stockQuery = String(d.stockQuery || '').trim() || 'calm ocean sunset';
+  const qs = BG_QUERIES[d.mood];
+  d.stockQuery = qs[Math.floor(Math.random() * qs.length)];
+  if (/部下|スタッフ|社員|従業員/.test(JSON.stringify(d.items))) errs.push('部下・スタッフの話が入っている');
   return errs;
 }
 
 async function generateScript(systemPrompt, pastTitles) {
+  const topicSeed = TOPIC_SEEDS[Math.floor(Math.random() * TOPIC_SEEDS.length)];
   if (process.env.WF4_RAW_FILE) {
     const d = JSON.parse(fs.readFileSync(process.env.WF4_RAW_FILE, 'utf-8'));
     const errs = validate(d);
@@ -179,10 +209,10 @@ async function generateScript(systemPrompt, pastTitles) {
   }
   const messages = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: buildPrompt(pastTitles) },
+    { role: 'user', content: buildPrompt(pastTitles, topicSeed) },
   ];
   let lastErrs = [];
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     let d;
     try {
       d = JSON.parse(await callLLM(messages, 4000));
@@ -191,8 +221,9 @@ async function generateScript(systemPrompt, pastTitles) {
       continue;
     }
     lastErrs = validate(d);
+    d.topicSeed = topicSeed;
     if (!lastErrs.length) return d;
-    console.error(`台本が不正(${attempt}/2): ${lastErrs.join(' / ')}`);
+    console.error(`台本が不正(${attempt}/3): ${lastErrs.join(' / ')}`);
   }
   throw new Error('台本を生成できませんでした: ' + lastErrs.join(' / '));
 }
@@ -207,7 +238,7 @@ async function fetchBackground(query, account, outDir) {
   }
   const key = (process.env.PEXELS_API_KEY || '').trim();
   if (!key) throw new Error('PEXELS_API_KEYが未設定です');
-  for (const q of [query, 'sunset ocean waves', 'calm lake nature', 'night city lights']) {
+  for (const q of [query, 'calm sea horizon', 'sunset ocean waves', 'night city lights bokeh']) {
     const res = await req(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=30&orientation=portrait`, {
       headers: { Authorization: key },
     });
@@ -271,7 +302,7 @@ function render(script, outDir) {
   const propsPath = path.join(outDir, 'list_props.json');
   fs.writeFileSync(propsPath, JSON.stringify(props), 'utf-8');
   const videoPath = path.join(outDir, 'video.mp4');
-  execFileSync('npx', ['remotion', 'render', 'src/index.ts', 'ListReel', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`, '--crf=20', ...(DRYRUN ? ['--concurrency=2'] : [])], {
+  execFileSync('npx', ['remotion', 'render', 'src/index.ts', 'ListReel', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`, '--crf=23', ...(DRYRUN ? ['--concurrency=2'] : [])], {
     cwd: REMOTION_DIR,
     timeout: 600000,
     shell: true,
@@ -367,7 +398,7 @@ async function main() {
   const historyPath = path.join(TOPICS_DIR, `${account}.json`);
   const history = readJson(historyPath, []);
   const script = await generateScript(persona.system, history.slice(-40).map((h) => h.title));
-  console.log(`[${account}] title: ${script.title.join(' / ')} | mood: ${script.mood} | bg: ${script.stockQuery}`);
+  console.log(`[${account}] seed: ${script.topicSeed} | title: ${script.title.join(' / ')} | mood: ${script.mood} | bg: ${script.stockQuery}`);
   script.items.forEach((it, i) => console.log(`  ${i + 1}. ${it.text}`));
   fs.writeFileSync(path.join(outDir, 'script.json'), JSON.stringify(script, null, 2), 'utf-8');
 
