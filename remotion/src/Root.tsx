@@ -6,6 +6,7 @@ import { Thumbnail } from "./Thumbnail";
 import { TalkingChibi } from "./TalkingChibi";
 import { TaidanReel } from "./TaidanReel";
 import { EditorialCover, EditorialCut } from "./EditorialScenes";
+import { ListReel, listReelDuration } from "./ListReel";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -157,6 +158,22 @@ export const RemotionRoot: React.FC = () => {
         titleEn: ["Winter Night", "Skin Routine"],
         headline: "化粧水は\n重ねなくていい",
       }}
+    />
+    <Composition
+      id="ListReel"
+      component={ListReel}
+      durationInFrames={900}
+      fps={30}
+      width={1080}
+      height={1920}
+      defaultProps={{
+        title: ["知っておきたい", "サンプル", "5つのサイン"],
+        label: "サンプルの5つのサイン",
+        items: [{ text: "サンプル", short: "サンプル", head: ["サンプル"], body: ["サンプル"] }],
+        video: "bg.mp4",
+        bgm: "bgm.mp3",
+      }}
+      calculateMetadata={({ props }) => ({ durationInFrames: listReelDuration(props, 30) })}
     />
     </>
   );

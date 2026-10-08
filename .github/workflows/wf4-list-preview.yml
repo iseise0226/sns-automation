@@ -1,0 +1,49 @@
+name: WF4 List Reel preview (投稿しない試し撮り)
+
+# 「長押しして読む」リスト解説リールを、本番と同じ環境・AI台本で1本だけ作り、投稿せずにArtifactへ置く
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: "アカウント"
+        required: false
+        default: "satoshi_mindset"
+      count:
+        description: "何本作るか(1〜3)"
+        required: false
+        default: "1"
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Remotion dependencies
+        working-directory: remotion
+        run: npm install
+      - name: Ensure Remotion's headless Chromium is installed
+        working-directory: remotion
+        run: npx remotion browser ensure
+      - name: Generate (dry run)
+        env:
+          WF4_DRYRUN: "1"
+          WF4_FORCE: "1"
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          for i in $(seq 1 ${{ github.event.inputs.count }}); do
+            node scripts/generate-list-reel.js ${{ github.event.inputs.account }}
+            d=wf4_preview/${{ github.event.inputs.account }}/$(date -u +%Y%m%d)
+            mkdir -p out/$i && cp $d/video.mp4 $d/caption.txt $d/script.json out/$i/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: list-reel-preview
+          path: out
+          retention-days: 7
