@@ -56,6 +56,22 @@ const NAVY: EditorialValues = {
 };
 
 // 算命学(satoshi_mindset)向け。暗く落として明朝の大きなテロップを際立たせる
+const WARM: EditorialValues = {
+  filter: "saturate(0.95) contrast(1.02) brightness(0.95)",
+  warm: "rgba(60,30,10,0.18)",
+  topFade: "linear-gradient(180deg, rgba(40,20,8,0.38) 0%, rgba(40,20,8,0) 40%)",
+  bottomFade: "linear-gradient(180deg, rgba(40,20,8,0) 45%, rgba(40,20,8,0.5) 100%)",
+  TERRA: "#c0623f",
+  GOLD: "#ffe3a6",
+  LINE: "rgba(255,255,255,0.85)",
+  CREAM: "#fbf1e4",
+  CREAM_VEIL: "rgba(251,241,228,0.72)",
+  WARM_INK: "#3a2218",
+  WARM_RED: "#d9784f",
+  WARM_RED_TEXT: "#a84a28",
+  GOLD_SOLID: "#f2c97a",
+};
+
 const INK: EditorialValues = {
   filter: "saturate(0.85) contrast(1.04) brightness(0.92)",
   warm: "rgba(24,18,40,0.22)",
@@ -89,7 +105,7 @@ const LEAF: EditorialValues = {
   GOLD_SOLID: "#e8d479",
 };
 
-export type EditorialThemeName = "editorial" | "editorial-navy" | "editorial-ink" | "editorial-card" | "editorial-leaf";
+export type EditorialThemeName = "editorial" | "editorial-navy" | "editorial-ink" | "editorial-card" | "editorial-leaf" | "editorial-warm";
 
 export const EDITORIAL_VARIANTS: Record<EditorialThemeName, EditorialValues> = {
   editorial: EDITORIAL,
@@ -97,6 +113,7 @@ export const EDITORIAL_VARIANTS: Record<EditorialThemeName, EditorialValues> = {
   "editorial-ink": INK,
   "editorial-card": EDITORIAL,
   "editorial-leaf": LEAF,
+  "editorial-warm": WARM,
 };
 
 export const isEditorialTheme = (theme?: string): theme is EditorialThemeName =>
@@ -151,6 +168,7 @@ export const PALETTES: Record<PaletteName, Palette> = {
   "editorial-ink": paletteOf(INK),
   "editorial-card": paletteOf(EDITORIAL),
   "editorial-leaf": paletteOf(LEAF),
+  "editorial-warm": paletteOf(WARM),
 };
 
 // MyVideoのルートに流し込むCSS変数。子孫の var(--ink) 等がこれを拾う。

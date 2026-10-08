@@ -545,7 +545,7 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
   );
   const subOpacity = interpolate(frame, [10, 18], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const editorial = isEditorialTheme(theme);
-  const telop = theme === "editorial-ink";
+  const telop = theme === "editorial-ink" || theme === "editorial-warm";
   const numcard = scene.type === "diagram" && scene.layout === "numcard";
   const onPhoto = scene.type === "cut" || scene.type === "cover" || numcard;
 
@@ -603,7 +603,7 @@ const SceneView: React.FC<{ scene: Scene; durationInFrames: number; chibi?: bool
           <ChibiOverlay
             audioSrc={scene.audio}
             pose={scene.pose as ChibiPose | undefined}
-            {...(theme === "editorial-leaf" ? { size: 580 } : {})}
+            {...(theme === "editorial-leaf" ? { size: 580 } : theme === "editorial-navy" ? { size: 500 } : {})}
           />
         )
       ) : null}

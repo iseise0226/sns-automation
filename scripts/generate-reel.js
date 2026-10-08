@@ -8,6 +8,7 @@ const {
   slotsForTheme,
   isEditorialTheme,
   isCardTheme,
+  isTelopTheme,
   clampMarkedLines,
   VERTICAL_MAX,
   clampVertical,
@@ -150,7 +151,7 @@ function buildStructureDoc(diagramLayouts, slots, theme) {
   // 帯の幅が固定なので、coverを出すテーマのときだけ字数の上限も伝える。
   // 他5アカウント(hasCover=false)の文面は1文字も変えない。
   const cutLimit = hasCover ? '。headlineは1行11字以内、2行まで' : '';
-  const inkTheme = theme === 'editorial-ink';
+  const inkTheme = isTelopTheme(theme);
   const cutDocs = slots.cut
     .map(
       (slot) => inkTheme
@@ -193,7 +194,7 @@ function pasonaFor(theme) {
       .replace(/【重要】各diagramの構成リスト[\s\S]*?\n\n/, '')
       .replace(/- 必ずどこかで語り手自身の体験[^\n]*\n/, VIEWER_DIRECTED_RULE);
   }
-  if (theme !== 'editorial-ink') return PASONA_STRUCTURE;
+  if (!isTelopTheme(theme)) return PASONA_STRUCTURE;
   return PASONA_STRUCTURE
     .replace(
       /diagramシーンは白背景に線画アイコンを置いた図解、cutシーンは実写に一言だけ乗せる4秒のハイライトです。\nアイコンに使える名前: .*\n/,
@@ -260,7 +261,7 @@ async function generateScenario(systemPrompt, theme) {
     slots.cover === null
       ? ''
       : `coverは{"headline":"...","title_en":["...","..."],"narration":"...","stockQuery":"..."}、`;
-  const jsonShape = `{"caption":"投稿文","scenes":[9個。${coverShape}diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"..."}、cutは{"headline":"...",${theme === 'editorial-ink' ? '"vertical":"...",' : ''}"narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`;
+  const jsonShape = `{"caption":"投稿文","scenes":[9個。${coverShape}diagramは{"title":"...","narration":"...","points":[{"text":"...","icon":"...","note":"..."(任意)}],"stockQuery":"..."}、cutは{"headline":"...",${isTelopTheme(theme) ? '"vertical":"...",' : ''}"narration":"...","stockQuery":"..."}],"chibi_poses":[9個の文字列],"se":[9個の「文字列またはnull」]}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -347,7 +348,7 @@ async function generateScenario(systemPrompt, theme) {
       };
     }
     const cutHeadline = String(raw.headline || '').trim() || 'きょうのポイント';
-    const ink = theme === 'editorial-ink';
+    const ink = isTelopTheme(theme);
     return {
       type: 'cut',
       // editorialの帯は黄色ベタの強調が使えないので記号を外し、2行に収める。inkは金の強調を1箇所残す
@@ -612,13 +613,26 @@ function getAudioDuration(audioPath) {
 }
 
 // scenario.scenes(diagram/cut混在) + 実写 + 音声から、MyVideo.tsxのScene配列を組み立てる
-function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, chibiPoses, seChoices, theme) {
+// アカウントごとの曲の雰囲気(bgmMoods)から1曲選ぶ。フォルダは remotion/assets/bgm_list/<雰囲気>/。
+// 未設定・曲が無い時は従来の共通 bgm.mp3 に戻る。
+function pickMoodBgm(moods) {
+  const root = path.join(__dirname, '..', 'remotion', 'assets', 'bgm_list');
+  const files = [];
+  for (const m of moods || []) {
+    const dir = path.join(root, m);
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir)) if (f.endsWith('.mp3')) files.push(path.join(dir, f));
+  }
+  return files.length ? files[Math.floor(Math.random() * files.length)] : null;
+}
+
+function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, chibiPoses, seChoices, theme, bgmMoods) {
   const scenes = scenarioScenes.map((sc, i) => {
     const audio = audioPaths[i] && fs.existsSync(audioPaths[i]) ? path.basename(audioPaths[i]) : '';
     const audioDur = audio ? getAudioDuration(audioPaths[i]) : null;
     // coverは4.5秒、cutは4秒に寄せる。diagramは音声長+図解を読む余白
     const minDuration =
-      sc.type === 'cover' ? 4.5 : sc.type === 'cut' ? (theme === 'editorial-ink' ? 3.2 : 4.0) : (sc.points || []).length >= 3 ? 7.0 : 5.5;
+      sc.type === 'cover' ? 4.5 : sc.type === 'cut' ? (isTelopTheme(theme) ? 3.2 : 4.0) : (sc.points || []).length >= 3 ? 7.0 : 5.5;
     return {
       type: sc.type,
       layout: sc.layout,
@@ -641,7 +655,9 @@ function renderVideo(scenarioScenes, videoBySlot, audioPaths, outDir, useChibi, 
 
   const remotionDir = path.join(__dirname, '..', 'remotion');
   // public-dirが実行ごとのoutDirになるため、BGM・効果音ファイルもここにコピーしておく
-  fs.copyFileSync(path.join(remotionDir, 'assets', 'bgm.mp3'), path.join(outDir, 'bgm.mp3'));
+  const moodBgm = pickMoodBgm(bgmMoods);
+  if (moodBgm) console.log(`bgm: ${path.basename(path.dirname(moodBgm))}/${path.basename(moodBgm)}`);
+  fs.copyFileSync(moodBgm || path.join(remotionDir, 'assets', 'bgm.mp3'), path.join(outDir, 'bgm.mp3'));
   const seSrc = path.join(remotionDir, 'assets', 'se');
   const seDst = path.join(outDir, 'se');
   fs.mkdirSync(seDst, { recursive: true });
@@ -852,7 +868,8 @@ async function main() {
     persona.chibi,
     scenario.chibiPoses,
     scenario.seChoices,
-    persona.theme
+    persona.theme,
+    persona.bgmMoods
   );
   console.log(`[${account}] video rendered:`, videoPath);
 

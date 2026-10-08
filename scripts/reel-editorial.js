@@ -14,12 +14,17 @@ const EDITORIAL_SLOTS = { cover: 0, diagram: [2, 4, 6, 8], cut: [1, 3, 5, 7] };
 // 明朝の大テロップ型: 図解なし。表紙の後ろは全部テロップのカット
 const INK_SLOTS = { cover: 0, diagram: [], cut: [1, 2, 3, 4, 5, 6, 7, 8] };
 
-const EDITORIAL_THEMES = ['editorial', 'editorial-navy', 'editorial-ink', 'editorial-card', 'editorial-leaf'];
+const EDITORIAL_THEMES = ['editorial', 'editorial-navy', 'editorial-ink', 'editorial-card', 'editorial-leaf', 'editorial-warm'];
 function isEditorialTheme(theme) {
   return EDITORIAL_THEMES.includes(theme);
 }
 
 // 図解の代わりに「番号付き解説カード(1枚=1ポイント)」を使うテーマ
+// 明朝の大テロップ型(図解なし)を使うテーマ
+function isTelopTheme(theme) {
+  return theme === 'editorial-ink' || theme === 'editorial-warm';
+}
+
 function isCardTheme(theme) {
   return theme === 'editorial-card' || theme === 'editorial-leaf';
 }
@@ -27,7 +32,7 @@ function isCardTheme(theme) {
 // テーマごとのスロット配分。合計は必ずSCENE_COUNT(9)になる。
 // 呼び出し側が配列を壊しても定数に影響しないよう毎回コピーを返す。
 function slotsForTheme(theme) {
-  const s = theme === 'editorial-ink' ? INK_SLOTS : isEditorialTheme(theme) ? EDITORIAL_SLOTS : DEFAULT_SLOTS;
+  const s = isTelopTheme(theme) ? INK_SLOTS : isEditorialTheme(theme) ? EDITORIAL_SLOTS : DEFAULT_SLOTS;
   return { cover: s.cover, diagram: [...s.diagram], cut: [...s.cut] };
 }
 
@@ -136,6 +141,7 @@ module.exports = {
   slotsForTheme,
   isEditorialTheme,
   isCardTheme,
+  isTelopTheme,
   clampMarkedLines,
   clampVertical,
   VERTICAL_MAX,
