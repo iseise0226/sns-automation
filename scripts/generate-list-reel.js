@@ -386,7 +386,8 @@ async function main() {
   if (!persona || !persona.igUserId) throw new Error(`unknown account: ${account}`);
   const intervalDays = persona.intervalDays || 3;
   const lastRun = readJson(LAST_RUN_PATH, {});
-  if (!process.env.WF4_FORCE && lastRun[account] && (Date.now() - new Date(lastRun[account]).getTime()) / 86400000 < intervalDays) {
+  // GitHubの定時実行は数時間遅れることがあり、前日が遅れると翌日が「まだ1日経っていない」で飛ばされる。半日の余裕を持たせる
+  if (!process.env.WF4_FORCE && lastRun[account] && (Date.now() - new Date(lastRun[account]).getTime()) / 86400000 < intervalDays - 0.5) {
     console.log(`[${account}] skip: 前回実行から${intervalDays}日経過していません`);
     return;
   }
