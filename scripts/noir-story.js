@@ -56,7 +56,7 @@ function jstDateAndSlot() {
 async function listDriveFiles(token) {
   const q = encodeURIComponent(`'${DRIVE_FOLDER_ID}' in parents and trashed = false and mimeType = 'video/mp4'`);
   const res = await request(`https://www.googleapis.com/drive/v3/files?q=${q}&pageSize=100&fields=files(id,name,mimeType)`, { headers: { Authorization: `Bearer ${token}` } });
-  if (res.status !== 200) throw new Error(`Drive list failed (${res.status})`);
+  if (res.status !== 200) throw new Error(`Drive list failed (${res.status}): ${res.body.toString('utf8').slice(0, 500)}`);
   return JSON.parse(res.body.toString()).files || [];
 }
 
