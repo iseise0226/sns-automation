@@ -1,0 +1,22 @@
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const ROOT = path.resolve(__dirname, '..', '..');
+const mediaDir = path.join(ROOT, 'ise_satoshi_media', 'own');
+const outDir = path.join(ROOT, 'ise_satoshi_media', 'generated');
+const texts = [['迷ってるなら、','まず動こう。'],['続かないなら、','小さく始めよう。'],['答えが出ないなら、','一歩だけでいい。'],['止まってもいい。','また動こう。']];
+fs.mkdirSync(outDir,{recursive:true});
+const files=fs.readdirSync(mediaDir).filter(f=>/\.(mp4|mov|m4v)$/i.test(f));
+if(!files.length) throw new Error('media/own に動画がありません');
+const src=path.join(mediaDir,files[Math.floor(Math.random()*files.length)]);
+const text=texts[Math.floor(Math.random()*texts.length)];
+const stamp=Date.now(), text1=path.join(outDir,`${stamp}-1.txt`), text2=path.join(outDir,`${stamp}-2.txt`), out=path.join(outDir,'story.mp4');
+fs.writeFileSync(text1,text[0]); fs.writeFileSync(text2,text[1]);
+const font=process.env.FONT_FILE || '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc';
+const vf=`scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawbox=x=0:y=0:w=iw:h=ih:color=black@0.15:t=fill,drawtext=fontfile=${font}:textfile=${text1}:fontcolor=white:fontsize=82:borderw=5:bordercolor=black:shadowcolor=black:shadowx=5:shadowy=5:x=(w-text_w)/2:y=h/2-100,drawtext=fontfile=${font}:textfile=${text2}:fontcolor=white:fontsize=82:borderw=5:bordercolor=black:shadowcolor=black:shadowx=5:shadowy=5:x=(w-text_w)/2:y=h/2+10`;
+const bgm=path.join(ROOT,'ise_satoshi_media','bgm.mp3');
+const args=['-y','-ss','0','-t','5','-i',src]; if(fs.existsSync(bgm)) args.push('-stream_loop','-1','-i',bgm);
+args.push('-vf',vf,'-map','0:v:0'); if(fs.existsSync(bgm)) args.push('-map','1:a:0','-af','volume=0.22','-shortest'); else args.push('-an');
+args.push('-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p','-movflags','+faststart'); if(fs.existsSync(bgm)) args.push('-c:a','aac'); args.push(out);
+execFileSync('ffmpeg',args,{stdio:'inherit'}); console.log(out);
+
