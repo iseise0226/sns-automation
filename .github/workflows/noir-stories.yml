@@ -1,0 +1,60 @@
+name: NOIR Stories - seira_noir_ai
+
+on:
+  schedule:
+    # JST 09:00 / 14:00 / 19:00. Each run waits a different 0-119 minutes.
+    - cron: '0 0 * * *'
+    - cron: '0 5 * * *'
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: 'true = render only; false = publish a Story'
+        required: true
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+      slot:
+        description: 'Caption type for manual runs'
+        required: true
+        default: 'night'
+        type: choice
+        options: ['morning', 'afternoon', 'night']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Randomize time inside the assigned daytime window
+        if: github.event_name == 'schedule'
+        run: sleep $(( (RANDOM % 120) * 60 ))
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/956015506197/locations/global/workloadIdentityPools/github-actions-noir/providers/github-actions
+          service_account: noir-story-drive-readernoir-st@sns-automation-501912.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/drive.readonly
+      - name: Render and publish
+        env:
+          GDRIVE_TOKEN: ${{ steps.auth.outputs.access_token }}
+          IG_TOKEN_SEIRA_NOIR_AI: ${{ secrets.IG_TOKEN_SEIRA_NOIR_AI }}
+          NOIR_DRYRUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dryrun == 'true' && '1' || '0' }}
+          NOIR_SLOT: ${{ github.event_name == 'workflow_dispatch' && inputs.slot || '' }}
+        run: node scripts/noir-story.js
+      - name: Save rendered preview for dry runs
+        if: github.event_name == 'workflow_dispatch' && inputs.dryrun == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: noir-story-preview
+          path: noir_story_output/story.mp4
+          if-no-files-found: error
