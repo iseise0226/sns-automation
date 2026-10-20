@@ -108,18 +108,18 @@ function uploadPublic(videoPath) {
 async function publishStory(videoPath, token) {
   const videoUrl = uploadPublic(videoPath);
   const form = new URLSearchParams({ media_type: 'STORIES', video_url: videoUrl, access_token: token });
-  const create = await request(`https://graph.facebook.com/v23.0/${IG_USER_ID}/media`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString() });
+  const create = await request(`https://graph.instagram.com/v23.0/${IG_USER_ID}/media`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString() });
   const container = JSON.parse(create.body.toString());
   if (!container.id) throw new Error(`Story container failed: ${create.status} ${container.error?.message || ''}`.trim());
   for (let i = 0; i < 20; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 6000));
-    const state = await request(`https://graph.facebook.com/v23.0/${container.id}?fields=status_code&access_token=${encodeURIComponent(token)}`);
+    const state = await request(`https://graph.instagram.com/v23.0/${container.id}?fields=status_code&access_token=${encodeURIComponent(token)}`);
     const json = JSON.parse(state.body.toString());
     if (json.status_code === 'FINISHED') break;
     if (json.status_code === 'ERROR') throw new Error('Instagram video processing failed');
     if (i === 19) throw new Error('Instagram video processing timed out');
   }
-  const publish = await request(`https://graph.facebook.com/v23.0/${IG_USER_ID}/media_publish`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ creation_id: container.id, access_token: token }).toString() });
+  const publish = await request(`https://graph.instagram.com/v23.0/${IG_USER_ID}/media_publish`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ creation_id: container.id, access_token: token }).toString() });
   const json = JSON.parse(publish.body.toString());
   if (!json.id) throw new Error(`Story publish failed: ${publish.status}`);
   return json.id;
