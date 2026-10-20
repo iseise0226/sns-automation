@@ -153,10 +153,10 @@ async function postToThreads(account, text) {
 async function main() {
   const targetAccount = process.argv[2];
   // ko_gi_omotiは画像付き投稿(post-corgi.js)専用のため、通常実行(全件)からは除外
-  // ise_satoshiは投稿内容の質に納得いくまで自動投稿を一時停止中(2026-07-24)
+  // ise_satoshiは自然な通常投稿として再開。古いCTAは上で明示的に無効化。
   const accountsToRun = targetAccount
     ? [targetAccount]
-    : Object.keys(ACCOUNTS).filter((a) => a !== 'ko_gi_omoti' && a !== 'ise_satoshi');
+    : Object.keys(ACCOUNTS).filter((a) => a !== 'ko_gi_omoti');
 
   const trends = await getBraveTrends();
   console.log('trends:', trends);
@@ -166,7 +166,9 @@ async function main() {
 
   for (const acc of accountsToRun) {
     try {
-      const useCta = !!CTA_TEXTS[acc] && (forceCta || Math.random() < CTA_CHANCE);
+      // ise_satoshiでは、過去の宣伝・募集文を再開後に混ぜない。
+      // 再開時も通常の自然な投稿だけを生成する。
+      const useCta = acc !== 'ise_satoshi' && !!CTA_TEXTS[acc] && (forceCta || Math.random() < CTA_CHANCE);
       const text = useCta ? pickCtaText(acc) : await generateText(acc, trends);
       if (!text) {
         console.error(`[${acc}] text generation failed, skipping`);
