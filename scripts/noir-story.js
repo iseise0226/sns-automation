@@ -110,7 +110,7 @@ async function publishStory(videoPath, token) {
   const form = new URLSearchParams({ media_type: 'STORIES', video_url: videoUrl, access_token: token });
   const create = await request(`https://graph.facebook.com/v23.0/${IG_USER_ID}/media`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString() });
   const container = JSON.parse(create.body.toString());
-  if (!container.id) throw new Error(`Story container failed: ${create.status}`);
+  if (!container.id) throw new Error(`Story container failed: ${create.status} ${container.error?.message || ''}`.trim());
   for (let i = 0; i < 20; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 6000));
     const state = await request(`https://graph.facebook.com/v23.0/${container.id}?fields=status_code&access_token=${encodeURIComponent(token)}`);
