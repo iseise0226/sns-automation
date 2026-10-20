@@ -12,7 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install video tools`n        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk`n      - uses: actions/setup-node@v4
+      - name: Install video tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - run: node scripts/ise-satoshi/generate-ise-satoshi-story.js
@@ -20,5 +22,3 @@ jobs:
         env:
           IG_TOKEN_ISE_SATOSHI: ${{ secrets.IG_TOKEN_ISE_SATOSHI }}
           IG_USER_ID: '17841401793428016'
-
-
