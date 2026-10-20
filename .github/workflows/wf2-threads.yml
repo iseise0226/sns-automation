@@ -2,8 +2,9 @@ name: WF2 Threads Auto Post
 
 on:
   schedule:
-    # JST 8,13,20時 = UTC 23(前日),4,11時
-    - cron: "0 23,4,11 * * *"
+    # 1日3回。JST 9-13 / 13-17 / 17-21 の各時間帯からランダムに投稿
+    # UTCでは 0時 / 4時 / 8時 に起動し、各ジョブ内で0-4時間待機する。
+    - cron: "0 0,4,8 * * *"
   workflow_dispatch:
     inputs:
       account:
@@ -21,6 +22,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Randomize posting time within JST window
+        if: github.event_name == 'schedule'
+        run: sleep $(( (RANDOM % 240) * 60 ))
       - name: Post to Threads
         env:
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
