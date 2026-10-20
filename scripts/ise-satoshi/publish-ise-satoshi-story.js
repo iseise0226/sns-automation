@@ -15,11 +15,11 @@ function upload() {
   throw new Error('公開URLの作成に失敗しました');
 }
 async function main() {
-  const url=upload(), base=`https://graph.facebook.com/v23.0/${igUserId}`;
+  const url=upload(), base=`https://graph.instagram.com/v23.0/${igUserId}`;
   const create=JSON.parse(curl(['-s','-X','POST',`${base}/media`,'-d','media_type=STORIES','-d',`video_url=${encodeURIComponent(url)}`,'-d',`access_token=${token}`]));
   if(!create.id) throw new Error(`コンテナ作成失敗: ${JSON.stringify(create)}`);
   let status='IN_PROGRESS';
-  for(let i=0;i<20&&status!=='FINISHED';i++){await new Promise(r=>setTimeout(r,6000));const s=JSON.parse(curl(['-s',`https://graph.facebook.com/v23.0/${create.id}?fields=status_code&access_token=${token}`]));status=s.status_code;if(status==='ERROR')throw new Error(`動画処理失敗: ${JSON.stringify(s)}`);}
+  for(let i=0;i<20&&status!=='FINISHED';i++){await new Promise(r=>setTimeout(r,6000));const s=JSON.parse(curl(['-s',`https://graph.instagram.com/v23.0/${create.id}?fields=status_code&access_token=${token}`]));status=s.status_code;if(status==='ERROR')throw new Error(`動画処理失敗: ${JSON.stringify(s)}`);}
   if(status!=='FINISHED')throw new Error(`動画処理タイムアウト: ${status}`);
   const result=JSON.parse(curl(['-s','-X','POST',`${base}/media_publish`,'-d',`creation_id=${create.id}`,'-d',`access_token=${token}`]));
   if(!result.id)throw new Error(`公開失敗: ${JSON.stringify(result)}`);
