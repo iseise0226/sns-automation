@@ -32,15 +32,20 @@ function chooseStory(files, date, slot, previousId = '') {
 }
 
 function wrapCaption(caption) {
-  if (caption.length <= 14) return caption;
-  const middle = Math.floor(caption.length / 2);
-  const breaks = [...caption]
-    .map((char, index) => ('、。！？'.includes(char) && index < caption.length - 1 ? index + 1 : -1))
-    .filter((index) => index > 0);
-  const splitAt = breaks.length
-    ? breaks.reduce((best, index) => Math.abs(index - middle) < Math.abs(best - middle) ? index : best)
-    : middle;
-  return `${caption.slice(0, splitAt)}\n${caption.slice(splitAt)}`;
+  const characters = [...caption];
+  const lineCount = Math.min(3, Math.ceil(characters.length / 10));
+  if (lineCount <= 1) return caption;
+
+  const lines = [];
+  let offset = 0;
+  for (let line = 0; line < lineCount; line += 1) {
+    const remaining = characters.length - offset;
+    const remainingLines = lineCount - line;
+    const length = Math.ceil(remaining / remainingLines);
+    lines.push(characters.slice(offset, offset + length).join(''));
+    offset += length;
+  }
+  return lines.join('\n');
 }
 
 function request(url, { method = 'GET', headers = {}, body } = {}) {
@@ -83,7 +88,7 @@ function renderStory(source, destination, caption) {
   fs.writeFileSync(captionFile, wrapCaption(caption), 'utf8');
   execFileSync('ffmpeg', [
     '-y', '-i', source, '-t', '15', '-vf',
-    `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,drawtext=fontfile=/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc:textfile=${captionFile}:fontcolor=white:fontsize=62:line_spacing=18:shadowcolor=black@0.9:shadowx=4:shadowy=4:x=(w-text_w)/2:y=(h-text_h)/2`,
+    `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,drawtext=fontfile=/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc:textfile=${captionFile}:fontcolor=white:fontsize=72:line_spacing=22:bordercolor=black@0.8:borderw=3:shadowcolor=black@0.95:shadowx=6:shadowy=6:x=(w-text_w)/2:y=(h-text_h)/2`,
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', destination,
   ], { stdio: 'inherit', timeout: 300000 });
 }
@@ -160,4 +165,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exit(1); });
-module.exports = { chooseStory };
+module.exports = { chooseStory, wrapCaption };
