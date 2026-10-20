@@ -28,7 +28,19 @@ function chooseStory(files, date, slot, previousId = '') {
   const pool = files.length > 1 && previousId ? files.filter((file) => file.id !== previousId) : files;
   const file = pool[hash(`${date}:${slot}`) % pool.length];
   const caption = CAPTIONS[hash(`${file.id}:${date}`) % CAPTIONS.length];
-  return { file, caption, includeLink: slot === 'night' };
+  return { file, caption, includeLink: false };
+}
+
+function wrapCaption(caption) {
+  if (caption.length <= 14) return caption;
+  const middle = Math.floor(caption.length / 2);
+  const breaks = [...caption]
+    .map((char, index) => ('、。！？'.includes(char) && index < caption.length - 1 ? index + 1 : -1))
+    .filter((index) => index > 0);
+  const splitAt = breaks.length
+    ? breaks.reduce((best, index) => Math.abs(index - middle) < Math.abs(best - middle) ? index : best)
+    : middle;
+  return `${caption.slice(0, splitAt)}\n${caption.slice(splitAt)}`;
 }
 
 function request(url, { method = 'GET', headers = {}, body } = {}) {
@@ -66,12 +78,12 @@ async function downloadDriveFile(id, token, destination) {
   fs.writeFileSync(destination, res.body);
 }
 
-function renderStory(source, destination, caption, includeLink) {
+function renderStory(source, destination, caption) {
   const captionFile = path.join(path.dirname(destination), 'caption.txt');
-  fs.writeFileSync(captionFile, includeLink ? `${caption}\nnoir-lounge.com` : caption, 'utf8');
+  fs.writeFileSync(captionFile, wrapCaption(caption), 'utf8');
   execFileSync('ffmpeg', [
     '-y', '-i', source, '-t', '15', '-vf',
-    `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,drawbox=x=40:y=1440:w=1000:h=300:color=black@0.42:t=fill,drawtext=fontfile=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc:textfile=${captionFile}:fontcolor=white:fontsize=46:line_spacing=18:x=(w-text_w)/2:y=1510`,
+    `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,drawtext=fontfile=/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc:textfile=${captionFile}:fontcolor=white:fontsize=62:line_spacing=18:shadowcolor=black@0.9:shadowx=4:shadowy=4:x=(w-text_w)/2:y=(h-text_h)/2`,
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', destination,
   ], { stdio: 'inherit', timeout: 300000 });
 }
@@ -137,9 +149,9 @@ async function main() {
   const source = path.join(outDir, 'source.mp4');
   const finalVideo = path.join(outDir, 'story.mp4');
   await downloadDriveFile(selected.file.id, driveToken, source);
-  renderStory(source, finalVideo, selected.caption, selected.includeLink);
+  renderStory(source, finalVideo, selected.caption);
   console.log(`Selected source: ${selected.file.name}`);
-  console.log(`Story text: ${selected.caption}${selected.includeLink ? ' / noir-lounge.com' : ''}`);
+  console.log(`Story text: ${selected.caption}`);
   if (process.env.NOIR_DRYRUN === '1') { console.log(`DRYRUN complete: ${finalVideo}`); return; }
   const token = (process.env.IG_TOKEN_SEIRA_NOIR_AI || '').trim();
   if (!token) throw new Error('IG_TOKEN_SEIRA_NOIR_AI is required');
