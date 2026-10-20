@@ -1,0 +1,45 @@
+name: NOIR Threads - seira_noir_ai
+
+on:
+  schedule:
+    # Every 30 minutes from 09:00 through 21:30 JST. The script chooses
+    # one deterministic-random time in each of the 09-11, 14-16, 19-21 windows.
+    - cron: '0,30 0-12 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dryrun = preview, verify = token check, publish = post now'
+        required: true
+        default: 'dryrun'
+        type: choice
+        options: ['dryrun', 'verify', 'publish']
+      slot:
+        description: 'Post type for a manual run'
+        required: true
+        default: 'night'
+        type: choice
+        options: ['morning', 'afternoon', 'night']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noir-threads-seira-noir-ai
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check schedule and publish
+        env:
+          THREADS_TOKEN_SEIRA_NOIR_AI: ${{ secrets.THREADS_TOKEN_SEIRA_NOIR_AI }}
+          NOIR_THREADS_MODE: ${{ github.event_name == 'schedule' && 'publish' || inputs.mode }}
+          NOIR_THREADS_SLOT: ${{ github.event_name == 'workflow_dispatch' && inputs.slot || '' }}
+          NOIR_THREADS_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
+        run: node scripts/noir-threads.js
