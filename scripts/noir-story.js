@@ -77,9 +77,32 @@ function renderStory(source, destination, caption, includeLink) {
 }
 
 function uploadPublic(videoPath) {
-  const output = execFileSync('curl', ['-fsS', '-F', 'reqtype=fileupload', '-F', 'time=24h', '-F', `fileToUpload=@${videoPath}`, 'https://litterbox.catbox.moe/resources/internals/api.php'], { encoding: 'utf8', timeout: 300000 }).trim();
-  if (!output.startsWith('https://')) throw new Error('Temporary video upload failed');
-  return output;
+  const attempts = [
+    {
+      args: ['-fsS', '-F', 'reqtype=fileupload', '-F', 'time=24h', '-F', `fileToUpload=@${videoPath}`, 'https://litterbox.catbox.moe/resources/internals/api.php'],
+      parse: output => output.trim(),
+    },
+    {
+      args: ['-fsS', '-F', `files[]=@${videoPath}`, 'https://uguu.se/upload.php'],
+      parse: output => JSON.parse(output).files?.[0]?.url,
+    },
+    {
+      args: ['-fsS', '--upload-file', videoPath, 'https://tmpfiles.org/api/v1/upload'],
+      parse: output => {
+        const url = JSON.parse(output).data?.url;
+        return url ? url.replace('tmpfiles.org/', 'tmpfiles.org/dl/') : undefined;
+      },
+    },
+  ];
+  for (const attempt of attempts) {
+    try {
+      const url = attempt.parse(execFileSync('curl', attempt.args, { encoding: 'utf8', timeout: 300000 }));
+      if (typeof url === 'string' && url.startsWith('https://')) return url;
+    } catch (_) {
+      // Try the next temporary host when a provider is unavailable.
+    }
+  }
+  throw new Error('Temporary video upload failed on all providers');
 }
 
 async function publishStory(videoPath, token) {
