@@ -14,11 +14,13 @@ const ACCOUNTS = [
 // WF4_ONLYが指定されていればそのアカウントだけ実行する（テスト用）
 const targets = process.env.WF4_ONLY ? ACCOUNTS.filter((a) => a === process.env.WF4_ONLY) : ACCOUNTS;
 
+// "format": "clip-quote" は3秒クリップ+中央字幕+ナレーション(generate-clip-quote.js)。
 // "format": "list-slides" のアカウントは「長押しして読む」リスト解説リール(generate-list-reel.js)で作る
 const accounts = require('../data/wf4_accounts.json');
 
 for (const account of targets) {
-  const script = accounts[account]?.format === 'list-slides' ? 'generate-list-reel.js' : 'generate-reel.js';
+  const fmt = accounts[account]?.format;
+  const script = fmt === 'list-slides' ? 'generate-list-reel.js' : fmt === 'clip-quote' ? 'generate-clip-quote.js' : 'generate-reel.js';
   try {
     execFileSync('node', [path.join(__dirname, script), account], { stdio: 'inherit' });
   } catch (e) {
