@@ -1,10 +1,18 @@
 name: ise_satoshi Stories
 on:
   workflow_dispatch:
+    inputs:
+      slot:
+        description: '0 or 1 = own video, 2 = test of daily slot; source rotates by date'
+        type: choice
+        options: ['0', '1', '2']
+        default: '0'
+      dry_run:
+        description: 'Generate video without publishing'
+        type: boolean
+        default: false
   schedule:
-    - cron: '0 0 * * *'
-    - cron: '0 6 * * *'
-    - cron: '0 12 * * *'
+    - cron: '*/15 0-11 * * *'
 permissions:
   contents: read
 jobs:
@@ -12,13 +20,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Plan today's random posting times
+        id: plan
+        run: node scripts/ise-satoshi/plan-ise-satoshi-story.js
+        env:
+          MANUAL_SLOT: ${{ inputs.slot }}
       - name: Install video tools
+        if: steps.plan.outputs.should_post == 'true'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
       - uses: actions/setup-node@v4
+        if: steps.plan.outputs.should_post == 'true'
         with:
           node-version: '20'
-      - run: node scripts/ise-satoshi/generate-ise-satoshi-story.js
-      - run: node scripts/ise-satoshi/publish-ise-satoshi-story.js
+      - if: steps.plan.outputs.should_post == 'true'
+        run: node scripts/ise-satoshi/generate-ise-satoshi-story.js
+        env:
+          STORY_SLOT: ${{ steps.plan.outputs.slot }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      - if: steps.plan.outputs.should_post == 'true' && inputs.dry_run != true
+        run: node scripts/ise-satoshi/publish-ise-satoshi-story.js
         env:
           IG_TOKEN_ISE_SATOSHI: ${{ secrets.IG_TOKEN_ISE_SATOSHI }}
           IG_USER_ID: '17841401793428016'
