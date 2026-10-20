@@ -28,7 +28,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Random delay can be up to 119 minutes, so leave enough time for
+    # rendering, upload, and Instagram publishing after the delay.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
