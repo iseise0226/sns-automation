@@ -19,6 +19,12 @@ on:
         default: 'night'
         type: choice
         options: ['morning', 'afternoon', 'night']
+      catchup:
+        description: 'Check and publish only overdue, missing slots'
+        required: true
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
 
 permissions:
   contents: read
@@ -52,7 +58,7 @@ jobs:
           IG_TOKEN_SEIRA_NOIR_AI: ${{ secrets.IG_TOKEN_SEIRA_NOIR_AI }}
           NOIR_DRYRUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dryrun == 'true' && '1' || '0' }}
           NOIR_SLOT: ${{ github.event_name == 'workflow_dispatch' && inputs.slot || '' }}
-          NOIR_STORY_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
+          NOIR_STORY_SCHEDULED: ${{ (github.event_name == 'schedule' || inputs.catchup == 'true') && '1' || '0' }}
         run: node scripts/noir-story.js
       - name: Save rendered preview for dry runs
         if: github.event_name == 'workflow_dispatch' && inputs.dryrun == 'true'
