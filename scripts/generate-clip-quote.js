@@ -231,24 +231,29 @@ const TOPIC_SEEDS = [
 
 // 聖さん本人の一次情報(第2の脳のヒーローズジャーニー由来)。ここにない数字・出来事は作らせない。毎日1つ選んで冒頭の実話にする
 const FACTS = [
-  '独立した最初の月の売上は26万円、毎月の返済は60万円だった。それでも約1年で月100万円の売上になった。',
-  '勤めていた美容師の約20年間は、帰りが毎晩夜11時過ぎ。長男が小さい頃は子どもの顔をまともに見てやれなかった。今は子どもと過ごす時間がある。',
-  '独立して一番変わったのはお金や売上ではなく、家族との時間が戻ってきたこと。お客さんから「最近楽しそうだね」「生き生きしてるね」と言われるようになった。',
-  '「シャンパンタワーの法則」に出会い、まず一番上の自分を満たさないと下には何も流れないと気づいた。それまでは節約が当たり前で、自分にお金を使う発想がなかった。',
-  '勉強会で一番刺さった言葉は「やり方より、あり方」。手法より、根本のマインドが整っていないと何も変わらない。',
-  '以前は壁にぶつかると「うわ、嫌だな」と重くなるだけだった。今は、壁があるのは乗り越えた先に成長があるからだと思えて、ワクワクできるようになった。',
-  '2020年、コロナ禍の真っ只中の40歳で独立した。めちゃくちゃ怖かったけれど、「自分の人生は自分で決めるしかない」と腹をくくった。',
-  '独立してから算命学に出会った。自分が鑑定を受けて、自分の星と運勢の流れを見てもらった瞬間、長年の迷いがスッキリ晴れた。',
+  { text: '独立した最初の月の売上は26万円、毎月の返済は60万円だった。それでも約1年で月100万円の売上になった。', lines: ['初月の売上26万円', '返済は60万円'], en: "First month: ¥260K in sales, ¥600K in loan payments." },
+  { text: '勤めていた美容師の約20年間は、帰りが毎晩夜11時過ぎ。長男が小さい頃は子どもの顔をまともに見てやれなかった。今は子どもと過ごす時間がある。', lines: ['勤めていた20年', '帰りは毎晩11時'], en: "20 years as an employee: home at 11 every night." },
+  { text: '独立して一番変わったのはお金や売上ではなく、家族との時間が戻ってきたこと。お客さんから「最近楽しそうだね」「生き生きしてるね」と言われるようになった。', lines: ['一番の変化は', 'お金じゃなかった'], en: "The biggest change wasn't the money." },
+  { text: 'それまでは節約が当たり前で、自分にお金を使う発想がなかった。「まず自分を満たすと、周りにも良いものが流れていく」という考え方に出会って、自分を変えようと思った。', lines: ['自分にお金を使う', '発想がなかった'], en: "I never thought about spending on myself." },
+  { text: '勉強会で一番刺さった言葉は「やり方より、あり方」。手法より、根本のマインドが整っていないと何も変わらない。', lines: ['一番刺さった言葉', 'やり方より、あり方'], en: "The line that hit me most: being matters more than doing." },
+  { text: '以前は壁にぶつかると「うわ、嫌だな」と重くなるだけだった。今は、壁があるのは乗り越えた先に成長があるからだと思えて、ワクワクできるようになった。', lines: ['壁を見ると', '今はワクワクする'], en: "These days, a wall makes me excited." },
+  { text: '2020年、コロナ禍の真っ只中の40歳で独立した。めちゃくちゃ怖かったけれど、「自分の人生は自分で決めるしかない」と腹をくくった。', lines: ['40歳、コロナ禍に', '独立した'], en: "At 40, in the middle of the pandemic, I went solo." },
+  { text: '独立してから算命学に出会った。自分が鑑定を受けて、自分の星と運勢の流れを見てもらった瞬間、長年の迷いがスッキリ晴れた。', lines: ['鑑定を受けた瞬間', '迷いが晴れた'], en: "The moment I got my reading, my doubts cleared." },
 ];
 
-function buildStoryPrompt(sceneCount, pastTitles, topicSeed, fact) {
+function pickFact() {
+  return FACTS[Math.floor(Date.now() / 86400000) % FACTS.length];
+}
+
+function buildStoryPrompt(sceneCount, pastTitles, topicSeed, factObj) {
+  const fact = factObj.text;
   const story = 3;
   return `インスタのリール用に「画面の真ん中に大きく出る一言を、ナレーションが読み上げる」台本を1本作ってください。画面には日本語の下に英語訳も出ます。
 今回の話題の方向: 「${topicSeed}」
 
 【構成】scenesはちょうど${sceneCount}個。1つが3秒の場面で、画面の文字とナレーションは同じ文。
-- 場面1〜${story}: 語り手(僕)の実話。下の「僕の実話」だけを元にする。書いていない数字・出来事・人物は作らない。場面1は、実話の中でいちばん驚く事実(数字・時期・変化)を、そのまま短く言い切る。クイズや問いかけ(「〜知ってる？」「興味ある？」)で始めない。
-- 場面1〜${story}は、初めて聞く人にも1場面で意味が通じる、具体的で平易な言葉にする。専門用語や比喩の名前(「シャンパンタワー」など)は、そのまま使わず、中身を一言で説明する。見本(別の実話の場合): 「初月の売上26万円/返済は60万円」「それでも1年で/月100万円になった」「変えたのは/考え方だった」。
+- 場面1: こちらで次の文に固定して差し込む(あなたの出力の場面1は何でもよい): 「${factObj.lines.join(' ')}」。
+- 場面2〜${story}: 場面1の続きとして、下の「僕の実話」だけを元に語る。書いていない数字・出来事・人物は作らない。初めて聞く人にも1場面で意味が通じる、具体的で平易な言葉にする。クイズや問いかけ(「〜知ってる？」)で始めない。専門用語や比喩の名前(「シャンパンタワー」など)はそのまま使わず、中身を一言で説明する。見本(別の実話の場合): 「それでも1年で/月100万円になった」「変えたのは/考え方だった」。
 - 場面${story + 1}〜${sceneCount}(${sceneCount - story}個): 読んだ人がプラスの気持ちになる、短くてまっすぐな前向きの言葉。実話の学びから自然につなぎ、全体でひとつのメッセージとして流れること。1場面に1つの言葉。毎回違う切り口で、聞いたことのある定型句の寄せ集めにしない。
 - 最後の場面は背中を押す短い締め。
 
@@ -342,11 +347,12 @@ async function generateScript(systemPrompt, sceneCount, pastTitles, cfg) {
     if (errs.length) throw new Error('WF4_RAW_FILEの台本が不正: ' + errs.join(' / '));
     return d;
   }
+  const fact = pickFact();
   const messages = [
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: cfg.english ? buildStoryPrompt(sceneCount, pastTitles, topicSeed, FACTS[Math.floor(Date.now() / 86400000) % FACTS.length]) : buildPrompt(sceneCount, pastTitles, topicSeed),
+      content: cfg.english ? buildStoryPrompt(sceneCount, pastTitles, topicSeed, fact) : buildPrompt(sceneCount, pastTitles, topicSeed),
     },
   ];
   let lastErrs = [];
@@ -358,6 +364,7 @@ async function generateScript(systemPrompt, sceneCount, pastTitles, cfg) {
       lastErrs = ['JSONの解析に失敗: ' + e.message];
       continue;
     }
+    if (cfg.english && Array.isArray(d.scenes) && d.scenes.length) d.scenes[0] = { lines: fact.lines, en: fact.en };
     lastErrs = validate(d, sceneCount, Boolean(cfg.english));
     d.topicSeed = topicSeed;
     if (!lastErrs.length) return d;
