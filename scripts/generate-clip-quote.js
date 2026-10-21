@@ -273,6 +273,7 @@ ${fact}
 - 上から教えず、友達に話すように。「〜しなさい」「〜すべき」は使わない。
 - 「脳科学的に」「研究で証明」のような、根拠を断定する言い方はしない。
 - 部下・スタッフ・社員の話は出さない。
+- 投稿文の中の「僕」の話は、「僕の実話」に書いてある内容だけ。書いていない習慣・日課・出来事・気持ちの変化を足さない(「毎朝〜している」など)。読む人への呼びかけは「あなたへ」と暗い状況を決めつけず、明るい言葉から始める。
 - 誤字、助詞の抜け、不自然な日本語がないか、出す前に1つずつ読み直す。
 - 下の「最近使ったタイトル」と話題がかぶらないこと。
 
@@ -335,6 +336,7 @@ function validate(d, sceneCount, needEn) {
   }
   if (!String(d.caption || '').trim()) errs.push('captionがない');
   if (DARK.test(JSON.stringify(d.scenes))) errs.push('暗い言葉が入っている');
+  if (DARK.test(String(d.caption || ''))) errs.push('投稿文に暗い言葉が入っている');
   if (/部下|スタッフ|社員|従業員/.test(JSON.stringify(d.scenes))) errs.push('部下・スタッフの話が入っている');
   return errs;
 }
