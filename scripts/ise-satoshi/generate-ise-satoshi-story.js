@@ -10,11 +10,13 @@ const date = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeri
 const day = Math.floor(Date.parse(`${date}T00:00:00Z`)/86400000);
 const slot = Number(process.env.STORY_SLOT || 0);
 if (![0,1,2].includes(slot)) throw new Error('STORY_SLOT must be 0, 1 or 2');
-const sequence = day*3+slot;
+// GitHub run number makes retries on the same day/slot use a new source and caption.
+const runNumber = Number(process.env.GITHUB_RUN_NUMBER || 0);
+const sequence = day*3+slot+runNumber;
 fs.mkdirSync(outDir,{recursive:true});
 const files=fs.readdirSync(mediaDir).filter(f=>/\.(mp4|mov|m4v)$/i.test(f));
 if(!files.length) throw new Error('media/own に動画がありません');
-let src=path.join(mediaDir,files[(day*2+slot)%files.length]);
+let src=path.join(mediaDir,files[(day*3+slot+runNumber)%files.length]);
 const stock=(day+slot)%3===0;
 if(stock){
   const key=process.env.PEXELS_API_KEY;
