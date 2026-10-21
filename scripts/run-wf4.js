@@ -3,9 +3,9 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 // satoshi_mind_coachingは2026-08-05から「ハッとしたんだよね」専用ワークフロー(wf-hitmehard.yml)に置き換え済み
+// ise_sato_kosodate は2026-10-21から朝7〜8時にランダム投稿する専用ワークフロー(wf4-kosodate-quote.yml)に移したため、ここには入れない
 const ACCOUNTS = [
   'satoshi_mindset',
-  'ise_sato_kosodate',
   'sessi_life',
   'ise_kenkou_otaku',
   'tabi_life_design',

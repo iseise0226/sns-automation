@@ -9,6 +9,8 @@ const { execFileSync, spawn } = require('child_process');
 
 const DRYRUN = Boolean(process.env.WF4_DRYRUN);
 const SCENE_SECONDS = 3;
+// CLIP_WIDE=1: YouTube用の横長(1920x1080)。素材は kosodate_wide、投稿はせず台本・動画だけ作る
+const WIDE = Boolean(process.env.CLIP_WIDE);
 
 const REMOTION_DIR = path.join(__dirname, '..', 'remotion');
 const BGM_DIR = path.join(REMOTION_DIR, 'assets', 'bgm_list');
@@ -227,6 +229,53 @@ const TOPIC_SEEDS = [
   '年齢を重ねるほど増える魅力', '身近な人へのありがとう', 'やってみたい気持ちの育て方', '心が軽くなる考え方', '幸せは毎日の中にある',
 ];
 
+// 聖さん本人の一次情報(第2の脳のヒーローズジャーニー由来)。ここにない数字・出来事は作らせない。毎日1つ選んで冒頭の実話にする
+const FACTS = [
+  '独立した最初の月の売上は26万円、毎月の返済は60万円だった。それでも約1年で月100万円の売上になった。',
+  '勤めていた美容師の約20年間は、帰りが毎晩夜11時過ぎ。長男が小さい頃は子どもの顔をまともに見てやれなかった。今は子どもと過ごす時間がある。',
+  '独立して一番変わったのはお金や売上ではなく、家族との時間が戻ってきたこと。お客さんから「最近楽しそうだね」「生き生きしてるね」と言われるようになった。',
+  '「シャンパンタワーの法則」に出会い、まず一番上の自分を満たさないと下には何も流れないと気づいた。それまでは節約が当たり前で、自分にお金を使う発想がなかった。',
+  '勉強会で一番刺さった言葉は「やり方より、あり方」。手法より、根本のマインドが整っていないと何も変わらない。',
+  '以前は壁にぶつかると「うわ、嫌だな」と重くなるだけだった。今は、壁があるのは乗り越えた先に成長があるからだと思えて、ワクワクできるようになった。',
+  '2020年、コロナ禍の真っ只中の40歳で独立した。めちゃくちゃ怖かったけれど、「自分の人生は自分で決めるしかない」と腹をくくった。',
+  '独立してから算命学に出会った。自分が鑑定を受けて、自分の星と運勢の流れを見てもらった瞬間、長年の迷いがスッキリ晴れた。',
+];
+
+function buildStoryPrompt(sceneCount, pastTitles, topicSeed, fact) {
+  const story = 3;
+  return `インスタのリール用に「画面の真ん中に大きく出る一言を、ナレーションが読み上げる」台本を1本作ってください。画面には日本語の下に英語訳も出ます。
+今回の話題の方向: 「${topicSeed}」
+
+【構成】scenesはちょうど${sceneCount}個。1つが3秒の場面で、画面の文字とナレーションは同じ文。
+- 場面1〜${story}: 語り手(僕)の実話。下の「僕の実話」だけを元にする。書いていない数字・出来事・人物は作らない。場面1は「へえ、聞きたい」と思わせる一言。
+- 場面${story + 1}〜${sceneCount}(${sceneCount - story}個): 読んだ人がプラスの気持ちになる、短くてまっすぐな前向きの言葉。実話の学びから自然につなぎ、全体でひとつのメッセージとして流れること。1場面に1つの言葉。毎回違う切り口で、聞いたことのある定型句の寄せ集めにしない。
+- 最後の場面は背中を押す短い締め。
+
+【僕の実話】
+${fact}
+
+【各場面】
+- lines: 画面に出す日本語。1〜2行。1行は10字以内。つなげた全体が18字以内。
+- en: その場面の自然な英語訳。1文、70文字以内。直訳でなく、英語圏の人が自然に読める言い方に。日本語を含めない。
+- title: 動画のタイトル(15字以内)。
+- caption: 投稿文。1行目は共感を呼ぶ一言、本文は短い段落で改行多め200〜300字(日本語)。そのあとに英語の短い一言(1〜2行)と、ハッシュタグ4つ(#前向き を含む)。LINEやプロフィールへの誘導は書かない。
+
+【中身のルール】
+- 読む人は40〜50代の、毎日を頑張っている人。
+- 明るく、前向きで、読んだ人がプラスの気持ちになる言葉だけを使う。
+- 「悩み」「つらい」「さみしい」「後悔」「不安」「疲れた」「失敗」「無理」「ダメ」など暗い言葉、不安をあおる言い方は使わない。
+- 上から教えず、友達に話すように。「〜しなさい」「〜すべき」は使わない。
+- 「脳科学的に」「研究で証明」のような、根拠を断定する言い方はしない。
+- 部下・スタッフ・社員の話は出さない。
+- 誤字、助詞の抜け、不自然な日本語がないか、出す前に1つずつ読み直す。
+- 下の「最近使ったタイトル」と話題がかぶらないこと。
+
+【最近使ったタイトル(かぶらないこと)】
+${pastTitles.length ? pastTitles.map((t) => '- ' + t).join('\n') : '- (なし)'}
+
+JSONだけを返す: {"title":"..","scenes":[{"lines":[".."],"en":".."}],"caption":".."}`;
+}
+
 function buildPrompt(sceneCount, pastTitles, topicSeed) {
   return `インスタのリール用に「画面の真ん中に大きく出る一言を、ナレーションが読み上げる」台本を1本作ってください。
 今回の話題の方向: 「${topicSeed}」
@@ -254,14 +303,15 @@ ${pastTitles.length ? pastTitles.map((t) => '- ' + t).join('\n') : '- (なし)'}
 JSONだけを返す: {"title":"..","scenes":[{"lines":[".."]}],"caption":".."}`;
 }
 
-const DARK = /悩|つら|辛|さみし|寂し|後悔|不安|疲|失敗|孤独|苦し|絶望|死|嫌|ダメ|だめ|無理/;
+const DARK = /悩|つら|辛|さみし|寂し|後悔|不安|疲|失敗|孤独|苦し|絶望|死|(?<!機)嫌|ダメ|だめ|無理/;
 
-function validate(d, sceneCount) {
+function validate(d, sceneCount, needEn) {
   const errs = [];
   if (!d || typeof d !== 'object') return ['JSONではない'];
   d.title = String(d.title || '').trim();
   d.scenes = (Array.isArray(d.scenes) ? d.scenes : []).slice(0, sceneCount).map((s) => ({
     lines: (Array.isArray(s.lines) ? s.lines : [s.lines]).map((l) => String(l || '').trim()).filter(Boolean).slice(0, 2),
+    en: String(s.en || '').trim() || undefined,
   }));
   if (d.scenes.length !== sceneCount) errs.push(`scenesが${sceneCount}個でない`);
   d.scenes.forEach((s, i) => {
@@ -270,23 +320,33 @@ function validate(d, sceneCount) {
     if (s.lines.some((l) => [...l].length > 11)) errs.push(`場面${i + 1}の1行が長い`);
     if (total > 20) errs.push(`場面${i + 1}が長い(${total}字)`);
   });
+  if (needEn) {
+    d.scenes.forEach((s, i) => {
+      if (!s.en) errs.push(`場面${i + 1}に英訳がない`);
+      else if (s.en.length > 90) errs.push(`場面${i + 1}の英訳が長い`);
+      else if (/[぀-ヿ一-鿿]/.test(s.en)) errs.push(`場面${i + 1}の英訳に日本語が混ざっている`);
+    });
+  }
   if (!String(d.caption || '').trim()) errs.push('captionがない');
   if (DARK.test(JSON.stringify(d.scenes))) errs.push('暗い言葉が入っている');
   if (/部下|スタッフ|社員|従業員/.test(JSON.stringify(d.scenes))) errs.push('部下・スタッフの話が入っている');
   return errs;
 }
 
-async function generateScript(systemPrompt, sceneCount, pastTitles) {
+async function generateScript(systemPrompt, sceneCount, pastTitles, cfg) {
   const topicSeed = TOPIC_SEEDS[Math.floor(Math.random() * TOPIC_SEEDS.length)];
   if (process.env.WF4_RAW_FILE) {
     const d = JSON.parse(fs.readFileSync(process.env.WF4_RAW_FILE, 'utf-8'));
-    const errs = validate(d, d.scenes.length);
+    const errs = validate(d, d.scenes.length, Boolean(cfg.english));
     if (errs.length) throw new Error('WF4_RAW_FILEの台本が不正: ' + errs.join(' / '));
     return d;
   }
   const messages = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: buildPrompt(sceneCount, pastTitles, topicSeed) },
+    {
+      role: 'user',
+      content: cfg.english ? buildStoryPrompt(sceneCount, pastTitles, topicSeed, FACTS[Math.floor(Date.now() / 86400000) % FACTS.length]) : buildPrompt(sceneCount, pastTitles, topicSeed),
+    },
   ];
   let lastErrs = [];
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -297,7 +357,7 @@ async function generateScript(systemPrompt, sceneCount, pastTitles) {
       lastErrs = ['JSONの解析に失敗: ' + e.message];
       continue;
     }
-    lastErrs = validate(d, sceneCount);
+    lastErrs = validate(d, sceneCount, Boolean(cfg.english));
     d.topicSeed = topicSeed;
     if (!lastErrs.length) return d;
     console.error(`台本が不正(${attempt}/3): ${lastErrs.join(' / ')}`);
@@ -348,7 +408,9 @@ function pickClips(clipSet, count, account, outDir) {
   }
   const src = (f) => f.split('_')[0];
   const picked = [];
-  while (picked.length < count && pool.length) {
+  while (picked.length < count) {
+    // 素材が足りない長尺では、直近に使っていないものから再利用する
+    if (!pool.length) pool = all.filter((f) => !picked.slice(-8).includes(f));
     const prev = picked.length ? src(picked[picked.length - 1]) : null;
     const cands = pool.filter((f) => src(f) !== prev);
     const f = (cands.length ? cands : pool)[Math.floor(Math.random() * (cands.length || pool.length))];
@@ -374,20 +436,44 @@ function pickBgm(moods, history, outDir) {
 
 function render(scenes, audios, clips, outDir) {
   const props = {
-    scenes: scenes.map((s, i) => ({ clip: `clips/${clips[i]}`, lines: s.lines, audio: audios[i] })),
+    scenes: scenes.map((s, i) => ({ clip: `clips/${clips[i]}`, lines: s.lines, en: s.en, audio: audios[i] })),
     bgm: 'bgm.mp3',
     sceneSeconds: SCENE_SECONDS,
   };
   const propsPath = path.join(outDir, 'clip_props.json');
   fs.writeFileSync(propsPath, JSON.stringify(props), 'utf-8');
   const videoPath = path.join(outDir, 'video.mp4');
-  execFileSync('npx', ['remotion', 'render', 'src/index.ts', 'ClipQuote', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`, '--crf=23', ...(DRYRUN ? ['--concurrency=2'] : [])], {
-    cwd: REMOTION_DIR,
-    timeout: 900000,
-    shell: true,
-    stdio: 'inherit',
-  });
+  // 動画の読み込みが一時的に失敗することがあるため、失敗したら並列数を下げて最大3回まで書き出し直す
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const concurrency = DRYRUN || attempt > 1 ? 1 : 2;
+    try {
+      execFileSync('npx', ['remotion', 'render', 'src/index.ts', WIDE ? 'ClipQuoteWide' : 'ClipQuote', videoPath, `--props=${propsPath}`, `--public-dir=${outDir}`, '--crf=23', `--concurrency=${concurrency}`, '--offthreadvideo-threads=1'], {
+        cwd: REMOTION_DIR,
+        timeout: 2400000,
+        shell: true,
+        stdio: 'inherit',
+      });
+      break;
+    } catch (e) {
+      if (attempt === 3) throw e;
+      console.error(`書き出しに失敗(${attempt}/3)。並列数を下げてやり直します`);
+    }
+  }
   return videoPath;
+}
+
+// 投稿時刻を「HH:MM-HH:MM」(日本時間)の範囲内でランダムに決め、その時刻まで待つ。すでに過ぎていればすぐ投稿する
+async function waitForPostWindow(win) {
+  const m = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/.exec(win);
+  if (!m) return;
+  const start = Number(m[1]) * 60 + Number(m[2]);
+  const end = Number(m[3]) * 60 + Number(m[4]);
+  const pick = start + Math.floor(Math.random() * Math.max(1, end - start));
+  const jst = new Date(Date.now() + 9 * 3600 * 1000);
+  const nowMin = jst.getUTCHours() * 60 + jst.getUTCMinutes();
+  const waitMin = pick - nowMin;
+  console.log(`投稿予定: 日本時間 ${String(Math.floor(pick / 60)).padStart(2, '0')}:${String(pick % 60).padStart(2, '0')}(現在 ${String(Math.floor(nowMin / 60)).padStart(2, '0')}:${String(nowMin % 60).padStart(2, '0')})`);
+  if (waitMin > 0 && waitMin < 180) await sleep(waitMin * 60 * 1000);
 }
 
 async function main() {
@@ -405,30 +491,31 @@ async function main() {
   }
 
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const outDir = path.resolve(DRYRUN ? 'wf4_preview' : 'wf4_media', account, today);
+  const outDir = path.resolve(DRYRUN || WIDE ? 'wf4_preview' : 'wf4_media', account, WIDE ? `${today}_long` : today);
   fs.mkdirSync(outDir, { recursive: true });
 
   const historyPath = path.join(TOPICS_DIR, `${account}.json`);
   const history = readJson(historyPath, []);
-  const script = await generateScript(cfg.system, sceneCount, history.slice(-40).map((h) => h.title));
+  const script = await generateScript(cfg.system, sceneCount, history.slice(-40).map((h) => h.title), cfg);
   console.log(`[${account}] title: ${script.title}`);
   script.scenes.forEach((s, i) => console.log(`  ${i + 1}. ${s.lines.join(' / ')}`));
   fs.writeFileSync(path.join(outDir, 'script.json'), JSON.stringify(script, null, 2), 'utf-8');
 
   await ensureVoicevoxEngine();
   const audios = await generateTTS(script.scenes, outDir, persona.voicevoxName, persona.voicevoxStyle);
-  const { picked, used } = pickClips(cfg.clipSet, sceneCount, account, outDir);
+  const { picked, used } = pickClips(WIDE ? `${cfg.clipSet}_wide` : cfg.clipSet, sceneCount, account, outDir);
   const bgm = pickBgm(persona.bgmMoods || ['前向き'], history, outDir);
   const videoPath = render(script.scenes, audios, picked, outDir);
   const caption = String(script.caption).trim() + (persona.ctaLine || '');
   fs.writeFileSync(path.join(outDir, 'caption.txt'), caption, 'utf-8');
   console.log(`[${account}] video rendered: ${videoPath}`);
 
-  if (DRYRUN) {
+  if (DRYRUN || WIDE) {
     console.log(`[${account}] DRYRUN: 投稿せず終了`);
     return;
   }
 
+  if (cfg.postWindow) await waitForPostWindow(cfg.postWindow);
   const result = await postReel(account, persona.igUserId, videoPath, caption);
   console.log(`[${account}] posted:`, result.id);
 
