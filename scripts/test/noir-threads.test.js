@@ -3,6 +3,8 @@ const {
   buildPostText,
   choosePost,
   dailySchedule,
+  dueSlots,
+  postedSlotsForDate,
   shouldRunAt,
   wasPostedToday,
 } = require('../noir-threads');
@@ -19,6 +21,20 @@ assert.equal(schedule.night % 30, 0);
 assert.equal(shouldRunAt(schedule, schedule.afternoon), 'afternoon');
 assert.equal(shouldRunAt(schedule, 12 * 60), null);
 
+// A delayed GitHub runner must catch up instead of silently skipping the post.
+assert.deepEqual(
+  dueSlots({ morning: 10 * 60 + 30, afternoon: 15 * 60, night: 20 * 60 + 30 }, 12 * 60 + 12, []),
+  ['morning'],
+);
+assert.deepEqual(
+  dueSlots({ morning: 10 * 60 + 30, afternoon: 15 * 60, night: 20 * 60 + 30 }, 20 * 60, ['morning']),
+  ['afternoon'],
+);
+assert.deepEqual(
+  dueSlots({ morning: 10 * 60 + 30, afternoon: 15 * 60, night: 20 * 60 + 30 }, 14 * 60, []),
+  ['morning'],
+);
+
 const morning = choosePost(posts, '2026-10-20', 'morning');
 const afternoon = choosePost(posts, '2026-10-20', 'afternoon');
 assert.notEqual(morning, afternoon);
@@ -34,5 +50,11 @@ const recent = [
 ];
 assert.equal(wasPostedToday(recent, '本文', '2026-10-20'), true);
 assert.equal(wasPostedToday(recent, '本文', '2026-10-21'), false);
+
+const postedMorningText = buildPostText(choosePost(posts, '2026-10-20', 'morning'), '2026-10-20', 'morning');
+assert.deepEqual(postedSlotsForDate(posts, [
+  { text: postedMorningText, timestamp: '2026-10-20T01:45:00+0000' },
+], '2026-10-20'), ['morning']);
+assert.deepEqual(postedSlotsForDate(posts, [], '2026-10-20'), []);
 
 console.log('noir Threads tests passed');

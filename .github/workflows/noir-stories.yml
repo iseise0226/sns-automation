@@ -2,10 +2,9 @@ name: NOIR Stories - seira_noir_ai
 
 on:
   schedule:
-    # JST 09:00 / 14:00 / 19:00. Each run waits a different 0-119 minutes.
-    - cron: '0 0 * * *'
-    - cron: '0 5 * * *'
-    - cron: '0 10 * * *'
+    # Check every 15 minutes from 09:07 through 21:52 JST, away from the
+    # heavily loaded :00/:30 boundaries. The script posts overdue slots.
+    - cron: '7,22,37,52 0-12 * * *'
   workflow_dispatch:
     inputs:
       dryrun:
@@ -25,12 +24,14 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: noir-stories-seira-noir-ai
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Random delay can be up to 119 minutes, so leave enough time for
-    # rendering, upload, and Instagram publishing after the delay.
-    timeout-minutes: 150
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,9 +39,6 @@ jobs:
           node-version: 22
       - name: Install video tools
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
-      - name: Randomize time inside the assigned daytime window
-        if: github.event_name == 'schedule'
-        run: sleep $(( (RANDOM % 120) * 60 ))
       - id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -54,6 +52,7 @@ jobs:
           IG_TOKEN_SEIRA_NOIR_AI: ${{ secrets.IG_TOKEN_SEIRA_NOIR_AI }}
           NOIR_DRYRUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dryrun == 'true' && '1' || '0' }}
           NOIR_SLOT: ${{ github.event_name == 'workflow_dispatch' && inputs.slot || '' }}
+          NOIR_STORY_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
         run: node scripts/noir-story.js
       - name: Save rendered preview for dry runs
         if: github.event_name == 'workflow_dispatch' && inputs.dryrun == 'true'

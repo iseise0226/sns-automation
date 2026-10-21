@@ -26,6 +26,14 @@ function shouldRunAt(schedule, minutes) {
   return Object.entries(schedule).find(([, selected]) => selected === minutes)?.[0] || null;
 }
 
+function dueSlots(schedule, minutes, postedSlots = []) {
+  const posted = new Set(postedSlots);
+  return Object.entries(schedule)
+    .filter(([slot, selected]) => selected <= minutes && !posted.has(slot))
+    .sort((left, right) => left[1] - right[1])
+    .map(([slot]) => slot);
+}
+
 function choosePost(sourcePosts, date, slot) {
   if (!Array.isArray(sourcePosts) || sourcePosts.length < 3) throw new Error('At least three NOIR Threads posts are required');
   const base = hash(date) % sourcePosts.length;
@@ -56,6 +64,13 @@ function buildPostText(text, date, slot) {
 
 function wasPostedToday(items, text, date) {
   return items.some((item) => item.text === text && item.timestamp && jstDate(new Date(item.timestamp)) === date);
+}
+
+function postedSlotsForDate(sourcePosts, items, date) {
+  return Object.keys(SLOT_OFFSETS).filter((slot) => {
+    const text = buildPostText(choosePost(sourcePosts, date, slot), date, slot);
+    return wasPostedToday(items, text, date);
+  });
 }
 
 function request(url, { method = 'GET', headers = {}, body } = {}) {
@@ -114,18 +129,9 @@ async function main() {
   const schedule = dailySchedule(now.date);
   let slot = process.env.NOIR_THREADS_SLOT || '';
 
-  if (process.env.NOIR_THREADS_SCHEDULED === '1') {
-    const halfHour = Math.floor(now.minutes / 30) * 30;
-    slot = shouldRunAt(schedule, halfHour);
-    if (!slot) {
-      console.log(`Not a selected slot. Today's JST schedule: ${JSON.stringify(schedule)}`);
-      return;
-    }
-  }
-  if (!SLOT_OFFSETS.hasOwnProperty(slot)) throw new Error('NOIR_THREADS_SLOT must be morning, afternoon, or night');
-
-  const text = buildPostText(choosePost(posts, now.date, slot), now.date, slot);
   if (mode === 'dryrun') {
+    if (!SLOT_OFFSETS.hasOwnProperty(slot)) throw new Error('NOIR_THREADS_SLOT must be morning, afternoon, or night');
+    const text = buildPostText(choosePost(posts, now.date, slot), now.date, slot);
     console.log(`DRYRUN ${now.date} ${slot} (${schedule[slot]} minutes JST)\n${text}`);
     return;
   }
@@ -140,6 +146,23 @@ async function main() {
   if (mode !== 'publish') throw new Error('NOIR_THREADS_MODE must be dryrun, verify, or publish');
 
   const recent = await recentThreads(token, account.id);
+  if (process.env.NOIR_THREADS_SCHEDULED === '1') {
+    const postedSlots = postedSlotsForDate(posts, recent, now.date);
+    const slots = dueSlots(schedule, now.minutes, postedSlots);
+    if (!slots.length) {
+      console.log(`No overdue Threads posts. JST ${now.date} schedule=${JSON.stringify(schedule)} posted=${JSON.stringify(postedSlots)}`);
+      return;
+    }
+    for (const dueSlot of slots) {
+      const text = buildPostText(choosePost(posts, now.date, dueSlot), now.date, dueSlot);
+      const id = await publish(token, account.id, text);
+      console.log(`Threads post published: ${id} (${now.date} ${dueSlot}, scheduled ${schedule[dueSlot]} JST minutes)`);
+    }
+    return;
+  }
+
+  if (!SLOT_OFFSETS.hasOwnProperty(slot)) throw new Error('NOIR_THREADS_SLOT must be morning, afternoon, or night');
+  const text = buildPostText(choosePost(posts, now.date, slot), now.date, slot);
   if (wasPostedToday(recent, text, now.date)) {
     console.log(`Skipped duplicate ${slot} post for ${now.date}.`);
     return;
@@ -149,4 +172,12 @@ async function main() {
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exit(1); });
-module.exports = { buildPostText, choosePost, dailySchedule, shouldRunAt, wasPostedToday };
+module.exports = {
+  buildPostText,
+  choosePost,
+  dailySchedule,
+  dueSlots,
+  postedSlotsForDate,
+  shouldRunAt,
+  wasPostedToday,
+};

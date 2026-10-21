@@ -16,6 +16,11 @@ const CAPTIONS = [
   '今日を生き抜いた。それだけで、もう十分えらい。',
   '言葉にできない気持ちも、ちゃんとここに置いていける。',
 ];
+const STORY_WINDOWS = {
+  morning: [9 * 60, 9 * 60 + 30, 10 * 60, 10 * 60 + 30, 11 * 60],
+  afternoon: [14 * 60, 14 * 60 + 30, 15 * 60, 15 * 60 + 30, 16 * 60],
+  night: [19 * 60, 19 * 60 + 30, 20 * 60, 20 * 60 + 30, 21 * 60],
+};
 
 function hash(value) {
   let n = 2166136261;
@@ -29,6 +34,13 @@ function chooseStory(files, date, slot, previousId = '') {
   const file = pool[hash(`${date}:${slot}`) % pool.length];
   const caption = CAPTIONS[hash(`${file.id}:${date}`) % CAPTIONS.length];
   return { file, caption, includeLink: false };
+}
+
+function storyDailySchedule(date) {
+  return Object.fromEntries(Object.entries(STORY_WINDOWS).map(([slot, candidates]) => [
+    slot,
+    candidates[hash(`${date}:story:${slot}`) % candidates.length],
+  ]));
 }
 
 function wrapCaption(caption) {
@@ -48,6 +60,46 @@ function wrapCaption(caption) {
   return lines.join('\n');
 }
 
+function dueStorySlots(schedule, minutes, postedSlots = []) {
+  const posted = new Set(postedSlots);
+  return Object.entries(schedule)
+    .filter(([slot, selected]) => selected <= minutes && !posted.has(slot))
+    .sort((left, right) => left[1] - right[1])
+    .map(([slot]) => slot);
+}
+
+function jstParts(value) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(value);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    minutes: Number(map.hour) * 60 + Number(map.minute),
+  };
+}
+
+function storySlotsFromTimestamps(items, date) {
+  const slots = new Set();
+  for (const item of items) {
+    if (!item.timestamp) continue;
+    const current = jstParts(new Date(item.timestamp));
+    if (current.date !== date) continue;
+    if (current.minutes >= 9 * 60 && current.minutes < 14 * 60) slots.add('morning');
+    else if (current.minutes >= 14 * 60 && current.minutes < 19 * 60) slots.add('afternoon');
+    else if (current.minutes >= 19 * 60) slots.add('night');
+  }
+  return ['morning', 'afternoon', 'night'].filter((slot) => slots.has(slot));
+}
+
+function validateInstagramProfile(profile) {
+  if (profile?.id !== IG_USER_ID || profile?.username !== 'seira_noir_ai') {
+    throw new Error(`unexpected Instagram account: ${profile?.username || 'unknown'} (${profile?.id || 'no id'})`);
+  }
+  return profile;
+}
+
 function request(url, { method = 'GET', headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
@@ -63,11 +115,9 @@ function request(url, { method = 'GET', headers = {}, body } = {}) {
 }
 
 function jstDateAndSlot() {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(now);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const hour = Number(map.hour);
-  return { date: `${map.year}-${map.month}-${map.day}`, slot: hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'night' };
+  const current = jstParts(new Date());
+  const hour = Math.floor(current.minutes / 60);
+  return { ...current, slot: hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'night' };
 }
 
 async function listDriveFiles(token) {
@@ -81,6 +131,22 @@ async function downloadDriveFile(id, token, destination) {
   const res = await request(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status !== 200) throw new Error(`Drive download failed (${res.status})`);
   fs.writeFileSync(destination, res.body);
+}
+
+async function instagramProfile(token) {
+  const fields = new URLSearchParams({ fields: 'id,username', access_token: token });
+  const res = await request(`https://graph.instagram.com/v23.0/${IG_USER_ID}?${fields}`);
+  const json = JSON.parse(res.body.toString() || '{}');
+  if (res.status !== 200) throw new Error(`Instagram profile check failed (${res.status}): ${json.error?.message || ''}`.trim());
+  return validateInstagramProfile(json);
+}
+
+async function recentStories(token) {
+  const fields = new URLSearchParams({ fields: 'id,timestamp', access_token: token });
+  const res = await request(`https://graph.instagram.com/v23.0/${IG_USER_ID}/stories?${fields}`);
+  const json = JSON.parse(res.body.toString() || '{}');
+  if (res.status !== 200) throw new Error(`Instagram Stories check failed (${res.status}): ${json.error?.message || ''}`.trim());
+  return json.data || [];
 }
 
 function renderStory(source, destination, caption) {
@@ -139,30 +205,65 @@ async function publishStory(videoPath, token) {
   const publish = await request(`https://graph.instagram.com/v23.0/${IG_USER_ID}/media_publish`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ creation_id: container.id, access_token: token }).toString() });
   const json = JSON.parse(publish.body.toString());
   if (!json.id) throw new Error(`Story publish failed: ${publish.status}`);
-  return json.id;
+  for (let i = 0; i < 6; i += 1) {
+    const visible = await recentStories(token);
+    if (visible.some((story) => story.id === json.id)) return json.id;
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  throw new Error(`Story ${json.id} was published by the API but did not appear in the account Stories feed`);
 }
 
 async function main() {
   const driveToken = (process.env.GDRIVE_TOKEN || '').trim();
   if (!driveToken) throw new Error('GDRIVE_TOKEN is required');
   const current = jstDateAndSlot();
-  const slot = process.env.NOIR_SLOT || current.slot;
+  const scheduled = process.env.NOIR_STORY_SCHEDULED === '1';
+  const dryRun = process.env.NOIR_DRYRUN === '1';
+  const token = (process.env.IG_TOKEN_SEIRA_NOIR_AI || '').trim();
+  let slots = [process.env.NOIR_SLOT || current.slot];
+
+  if (!dryRun) {
+    if (!token) throw new Error('IG_TOKEN_SEIRA_NOIR_AI is required');
+    await instagramProfile(token);
+  }
+  if (scheduled) {
+    const schedule = storyDailySchedule(current.date);
+    const postedSlots = storySlotsFromTimestamps(await recentStories(token), current.date);
+    slots = dueStorySlots(schedule, current.minutes, postedSlots);
+    if (!slots.length) {
+      console.log(`No overdue Stories. JST ${current.date} schedule=${JSON.stringify(schedule)} posted=${JSON.stringify(postedSlots)}`);
+      return;
+    }
+  }
+
   const files = await listDriveFiles(driveToken);
-  const selected = chooseStory(files, current.date, slot, process.env.NOIR_PREVIOUS_SOURCE_ID || '');
   const outDir = path.resolve('noir_story_output');
   fs.mkdirSync(outDir, { recursive: true });
   const source = path.join(outDir, 'source.mp4');
   const finalVideo = path.join(outDir, 'story.mp4');
-  await downloadDriveFile(selected.file.id, driveToken, source);
-  renderStory(source, finalVideo, selected.caption);
-  console.log(`Selected source: ${selected.file.name}`);
-  console.log(`Story text: ${selected.caption}`);
-  if (process.env.NOIR_DRYRUN === '1') { console.log(`DRYRUN complete: ${finalVideo}`); return; }
-  const token = (process.env.IG_TOKEN_SEIRA_NOIR_AI || '').trim();
-  if (!token) throw new Error('IG_TOKEN_SEIRA_NOIR_AI is required');
-  const id = await publishStory(finalVideo, token);
-  console.log(`Story published: ${id}`);
+  let previousId = process.env.NOIR_PREVIOUS_SOURCE_ID || '';
+  for (const slot of slots) {
+    const selected = chooseStory(files, current.date, slot, previousId);
+    await downloadDriveFile(selected.file.id, driveToken, source);
+    renderStory(source, finalVideo, selected.caption);
+    console.log(`Selected source: ${selected.file.name}`);
+    console.log(`Story text: ${selected.caption}`);
+    if (dryRun) {
+      console.log(`DRYRUN complete: ${finalVideo}`);
+      return;
+    }
+    const id = await publishStory(finalVideo, token);
+    console.log(`Story published and verified visible: ${id} (${current.date} ${slot})`);
+    previousId = selected.file.id;
+  }
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exit(1); });
-module.exports = { chooseStory, wrapCaption };
+module.exports = {
+  chooseStory,
+  dueStorySlots,
+  storyDailySchedule,
+  storySlotsFromTimestamps,
+  validateInstagramProfile,
+  wrapCaption,
+};

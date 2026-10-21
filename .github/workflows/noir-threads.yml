@@ -2,9 +2,10 @@ name: NOIR Threads - seira_noir_ai
 
 on:
   schedule:
-    # Every 30 minutes from 09:00 through 21:30 JST. The script chooses
-    # one deterministic-random time in each of the 09-11, 14-16, 19-21 windows.
-    - cron: '0,30 0-12 * * *'
+    # Check every 15 minutes away from GitHub's busy :00/:30 boundaries.
+    # The script catches up every overdue, unposted slot instead of requiring
+    # the runner to start at the exact selected minute.
+    - cron: '7,22,37,52 0-12 * * *'
   workflow_dispatch:
     inputs:
       mode:
