@@ -107,7 +107,7 @@ async function generateText(account, trends) {
     { role: 'user', content: userContent },
   ];
 
-  const groqBody = JSON.stringify({ model: 'llama-3.3-70b-versatile', messages, max_tokens: 500 });
+  const groqBody = JSON.stringify({ model: 'llama-3.1-8b-instant', messages, max_tokens: 500 });
   const res = await req(
     'https://api.groq.com/openai/v1/chat/completions',
     { method: 'POST', headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } },
