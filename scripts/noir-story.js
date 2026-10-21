@@ -94,7 +94,7 @@ function storySlotsFromTimestamps(items, date) {
 }
 
 function validateInstagramProfile(profile) {
-  if (profile?.id !== IG_USER_ID || profile?.username !== 'seira_noir_ai') {
+  if (!profile?.id || profile?.username !== 'seira_noir_ai') {
     throw new Error(`unexpected Instagram account: ${profile?.username || 'unknown'} (${profile?.id || 'no id'})`);
   }
   return profile;

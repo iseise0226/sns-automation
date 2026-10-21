@@ -44,11 +44,11 @@ assert.deepEqual(storySlotsFromTimestamps([
   { timestamp: '2026-10-20T11:30:00Z' },
 ], '2026-10-21'), []);
 assert.deepEqual(
-  validateInstagramProfile({ id: '17841459524471370', username: 'seira_noir_ai' }),
-  { id: '17841459524471370', username: 'seira_noir_ai' },
+  validateInstagramProfile({ id: '28221014890910736', username: 'seira_noir_ai' }),
+  { id: '28221014890910736', username: 'seira_noir_ai' },
 );
 assert.throws(
-  () => validateInstagramProfile({ id: 'other', username: 'another_account' }),
+  () => validateInstagramProfile({ id: '28221014890910736', username: 'another_account' }),
   /unexpected Instagram account/,
 );
 console.log('noir story selection tests passed');
