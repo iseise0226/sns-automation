@@ -8,6 +8,7 @@ const https = require('https');
 const { execFileSync, spawn } = require('child_process');
 
 const DRYRUN = Boolean(process.env.WF4_DRYRUN);
+const talk = require('./clip-talk-lib');
 const SCENE_SECONDS = 3;
 // CLIP_WIDE=1: YouTube用の横長(1920x1080)。素材は kosodate_wide、投稿はせず台本・動画だけ作る
 const WIDE = Boolean(process.env.CLIP_WIDE);
@@ -154,17 +155,17 @@ async function resolveVoicevoxSpeaker(name, styleName) {
   return style.id;
 }
 // generate-reel.js と同じ: 一時アップロード先を順に試し、直リンクとして使えるものを採用
-function isDirectVideoUrl(url) {
+function isDirectVideoUrl(url, kind = 'video') {
   try {
     const out = execFileSync('curl', ['-s', '-I', '-L', '-o', '/dev/null', '-w', '%{http_code} %{content_type}', url], { timeout: 30000 }).toString().trim();
     const [code, type] = out.split(' ');
-    return code === '200' && (type || '').startsWith('video/');
+    return code === '200' && (type || '').startsWith(kind + '/');
   } catch (e) {
     return false;
   }
 }
 
-function uploadPublic(videoPath) {
+function uploadPublic(videoPath, kind = 'video') {
   const uploaders = [
     {
       name: 'litterbox',
@@ -182,7 +183,7 @@ function uploadPublic(videoPath) {
   for (const up of uploaders) {
     try {
       const url = up.run();
-      if (url.startsWith('https://') && isDirectVideoUrl(url)) {
+      if (url.startsWith('https://') && isDirectVideoUrl(url, kind)) {
         console.log(`upload host: ${up.name}`);
         return url;
       }
@@ -194,17 +195,18 @@ function uploadPublic(videoPath) {
   throw new Error('全アップロードホストが失敗しました');
 }
 
-async function postReel(account, igUserId, videoPath, caption) {
+async function postReel(account, igUserId, videoPath, caption, coverPath) {
   const igToken = (process.env[`IG_TOKEN_${account.toUpperCase()}`] || '').trim();
   const publicUrl = uploadPublic(videoPath);
+  const coverUrl = coverPath ? uploadPublic(coverPath, 'image') : null;
   const curlJson = (args) => JSON.parse(execFileSync('curl', ['-s', ...args]).toString());
   const container = curlJson([
     '-X', 'POST', `https://graph.facebook.com/v23.0/${igUserId}/media`,
     '-d', 'media_type=REELS',
     '-d', `video_url=${encodeURIComponent(publicUrl)}`,
     '-d', `caption=${encodeURIComponent(caption)}`,
-    // 一覧が出ている1秒地点を表紙にする
-    '-d', 'thumb_offset=1000',
+    // 表紙画像があればそれを使い、なければ1秒地点を表紙にする
+    ...(coverUrl ? ['-d', `cover_url=${encodeURIComponent(coverUrl)}`] : ['-d', 'thumb_offset=1000']),
     '-d', `access_token=${igToken}`,
   ]);
   if (!container.id) throw new Error(`container failed: ${JSON.stringify(container)}`);
@@ -506,16 +508,33 @@ async function main() {
 
   const historyPath = path.join(TOPICS_DIR, `${account}.json`);
   const history = readJson(historyPath, []);
-  const script = await generateScript(cfg.system, sceneCount, history.slice(-40).map((h) => h.title), cfg);
+  const isTalk = cfg.style === 'talk';
+  const recentTitles = history.slice(-40).map((h) => h.title);
+  const script = isTalk
+    ? await talk.generateTalkScript({ callLLM, systemPrompt: cfg.system, pastTitles: recentTitles, topicSeed: TOPIC_SEEDS[Math.floor(Math.random() * TOPIC_SEEDS.length)], fact: pickFact() })
+    : await generateScript(cfg.system, sceneCount, recentTitles, cfg);
   console.log(`[${account}] title: ${script.title}`);
-  script.scenes.forEach((s, i) => console.log(`  ${i + 1}. ${s.lines.join(' / ')}`));
+  script.scenes.forEach((s, i) => console.log(`  ${i + 1}. ${s.tag ? '[' + s.tag + '] ' : ''}${s.lines.join(' / ')}`));
   fs.writeFileSync(path.join(outDir, 'script.json'), JSON.stringify(script, null, 2), 'utf-8');
 
   await ensureVoicevoxEngine();
-  const audios = await generateTTS(script.scenes, outDir, persona.voicevoxName, persona.voicevoxStyle);
-  const { picked, used } = pickClips(WIDE ? `${cfg.clipSet}_wide` : cfg.clipSet, sceneCount, account, outDir);
+  const count = isTalk ? script.scenes.length : sceneCount;
+  const { picked, used } = pickClips(WIDE ? `${cfg.clipSet}_wide` : cfg.clipSet, count, account, outDir);
   const bgm = pickBgm(persona.bgmMoods || ['前向き'], history, outDir);
-  const videoPath = render(script.scenes, audios, picked, outDir);
+  let videoPath;
+  let coverPath = null;
+  let coverPhoto = null;
+  if (isTalk) {
+    const speakerId = await resolveVoicevoxSpeaker(persona.voicevoxName || DEFAULT_VOICEVOX_NAME, persona.voicevoxStyle || DEFAULT_VOICEVOX_STYLE);
+    const tts = await talk.generateTalkTTS({ engine: VOICEVOX_ENGINE, speakerId, scenes: script.scenes, outDir });
+    videoPath = talk.renderTalk({ script, tts, clips: picked, outDir });
+    coverPhoto = talk.pickCoverPhoto(script.coverMood, history.slice(-6).map((h) => h.cover).filter(Boolean));
+    coverPath = talk.renderCover({ script, photo: coverPhoto, outDir });
+    console.log(`[${account}] cover: ${coverPhoto} (${script.coverMood})`);
+  } else {
+    const audios = await generateTTS(script.scenes, outDir, persona.voicevoxName, persona.voicevoxStyle);
+    videoPath = render(script.scenes, audios, picked, outDir);
+  }
   const caption = String(script.caption).trim() + (persona.ctaLine || '');
   fs.writeFileSync(path.join(outDir, 'caption.txt'), caption, 'utf-8');
   console.log(`[${account}] video rendered: ${videoPath}`);
@@ -526,12 +545,12 @@ async function main() {
   }
 
   if (cfg.postWindow) await waitForPostWindow(cfg.postWindow);
-  const result = await postReel(account, persona.igUserId, videoPath, caption);
+  const result = await postReel(account, persona.igUserId, videoPath, caption, coverPath);
   console.log(`[${account}] posted:`, result.id);
 
   lastRun[account] = new Date().toISOString();
   fs.writeFileSync(LAST_RUN_PATH, JSON.stringify(lastRun, null, 2), 'utf-8');
-  history.push({ date: today, title: script.title, bgm, media: result.id });
+  history.push({ date: today, title: script.title, bgm, media: result.id, ...(coverPhoto ? { cover: coverPhoto } : {}) });
   fs.mkdirSync(TOPICS_DIR, { recursive: true });
   fs.writeFileSync(historyPath, JSON.stringify(history.slice(-200), null, 2), 'utf-8');
   fs.mkdirSync(USED_CLIPS_DIR, { recursive: true });

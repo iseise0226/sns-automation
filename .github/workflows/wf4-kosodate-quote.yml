@@ -72,3 +72,4 @@ jobs:
             wf4_preview/ise_sato_kosodate/**/video.mp4
             wf4_preview/ise_sato_kosodate/**/script.json
             wf4_preview/ise_sato_kosodate/**/caption.txt
+            wf4_preview/ise_sato_kosodate/**/cover.jpg
