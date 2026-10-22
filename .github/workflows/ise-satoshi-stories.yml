@@ -25,20 +25,39 @@ jobs:
         run: node scripts/ise-satoshi/plan-ise-satoshi-story.js
         env:
           MANUAL_SLOT: ${{ inputs.slot }}
+      - name: Check whether this scheduled slot is already posted
+        id: posted
+        if: github.event_name == 'schedule' && steps.plan.outputs.should_post == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .story-published
+          key: ise-satoshi-story-${{ steps.plan.outputs.date }}-${{ steps.plan.outputs.slot }}
+          lookup-only: true
       - name: Install video tools
-        if: steps.plan.outputs.should_post == 'true'
+        if: steps.plan.outputs.should_post == 'true' && (github.event_name == 'workflow_dispatch' || steps.posted.outputs.cache-hit != 'true')
         run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
       - uses: actions/setup-node@v4
-        if: steps.plan.outputs.should_post == 'true'
+        if: steps.plan.outputs.should_post == 'true' && (github.event_name == 'workflow_dispatch' || steps.posted.outputs.cache-hit != 'true')
         with:
           node-version: '20'
-      - if: steps.plan.outputs.should_post == 'true'
+      - if: steps.plan.outputs.should_post == 'true' && (github.event_name == 'workflow_dispatch' || steps.posted.outputs.cache-hit != 'true')
         run: node scripts/ise-satoshi/generate-ise-satoshi-story.js
         env:
           STORY_SLOT: ${{ steps.plan.outputs.slot }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-      - if: steps.plan.outputs.should_post == 'true' && inputs.dry_run != true
+      - if: steps.plan.outputs.should_post == 'true' && inputs.dry_run != true && (github.event_name == 'workflow_dispatch' || steps.posted.outputs.cache-hit != 'true')
         run: node scripts/ise-satoshi/publish-ise-satoshi-story.js
         env:
           IG_TOKEN_ISE_SATOSHI: ${{ secrets.IG_TOKEN_ISE_SATOSHI }}
           IG_USER_ID: '17841401793428016'
+      - name: Record successful scheduled post
+        if: github.event_name == 'schedule' && steps.plan.outputs.should_post == 'true' && steps.posted.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .story-published
+          echo "${{ steps.plan.outputs.date }}-${{ steps.plan.outputs.slot }}" > .story-published/post.txt
+      - name: Save scheduled post record
+        if: github.event_name == 'schedule' && steps.plan.outputs.should_post == 'true' && steps.posted.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .story-published
+          key: ise-satoshi-story-${{ steps.plan.outputs.date }}-${{ steps.plan.outputs.slot }}

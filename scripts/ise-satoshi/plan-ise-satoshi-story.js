@@ -20,12 +20,13 @@ function plan(now = new Date(), manual = false, manualSlot = 0) {
     const tick = hash(`${date}:${index}`) % 16;
     return { index, hour: 9 + index * 4 + Math.floor(tick / 4), minute: (tick % 4) * 15 };
   });
-  // GitHub Actions can start a scheduled run late. Accept the first 30-minute
-  // window after a planned slot so a delayed scheduler run still publishes.
+  // GitHub Actions can start late, so any past slot remains eligible.
   const nowMinutes = hour * 60 + minute;
-  const due = slots.find(slot => {
+  // If GitHub starts late, publish the most recent unmissed time window.
+  // The workflow records successful slots so a later run will not duplicate it.
+  const due = [...slots].reverse().find(slot => {
     const slotMinutes = slot.hour * 60 + slot.minute;
-    return nowMinutes >= slotMinutes && nowMinutes < slotMinutes + 30;
+    return nowMinutes >= slotMinutes;
   });
   if (manual && ![0, 1, 2].includes(manualSlot)) throw new Error('Manual slot must be 0, 1 or 2');
   const slot = manual ? { index: manualSlot } : due;
@@ -36,7 +37,7 @@ if (require.main === module) {
   const result = plan(new Date(), process.env.GITHUB_EVENT_NAME === 'workflow_dispatch', Number(process.env.MANUAL_SLOT || 0));
   console.log(JSON.stringify(result));
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT,
-    `should_post=${result.shouldPost}\nslot=${result.slot}\n`);
+    `should_post=${result.shouldPost}\nslot=${result.slot}\ndate=${result.date}\n`);
 }
 
 module.exports = { plan };
