@@ -2,8 +2,10 @@ name: WF4 Kosodate Quote (ise_sato_kosodate, daily 7-8am random)
 
 on:
   schedule:
-    # JST 6:20 = UTC 21:20(前日)に動画を作り、日本時間7:00〜8:00のランダムな時刻まで待ってから投稿する
-    - cron: "20 21 * * *"
+    # GitHubの定期実行は数時間遅れることがある(2026-10-22は6:20予定が9:02開始)ため、早めに2回予約する。
+    # 動画を作ったあと日本時間7:00〜8:00のランダムな時刻まで待って投稿する。2回目は投稿済みならスキップ(同時には動かない)
+    - cron: "30 19 * * *" # JST 4:30
+    - cron: "30 20 * * *" # JST 5:30
   workflow_dispatch:
     inputs:
       no_upload:
@@ -25,7 +27,7 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

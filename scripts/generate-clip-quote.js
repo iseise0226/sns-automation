@@ -485,7 +485,7 @@ async function waitForPostWindow(win) {
   const nowMin = jst.getUTCHours() * 60 + jst.getUTCMinutes();
   const waitMin = pick - nowMin;
   console.log(`投稿予定: 日本時間 ${String(Math.floor(pick / 60)).padStart(2, '0')}:${String(pick % 60).padStart(2, '0')}(現在 ${String(Math.floor(nowMin / 60)).padStart(2, '0')}:${String(nowMin % 60).padStart(2, '0')})`);
-  if (waitMin > 0 && waitMin < 180) await sleep(waitMin * 60 * 1000);
+  if (waitMin > 0 && waitMin < 330) await sleep(waitMin * 60 * 1000);
 }
 
 async function main() {
@@ -564,7 +564,8 @@ async function main() {
   execFileSync('git', ['add', 'data/wf4_clip_used', 'data/wf4_last_run.json', 'data/wf4_list_topics']);
   try {
     execFileSync('git', ['commit', '-m', `chore: WF4 ${account} clip-quote ${today}`]);
-    execFileSync('git', ['pull', '--rebase']);
+    // npm install などで作業ツリーが変わっていても記録を残せるよう、退避してから取り込む
+    execFileSync('git', ['pull', '--rebase', '--autostash']);
     execFileSync('git', ['push']);
   } catch (e) {
     console.log('no changes to commit or push failed:', e.message);
