@@ -528,9 +528,12 @@ async function main() {
     const speakerId = await resolveVoicevoxSpeaker(persona.voicevoxName || DEFAULT_VOICEVOX_NAME, persona.voicevoxStyle || DEFAULT_VOICEVOX_STYLE);
     const tts = await talk.generateTalkTTS({ engine: VOICEVOX_ENGINE, speakerId, scenes: script.scenes, outDir });
     videoPath = talk.renderTalk({ script, tts, clips: picked, outDir });
-    coverPhoto = talk.pickCoverPhoto(script.coverMood, history.slice(-6).map((h) => h.cover).filter(Boolean));
-    coverPath = talk.renderCover({ script, photo: coverPhoto, outDir });
-    console.log(`[${account}] cover: ${coverPhoto} (${script.coverMood})`);
+    // 表紙画像は clipQuote.cover が true のときだけ作る(2026-10-22に本人が「この投稿なら表紙なくていい」と判断したので既定は作らない)
+    if (cfg.cover) {
+      coverPhoto = talk.pickCoverPhoto(script.coverMood, history.slice(-6).map((h) => h.cover).filter(Boolean));
+      coverPath = talk.renderCover({ script, photo: coverPhoto, outDir });
+      console.log(`[${account}] cover: ${coverPhoto} (${script.coverMood})`);
+    }
   } else {
     const audios = await generateTTS(script.scenes, outDir, persona.voicevoxName, persona.voicevoxStyle);
     videoPath = render(script.scenes, audios, picked, outDir);
