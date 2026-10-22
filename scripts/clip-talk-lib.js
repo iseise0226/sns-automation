@@ -47,7 +47,7 @@ ${fact.text}
 ${BELIEFS.map((b) => '- ' + b).join('\n')}
 
 【各場面の書き方】
-- lines: 画面に出す日本語。2〜3行。1行は13字以内。読み上げて4〜5秒で言える長さ。行の切れ目は意味の切れ目にする。
+- lines: 画面に出す日本語。2〜3行。各場面の中で文を言い終える(「〜が、」で次の場面に続けない)。1行は13字以内。読み上げて4〜5秒で言える長さ。行の切れ目は意味の切れ目にする。
 - en: その場面の自然な英語訳。1〜2文、80文字以内。直訳でなく英語圏の人が自然に読める言い方。日本語を含めない。
 - tag: 場面3〜5だけ「その1」「その2」「その3」。他の場面には付けない。
 
@@ -94,6 +94,7 @@ function validateTalk(d) {
   d.scenes.forEach((s, i) => {
     if (!s.lines.length) errs.push(`場面${i + 1}が空`);
     if (s.lines.some((l) => [...l].length > 14)) errs.push(`場面${i + 1}の1行が長い`);
+    if (/[、,が]$/.test(s.lines[s.lines.length - 1] || "")) errs.push(`場面${i + 1}の文が途中で切れている`);
     if (i >= 1 && s.lines.length < 2) errs.push(`場面${i + 1}が1行しかない(2〜3行にする)`);
     if (!s.en) errs.push(`場面${i + 1}に英訳がない`);
     else if (s.en.length > 100) errs.push(`場面${i + 1}の英訳が長い`);
