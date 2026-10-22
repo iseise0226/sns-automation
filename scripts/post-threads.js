@@ -129,6 +129,25 @@ async function generateText(account, trends) {
   return res2.json?.choices?.[0]?.message?.content;
 }
 
+// ise_satoshi は架空の生活エピソードを出さない。プロンプト逸脱時は投稿せず再生成する。
+function isAllowedIseSatoshiText(text) {
+  const banned = [
+    '道に迷', '迷子', '散歩', '寝坊', '忘れ物', '電車', '運転', '買い物',
+    '天気', '雨', '家族', '食事', '友人', '美容室', 'サロン', 'お客様',
+    '算命学', '鑑定', '占い', 'マインドセット', 'マインドフルネス',
+  ];
+  return !banned.some((word) => text.includes(word));
+}
+
+async function generateIseSatoshiText(trends) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const text = await generateText('ise_satoshi', trends);
+    if (text && isAllowedIseSatoshiText(text)) return text;
+    console.error(`[ise_satoshi] rejected generated text (attempt ${attempt})`);
+  }
+  throw new Error('ise_satoshi の投稿文が内容ルールを満たしませんでした');
+}
+
 async function postToThreads(account, text) {
   const a = ACCOUNTS[account];
   const token = (process.env[`THREADS_TOKEN_${account.toUpperCase()}`] || '').trim();
@@ -169,7 +188,11 @@ async function main() {
       // ise_satoshiでは、過去の宣伝・募集文を再開後に混ぜない。
       // 再開時も通常の自然な投稿だけを生成する。
       const useCta = acc !== 'ise_satoshi' && !!CTA_TEXTS[acc] && (forceCta || Math.random() < CTA_CHANCE);
-      const text = useCta ? pickCtaText(acc) : await generateText(acc, trends);
+      const text = useCta
+        ? pickCtaText(acc)
+        : acc === 'ise_satoshi'
+          ? await generateIseSatoshiText(trends)
+          : await generateText(acc, trends);
       if (!text) {
         console.error(`[${acc}] text generation failed, skipping`);
         continue;
