@@ -16,10 +16,9 @@ function hash(value) {
 
 function plan(now = new Date(), manual = false, manualSlot = 0) {
   const { date, hour, minute } = jstParts(now);
-  const slots = [0, 1, 2].map(index => {
-    const tick = hash(`${date}:${index}`) % 16;
-    return { index, hour: 9 + index * 4 + Math.floor(tick / 4), minute: (tick % 4) * 15 };
-  });
+  // One post a day, randomized within the JST 9:00–11:45 morning window.
+  const tick = hash(`${date}:morning`) % 12;
+  const slots = [{ index: 0, hour: 9 + Math.floor(tick / 4), minute: (tick % 4) * 15 }];
   // GitHub Actions can start late, so any past slot remains eligible.
   const nowMinutes = hour * 60 + minute;
   // If GitHub starts late, publish the most recent unmissed time window.
@@ -28,7 +27,7 @@ function plan(now = new Date(), manual = false, manualSlot = 0) {
     const slotMinutes = slot.hour * 60 + slot.minute;
     return nowMinutes >= slotMinutes;
   });
-  if (manual && ![0, 1, 2].includes(manualSlot)) throw new Error('Manual slot must be 0, 1 or 2');
+  if (manual && manualSlot !== 0) throw new Error('Manual slot must be 0');
   const slot = manual ? { index: manualSlot } : due;
   return { date, slots, shouldPost: Boolean(slot), slot: slot?.index ?? -1 };
 }

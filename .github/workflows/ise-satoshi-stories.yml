@@ -3,16 +3,17 @@ on:
   workflow_dispatch:
     inputs:
       slot:
-        description: '0 or 1 = own video, 2 = test of daily slot; source rotates by date'
+        description: 'Morning story test slot'
         type: choice
-        options: ['0', '1', '2']
+        options: ['0']
         default: '0'
       dry_run:
         description: 'Generate video without publishing'
         type: boolean
         default: false
   schedule:
-    - cron: '*/15 0-11 * * *'
+    # JST 9:00–11:45. The planner picks one randomized time in this window.
+    - cron: '*/15 0-2 * * *'
 permissions:
   contents: read
 jobs:
@@ -44,7 +45,6 @@ jobs:
         run: node scripts/ise-satoshi/generate-ise-satoshi-story.js
         env:
           STORY_SLOT: ${{ steps.plan.outputs.slot }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
       - if: steps.plan.outputs.should_post == 'true' && inputs.dry_run != true && (github.event_name == 'workflow_dispatch' || steps.posted.outputs.cache-hit != 'true')
         run: node scripts/ise-satoshi/publish-ise-satoshi-story.js
         env:
