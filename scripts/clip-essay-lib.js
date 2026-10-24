@@ -32,7 +32,7 @@ ${fact.text}
 ${beliefs.map((b) => '- ' + b).join('\n')}
 
 【書き方】
-- lines: 1枚の文。1〜3行。1行は14字以内。1枚は3〜4秒で読める長さ。行の切れ目は意味の切れ目。各枚の中で文を言い終える。
+- lines: 1枚の文。1〜3行。1行は14字以内。1枚は3〜4秒で読める長さ。行の切れ目は意味の切れ目にし、助詞(を・が・は・に・と・の など)や「だ」「いる」で次の行を始めない。各枚の中で文を言い終える。
 - 「〜しなさい」「〜すべき」と教えない。友達に語りかけるように、最後は言い切る。
 - 暗い言葉(怖い・重い・つらい・不安・疲れた など)は「共感」「本音」「葛藤」「実話」だけで使ってよい。「言い換え」「許可」「希望」では使わず、明るい言葉だけにする(「許可」の「怖くてもいい。」「迷ってもいい。」はよい)。
 - 「脳科学的に」「研究で証明」のような根拠を断定する言い方はしない。部下・スタッフ・社員の話は出さない。
@@ -68,6 +68,8 @@ function validateEssay(d) {
     else last = pi;
     if (!c.lines.length) errs.push(`${i + 1}枚目が空`);
     if (c.lines.some((l) => [...l].length > 15)) errs.push(`${i + 1}枚目の1行が長い`);
+    // 行の頭が助詞・助動詞だと、言葉の途中で改行したように見える(例「当たり前が宝物 / だと気づく」)
+    if (c.lines.slice(1).some((l) => /^(を|は|へ|だと|だっ|です|でし|いる|いた|ある|ない|が(?!ん))/.test(l))) errs.push(`${i + 1}枚目の行の区切りが不自然`);
     if (/[、,]$/.test(c.lines[c.lines.length - 1] || '')) errs.push(`${i + 1}枚目の文が途中で切れている`);
     // 許可では「怖くてもいい」「迷ってもいい」のように怖さを認める言葉だけは使ってよい
     const body = c.phase === '許可' ? c.lines.join('').replace(/怖|迷/g, '') : c.lines.join('');
@@ -145,15 +147,19 @@ function pickEssayClips({ clipDir, shots, used, outDir }) {
   const ranked = clipsByBrightness(clipDir);
   const third = Math.floor(ranked.length / 3);
   const pools = { dark: ranked.slice(0, third), dawn: ranked.slice(third, third * 2), warm: ranked.slice(third * 2) };
-  const srcUsed = new Set();
+  // 同じ元動画(sNN)は直近4本の間は避ける(長い動画でも続けて同じ映像にならないように)
+  const recent = [];
+  const isRecent = (f) => recent.slice(-4).includes(f.split('_')[0]);
+  const pickedSet = new Set();
   const picked = [];
   fs.mkdirSync(path.join(outDir, 'clips'), { recursive: true });
   for (const s of shots) {
     const base = pools[s.tone];
-    const tiers = [base.filter((c) => !used.includes(c.f) && !srcUsed.has(c.f.split('_')[0])), base.filter((c) => !srcUsed.has(c.f.split('_')[0])), base];
+    const tiers = [base.filter((c) => !used.includes(c.f) && !pickedSet.has(c.f) && !isRecent(c.f)), base.filter((c) => !isRecent(c.f)), base];
     const pool = tiers.find((t) => t.length);
     const c = pool[Math.floor(Math.random() * pool.length)];
-    srcUsed.add(c.f.split('_')[0]);
+    recent.push(c.f.split('_')[0]);
+    pickedSet.add(c.f);
     picked.push(c.f);
     fs.copyFileSync(path.join(clipDir, c.f), path.join(outDir, 'clips', c.f));
     s.clip = `clips/${c.f}`;
