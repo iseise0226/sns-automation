@@ -9,6 +9,7 @@ const { execFileSync, spawn } = require('child_process');
 
 const DRYRUN = Boolean(process.env.WF4_DRYRUN);
 const talk = require('./clip-talk-lib');
+const essay = require('./clip-essay-lib');
 const SCENE_SECONDS = 3;
 // CLIP_WIDE=1: YouTube用の横長(1920x1080)。素材は kosodate_wide、投稿はせず台本・動画だけ作る
 const WIDE = Boolean(process.env.CLIP_WIDE);
@@ -509,22 +510,39 @@ async function main() {
   const historyPath = path.join(TOPICS_DIR, `${account}.json`);
   const history = readJson(historyPath, []);
   const isTalk = cfg.style === 'talk';
+  const isEssay = cfg.style === 'essay';
   const recentTitles = history.slice(-40).map((h) => h.title);
-  const script = isTalk
-    ? await talk.generateTalkScript({ callLLM, systemPrompt: cfg.system, pastTitles: recentTitles, topicSeed: TOPIC_SEEDS[Math.floor(Math.random() * TOPIC_SEEDS.length)], fact: pickFact() })
+  const topicSeed = TOPIC_SEEDS[Math.floor(Math.random() * TOPIC_SEEDS.length)];
+  const script = isEssay
+    ? await essay.generateEssayScript({ callLLM, systemPrompt: cfg.system, pastTitles: recentTitles, topicSeed, fact: pickFact(), beliefs: talk.BELIEFS })
+    : isTalk
+    ? await talk.generateTalkScript({ callLLM, systemPrompt: cfg.system, pastTitles: recentTitles, topicSeed, fact: pickFact() })
     : await generateScript(cfg.system, sceneCount, recentTitles, cfg);
   console.log(`[${account}] title: ${script.title}`);
-  script.scenes.forEach((s, i) => console.log(`  ${i + 1}. ${s.tag ? '[' + s.tag + '] ' : ''}${s.lines.join(' / ')}`));
+  (isEssay ? script.cards : script.scenes).forEach((s, i) => console.log(`  ${i + 1}. ${s.phase ? '[' + s.phase + '] ' : s.tag ? '[' + s.tag + '] ' : ''}${s.lines.join(' / ')}`));
   fs.writeFileSync(path.join(outDir, 'script.json'), JSON.stringify(script, null, 2), 'utf-8');
 
   await ensureVoicevoxEngine();
-  const count = isTalk ? script.scenes.length : sceneCount;
-  const { picked, used } = pickClips(WIDE ? `${cfg.clipSet}_wide` : cfg.clipSet, count, account, outDir);
+  let picked;
+  let used;
+  let essayParts = null;
+  if (isEssay) {
+    // 縦書き型は映像の明るさで素材を選ぶ(前半は暗い映像、後半は明るい映像)
+    used = readJson(path.join(USED_CLIPS_DIR, `${account}.json`), []);
+    essayParts = essay.buildShots(script);
+    picked = essay.pickEssayClips({ clipDir: path.join(CLIPS_DIR, cfg.clipSet), shots: essayParts.shots, used, outDir });
+  } else {
+    ({ picked, used } = pickClips(WIDE ? `${cfg.clipSet}_wide` : cfg.clipSet, isTalk ? script.scenes.length : sceneCount, account, outDir));
+  }
   const bgm = pickBgm(persona.bgmMoods || ['前向き'], history, outDir);
   let videoPath;
   let coverPath = null;
   let coverPhoto = null;
-  if (isTalk) {
+  if (isEssay) {
+    const speakerId = await resolveVoicevoxSpeaker(persona.voicevoxName || DEFAULT_VOICEVOX_NAME, persona.voicevoxStyle || DEFAULT_VOICEVOX_STYLE);
+    await essay.generateEssayTTS({ engine: VOICEVOX_ENGINE, speakerId, cards: essayParts.cards, outDir });
+    videoPath = essay.renderEssay({ cards: essayParts.cards, shots: essayParts.shots, outDir });
+  } else if (isTalk) {
     const speakerId = await resolveVoicevoxSpeaker(persona.voicevoxName || DEFAULT_VOICEVOX_NAME, persona.voicevoxStyle || DEFAULT_VOICEVOX_STYLE);
     const tts = await talk.generateTalkTTS({ engine: VOICEVOX_ENGINE, speakerId, scenes: script.scenes, outDir });
     videoPath = talk.renderTalk({ script, tts, clips: picked, outDir });

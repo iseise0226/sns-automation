@@ -203,4 +203,4 @@ function renderCover({ script, photo, outDir }) {
   return coverPath;
 }
 
-module.exports = { SCENES, generateTalkScript, generateTalkTTS, renderTalk, pickCoverPhoto, renderCover, validateTalk, buildTalkPrompt };
+module.exports = { BELIEFS, SCENES, generateTalkScript, generateTalkTTS, renderTalk, pickCoverPhoto, renderCover, validateTalk, buildTalkPrompt };
