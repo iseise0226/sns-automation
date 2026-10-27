@@ -129,20 +129,58 @@ async function generateText(account, trends) {
   return res2.json?.choices?.[0]?.message?.content;
 }
 
-// ise_satoshi は架空の生活エピソードを出さない。プロンプト逸脱時は投稿せず再生成する。
-function isAllowedIseSatoshiText(text) {
+function normalizeText(text) {
+  return String(text || '').replace(/[\s、。！？…「」]/g, '');
+}
+
+function repeatsRecentWording(text, recentTexts) {
+  const candidate = normalizeText(text);
+  return recentTexts.some((recent) => {
+    const previous = normalizeText(recent);
+    if (!previous) return false;
+    if (candidate === previous) return true;
+    // 14文字以上連続で一致する表現は、同じ言い回しとして作り直す。
+    for (let index = 0; index <= candidate.length - 14; index += 1) {
+      if (previous.includes(candidate.slice(index, index + 14))) return true;
+    }
+    return false;
+  });
+}
+
+async function recentIseSatoshiTexts() {
+  const token = (process.env.THREADS_TOKEN_ISE_SATOSHI || '').trim();
+  const userId = THREADS_USER_IDS.ise_satoshi;
+  if (!token) return [];
+  const url = `https://graph.threads.net/v1.0/${userId}/threads?` +
+    new URLSearchParams({ fields: 'text,timestamp', limit: '25', access_token: token });
+  try {
+    const response = await req(url, { method: 'GET' });
+    if (response.status !== 200) throw new Error(response.json?.error?.message || `HTTP ${response.status}`);
+    return (response.json?.data || []).map((post) => post.text).filter(Boolean);
+  } catch (error) {
+    // 投稿を止めないため、履歴取得だけが失敗した場合はプロンプト側の制約で続行する。
+    console.error(`[ise_satoshi] could not load recent posts: ${error.message}`);
+    return [];
+  }
+}
+
+// 架空の生活エピソードと、AIらしい定番フレーズを投稿前に除外する。
+function isAllowedIseSatoshiText(text, recentTexts) {
   const banned = [
     '道に迷', '迷子', '散歩', '寝坊', '忘れ物', '電車', '運転', '買い物',
     '天気', '雨', '家族', '食事', '友人', '美容室', 'サロン', 'お客様',
     '算命学', '鑑定', '占い', 'マインドセット', 'マインドフルネス',
+    '小さなことでも', '自分のペースで', '今日の一歩', '気持ちを整える',
+    '前に進む', '大切なのは',
   ];
-  return !banned.some((word) => text.includes(word));
+  return !banned.some((word) => text.includes(word)) && !repeatsRecentWording(text, recentTexts);
 }
 
 async function generateIseSatoshiText(trends) {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  const recentTexts = await recentIseSatoshiTexts();
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
     const text = await generateText('ise_satoshi', trends);
-    if (text && isAllowedIseSatoshiText(text)) return text;
+    if (text && isAllowedIseSatoshiText(text, recentTexts)) return text;
     console.error(`[ise_satoshi] rejected generated text (attempt ${attempt})`);
   }
   throw new Error('ise_satoshi の投稿文が内容ルールを満たしませんでした');
