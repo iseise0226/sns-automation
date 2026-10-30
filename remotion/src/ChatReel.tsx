@@ -13,8 +13,9 @@ import {
 } from "remotion";
 
 // AIラク活(旧sessi_life)の「チャット型」リール(2026-10-30〜)
-// 上=固定のタイトル帯、真ん中=①結論②コピペ③完成の章ごとに切り替わる画面、下=ナレーションの字幕。
-// 真ん中は「自分→AI」の吹き出しで、コピペ用の文と、その文を実際にAIへ送って返ってきた答えを見せる。
+// 上=固定のタイトル帯、真ん中=①悩み②結論③コピペ④完成の章ごとに切り替わる画面、下=ナレーションの字幕。
+// 悩みを言い当てて心の声を見せてから、時間の比較で結論→理由→「自分→AI」の吹き出しで
+// コピペ用の文と、その文を実際にAIへ送って返ってきた答えを見せる(悩み→PREPの流れ)。
 // 書体はListReelと同じ理由で同梱のTTF(remotion/assets/fonts_rounded → public-dir/fonts)を読む。
 const ROUND = "ChatReelRounded";
 const fontHandle = delayRender("ChatReel fonts");
@@ -33,7 +34,7 @@ Promise.all(
     continueRender(fontHandle);
   });
 
-export type ChatScene = "hook" | "intro" | "prompt" | "result" | "save";
+export type ChatScene = "pain" | "point" | "reason" | "prompt" | "result" | "save";
 
 export type ChatLine = {
   text: string; // 字幕。【】で囲んだ部分を色付きで強調する
@@ -47,6 +48,8 @@ export type ChatReelProps = {
   topLine: string;
   topMain: string; // 【】で囲んだ部分にマーカー
   hook: { beforeLabel: string; before: string; afterLabel: string; after: string; question: string };
+  worries: string[]; // 悩んでいる時の心の声
+  reason: string; // 「〜だから」の理由カード
   prompt: string; // [[ ]]で囲んだ部分は「自分で書き換える所」として色を付ける
   result: string;
   saveLabel: string;
@@ -71,7 +74,8 @@ const C = {
 export const chatReelDuration = (p: ChatReelProps) =>
   p.lines.reduce((s, l) => s + Math.round(l.seconds * FPS), 0);
 
-const STEP_OF: Record<ChatScene, number> = { hook: 0, intro: 0, prompt: 1, result: 2, save: 3 };
+const STEP_OF: Record<ChatScene, number> = { pain: 0, point: 1, reason: 1, prompt: 2, result: 3, save: 4 };
+const STEPS = ["悩み", "結論", "コピペ", "完成"];
 
 // 【強調】を色付きspanに
 const Emph: React.FC<{ text: string; color: string; bg?: string }> = ({ text, color, bg }) => (
@@ -157,11 +161,63 @@ const pop = (frame: number, fps: number, delay = 0) =>
 
 // ---- 真ん中の画面 ----
 
-const HookView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
+// ①悩み: 問いかけで言い当てて、心の声を1つずつ浮かべる
+const PainView: React.FC<{ p: ChatReelProps; f: number; dur: number }> = ({ p, f, dur }) => {
+  const { fps } = useVideoConfig();
+  const q = pop(f, fps, 0);
+  return (
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div
+        style={{
+          fontSize: 76,
+          fontWeight: 900,
+          lineHeight: 1.32,
+          textAlign: "center",
+          color: C.ink,
+          whiteSpace: "pre-line",
+          transform: `scale(${0.9 + 0.1 * q})`,
+          opacity: q,
+        }}
+      >
+        {p.hook.question}
+      </div>
+      <div style={{ marginTop: 56, width: "100%", display: "flex", flexDirection: "column", gap: 24 }}>
+        {p.worries.map((w, i) => {
+          const e = pop(f, fps, Math.round(dur * (0.22 + 0.2 * i)));
+          const left = i % 2 === 0;
+          return (
+            <div
+              key={i}
+              style={{
+                alignSelf: left ? "flex-start" : "flex-end",
+                marginLeft: left ? 30 + i * 20 : 0,
+                marginRight: left ? 0 : 30,
+                padding: "22px 40px",
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.9)",
+                border: `4px dashed ${C.muted}`,
+                color: "#5D5C80",
+                fontSize: 44,
+                fontWeight: 800,
+                opacity: e,
+                transform: `translateY(${(1 - e) * 40}px) rotate(${left ? -2 : 2}deg)`,
+              }}
+            >
+              💭 {w}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ②結論: 時間の比較で言い切る。続きを見たくなるよう「このあと」を添える
+const PointView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
   const { fps } = useVideoConfig();
   const a = pop(f, fps, 0);
   const b = pop(f, fps, 8);
-  const q = interpolate(f, [14, 26], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const n = interpolate(f, [22, 34], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const box: React.CSSProperties = { width: 380, padding: "44px 0 36px", borderRadius: 44, textAlign: "center" };
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -186,19 +242,57 @@ const HookView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
       </div>
       <div
         style={{
-          marginTop: 64,
-          fontSize: 60,
-          fontWeight: 900,
-          lineHeight: 1.4,
-          textAlign: "center",
-          color: C.ink,
-          opacity: q,
-          transform: `translateY(${(1 - q) * 30}px)`,
-          whiteSpace: "pre-line",
+          marginTop: 70,
+          fontSize: 40,
+          fontWeight: 800,
+          padding: "14px 36px",
+          borderRadius: 999,
+          background: "#fff",
+          color: C.indigoDeep,
+          boxShadow: `0 8px 24px ${C.shadow}`,
+          opacity: n,
+          transform: `translateY(${(1 - n) * 24}px)`,
         }}
       >
-        {p.hook.question}
+        ▼ このあとコピペ用の文を見せます
       </div>
+    </div>
+  );
+};
+
+// 結論の理由。「なぜ？」の札と一緒に大きく出す
+const ReasonView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
+  const { fps } = useVideoConfig();
+  const e = pop(f, fps, 0);
+  const t = pop(f, fps, 6);
+  return (
+    <div
+      style={{
+        width: "100%",
+        padding: "70px 50px 76px",
+        borderRadius: 48,
+        background: "#fff",
+        boxShadow: `0 16px 44px ${C.shadow}`,
+        textAlign: "center",
+        opacity: e,
+        transform: `scale(${0.92 + 0.08 * e})`,
+      }}
+    >
+      <span
+        style={{
+          display: "inline-block",
+          fontSize: 40,
+          fontWeight: 900,
+          padding: "10px 40px",
+          borderRadius: 999,
+          background: C.coral,
+          color: "#fff",
+          transform: `scale(${t})`,
+        }}
+      >
+        なぜ？
+      </span>
+      <div style={{ marginTop: 40, fontSize: 68, fontWeight: 900, lineHeight: 1.42, color: C.ink, whiteSpace: "pre-line" }}>{p.reason}</div>
     </div>
   );
 };
@@ -346,16 +440,6 @@ const ResultView: React.FC<{ p: ChatReelProps; f: number; dur: number; save: boo
   );
 };
 
-const IntroView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
-  const { fps } = useVideoConfig();
-  const e = pop(f, fps, 0);
-  return (
-    <Bubble who="あなた" me enter={e} style={{ fontSize: 50, fontWeight: 800, padding: "40px 48px" }}>
-      {p.hook.question.replace(/\n/g, "")}
-    </Bubble>
-  );
-};
-
 // ---- 全体 ----
 
 export const ChatReel: React.FC<ChatReelProps> = (p) => {
@@ -421,7 +505,7 @@ export const ChatReel: React.FC<ChatReelProps> = (p) => {
 
       {/* 章 */}
       <div style={{ position: "absolute", top: 470, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 20 }}>
-        {["結論", "コピペ", "完成"].map((s, i) => {
+        {STEPS.map((s, i) => {
           const done = i < step;
           const on = i === step;
           return (
@@ -436,7 +520,7 @@ export const ChatReel: React.FC<ChatReelProps> = (p) => {
                 color: on ? "#fff" : done ? C.coral : "#A3A2C2",
               }}
             >
-              {done ? "✓ " : ["① ", "② ", "③ "][i]}
+              {done ? "✓ " : ["① ", "② ", "③ ", "④ "][i]}
               {s}
             </span>
           );
@@ -456,8 +540,9 @@ export const ChatReel: React.FC<ChatReelProps> = (p) => {
           justifyContent: "center",
         }}
       >
-        {line.scene === "hook" && <HookView p={p} f={sf} />}
-        {line.scene === "intro" && <IntroView p={p} f={sf} />}
+        {line.scene === "pain" && <PainView p={p} f={sf} dur={sdur} />}
+        {line.scene === "point" && <PointView p={p} f={sf} />}
+        {line.scene === "reason" && <ReasonView p={p} f={sf} />}
         {line.scene === "prompt" && <PromptView p={p} f={sf} dur={sdur} />}
         {(line.scene === "result" || line.scene === "save") && (
           <ResultView p={p} f={sf} dur={sdur} save={line.scene === "save"} />

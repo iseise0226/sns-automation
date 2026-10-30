@@ -1,5 +1,5 @@
 // WF4: AIラク活(旧sessi_life)の「チャット型」リールを生成・投稿する(2026-10-30〜)
-// 1秒目に「15分→30秒」で結論 → コピペ用の文を吹き出しで見せる → その文を実際にAIへ送った答えを見せる → 保存して、で締める。
+// 悩みを言い当てて掘る → 「15分→30秒」で結論 → 理由 → コピペ用の文と、その文を実際にAIへ送った答え → 悩みが消えた一言と保存、のPREPの流れ(2026-10-30〜)。
 // 答えは台本のAIに書かせず、コピペ用の文と入力例を別にAIへ送って返ってきたものを使う(作り話の結果を出さないため)。
 // wf4_accounts.json で "format": "chat-prompt" のアカウントを wf4-ai-rakukatsu.yml が呼ぶ。
 // generate-reel.js / generate-list-reel.js は末尾で main() を実行するため require できない。共通処理はここに写している。
@@ -103,20 +103,24 @@ function readJson(p, fallback) {
   }
 }
 
-// 2026-10-30にユーザーに見せた1本目の台本。AIへの「良い例」として渡す
+// 2026-10-30にユーザーに見せた1本目の台本を、悩みを掘ってから答えるPREPの流れに直したもの。AIへの「良い例」として渡す
 const GOOD_EXAMPLE = {
   topLine: '返信メールに悩む時間、ゼロへ',
   topMain: '【AIに丸投げ】でOK',
-  hook: { beforeLabel: '自分で書く', before: '15分', afterLabel: 'AIに頼む', after: '30秒', question: '断りのメール、\n何て書けばいいか\n迷ってない？' },
+  hook: { beforeLabel: '自分で書く', before: '15分', afterLabel: 'AIに頼む', after: '30秒', question: '断りのメール、\n何回も\n書き直してない？' },
+  worries: ['失礼にならないかな…', '嫌われたくない', 'もう15分たってる'],
+  reason: 'AIは、角が立たない\n断り方をたくさん\n知っているから',
   prompt: '次のメールに、[[丁寧だけど短め]]の返信を書いて。今回は[[お断り]]したいけど、関係は悪くしたくない。150字以内で。\n【ここにメールを貼る】',
   sampleInput: '件名：来月のセミナー登壇のお願い\n〇〇様\nいつもお世話になっております。来月15日のセミナーで、30分ほどお話しいただけないでしょうか。ご検討よろしくお願いいたします。',
   lines: [
-    { scene: 'hook', text: '断りのメール、【まだ自分で】考えてる？' },
-    { scene: 'intro', text: '角が立たない断り方、【AIが一瞬で】書いてくれます' },
-    { scene: 'prompt', text: 'この文を【そのままコピペ】' },
-    { scene: 'prompt', text: '最後に、もらったメールを貼るだけ' },
-    { scene: 'result', text: 'すると、【ちゃんと断れる】返信が完成' },
-    { scene: 'save', text: '【保存して】、次に断るとき使ってね' },
+    { scene: 'pain', text: '断りのメール、【何回も】書き直してない？' },
+    { scene: 'pain', text: '嫌われたくなくて、気づけば【15分】…' },
+    { scene: 'point', text: 'それ、【AIに頼めば30秒】で終わります' },
+    { scene: 'reason', text: 'AIは角が立たない言い方を知ってるから' },
+    { scene: 'prompt', text: 'この文を【そのままコピペ】して' },
+    { scene: 'prompt', text: 'もらったメールを下に貼るだけ' },
+    { scene: 'result', text: 'ほら、【ちゃんと断れる】返信が完成' },
+    { scene: 'save', text: 'もう悩まなくていい。【保存】してね' },
   ],
   comment: '一番返信に困るメールは？',
 };
@@ -127,23 +131,32 @@ function buildPrompt(pastTopics, category, seed) {
 
 【見る人】30〜50代の働く人・家事をしている人。ChatGPTは入れたけど「何て打てばいいか分からない」で止まっている初心者。
 
+【流れ】いきなり答えを出さず、まず悩みを掘ってから答える(悩み → PREP)。
+1. 悩み(pain・2行): 見る人の頭の中の言葉で、その場面をそのまま言い当てる(ラベリング)。2行目で本音の不安と、失っている時間や気力を言う(損失回避)。責めない。「あるある」と思わせる
+2. 結論(point): 「それ、AIに頼めば〇〇で終わる」と言い切る。かかる時間の比較で見せる(コントラスト)
+3. 理由(reason): なぜAIだと楽なのかを一言で(「〜だから」で終える。理由があると人は納得する)
+4. 具体例(prompt・2行 → result): コピペ用の文を見せ、実際にAIに送った答えを見せる
+5. 結論をもう一度(save): 「もう〇〇しなくていい」と悩みが消えた未来を言い、保存をすすめる
+
 【形式】
 - topLine: 上の帯の1行目。悩みが消える一言(18字以内)
 - topMain: 上の帯の大きい文字(10字以内)。一番言いたい部分を【】で囲む
-- hook: 1秒目に出す比較と問いかけ
+- hook: 時間の比較と、冒頭の問いかけ
   - beforeLabel / afterLabel: 「自分で書く」「AIに頼む」など(6字以内)
   - before / after: 「15分」「30秒」など、かかる時間の比較(4字以内。大げさにしすぎない)
-  - question: 見る人が「自分のことだ」と思う問いかけ。\\nで3行以内(1行12字以内)
+  - question: 1秒目に大きく出す、悩みを言い当てる問いかけ。\\nで3行以内(1行10字以内)
+- worries: 悩んでいる時の心の声を3つ(各12字以内)。不安→本音→失っている時間の順
+- reason: 理由のカードに出す文。\\nで3行以内(1行10字以内)。「〜から」で終える
 - prompt: コピペ用の文。見る人がそのままAIに貼る文(120字以内)。
   - 自分の状況に合わせて書き換える所を[[ ]]で囲む(1〜3か所)
   - 動画で答えを見せるため、文の中に「150字以内で」「3つまで」など答えの長さの指定を必ず入れる
   - 最後の行に、見る人が自分のもの(メール・メモ・食材など)を貼る場所を【ここに〇〇を貼る】と書く
 - sampleInput: 【ここに〇〇を貼る】に入れる、それらしい入力例(実在の人名・会社名は使わない。150字以内)
-- lines: ナレーション兼字幕。ちょうど6行。sceneは順に hook, intro, prompt, prompt, result, save
+- lines: ナレーション兼字幕。ちょうど8行。sceneは順に pain, pain, point, reason, prompt, prompt, result, save
   - 1行22字以内。話し言葉で、やさしく。強調したい部分を1か所だけ【】で囲む
-  - hookの行は問いかけ、saveの行は「保存して、〇〇するとき使ってね」の形
+  - saveの行は「もう〇〇しなくていい」など悩みが消えた一言と、保存のすすめ
 - comment: 最後に出すコメントの問いかけ(16字以内)
-- caption: 投稿文の本文。1行目は悩みに共感する一言。そのあと「■ 使い方」として1〜3の手順、「■ ポイント」として書き換えのコツを2つ。200〜350字。コピペ用の文とハッシュタグは書かない(あとで自動で付け足す)
+- caption: 投稿文の本文。同じ流れで書く: 1行目は悩みを言い当てる一言 → 本音の不安に寄りそう一言 → 「AIに頼めば〇〇で終わります」→ 理由 → 「■ 使い方」として1〜3の手順 → 「■ ポイント」として書き換えのコツを2つ。250〜400字。コピペ用の文とハッシュタグは書かない(あとで自動で付け足す)
 - hashtags: 5つ(#ChatGPT #AI活用 を含む)
 
 【良い例(この質を目指す。言い回しは真似しない)】
@@ -152,18 +165,18 @@ ${JSON.stringify(GOOD_EXAMPLE)}
 【ルール】
 - 多くの人が週に1回はぶつかる、よくある困りごとにする(「2つの〇〇を比べる」のような、人によっては起きない場面は避ける)
 - beforeLabel は今回の作業に合った言葉にする(書く作業でなければ「自分で考える」「自分で調べる」など)
-- introの行はhookの言い換えにしない。「AIなら何ができるか」を言う
+- 悩みの2行は同じことの言い換えにしない(1行目=場面、2行目=本音と失っているもの)
 - 本当にAIに打てば今日から使えるものだけ。特定の有料サービスや最新機能に頼らない
-- 「絶対」「誰でも稼げる」のような言い過ぎはしない
+- 「絶対」「誰でも稼げる」のような言い過ぎ、不安をあおりすぎる言い方はしない
 - 下の「最近使ったテーマ」とかぶらないこと
 
 【最近使ったテーマ(かぶらないこと)】
 ${pastTopics.length ? pastTopics.map((t) => '- ' + t).join('\n') : '- (なし)'}
 
-JSONだけを返す: {"topLine":"..","topMain":"..","hook":{"beforeLabel":"..","before":"..","afterLabel":"..","after":"..","question":".."},"prompt":"..","sampleInput":"..","lines":[{"scene":"hook","text":".."}],"comment":"..","caption":"..","hashtags":["#.."]}`;
+JSONだけを返す: {"topLine":"..","topMain":"..","hook":{"beforeLabel":"..","before":"..","afterLabel":"..","after":"..","question":".."},"worries":[".."],"reason":"..","prompt":"..","sampleInput":"..","lines":[{"scene":"pain","text":".."}],"comment":"..","caption":"..","hashtags":["#.."]}`;
 }
 
-const SCENES = ['hook', 'intro', 'prompt', 'prompt', 'result', 'save'];
+const SCENES = ['pain', 'pain', 'point', 'reason', 'prompt', 'prompt', 'result', 'save'];
 const len = (s) => [...String(s || '')].length;
 
 function validate(d) {
@@ -188,6 +201,10 @@ function validate(d) {
     question: String(h.question || '').replace(/\\n/g, '\n').trim(),
   };
   if (!d.hook.before || !d.hook.after || !d.hook.question) errs.push('hookが欠けている');
+  d.worries = (Array.isArray(d.worries) ? d.worries : []).map((w) => String(w).trim()).filter(Boolean).slice(0, 3);
+  if (d.worries.length < 2 || d.worries.some((w) => len(w) > 14)) errs.push('worriesが2〜3個で短くない');
+  d.reason = String(d.reason || '').replace(/\\n/g, '\n').trim();
+  if (!d.reason || len(d.reason.replace(/\n/g, '')) > 34) errs.push('reasonがないか長い');
   d.lines = (Array.isArray(d.lines) ? d.lines : []).slice(0, SCENES.length).map((l, i) => ({ scene: SCENES[i], text: String(l.text || '').trim() }));
   if (d.lines.length !== SCENES.length || d.lines.some((l) => !l.text)) errs.push(`linesが${SCENES.length}行でない`);
   if (d.lines.some((l) => len(l.text.replace(/[【】]/g, '')) > 26)) errs.push('字幕の行が長い');
@@ -333,7 +350,7 @@ async function makeVoices(lines, outDir, persona) {
     const file = `voice${i + 1}.wav`;
     fs.writeFileSync(path.join(outDir, file), Buffer.from(await s.arrayBuffer()));
     // 画面の動き(打ち込み・吹き出し)が見えるよう、場面ごとに最低の長さを持たせる
-    const min = { hook: 2.6, intro: 2.2, prompt: 2.6, result: 4.6, save: 3.4 }[lines[i].scene];
+    const min = { pain: 2.6, point: 2.6, reason: 2.6, prompt: 2.6, result: 4.6, save: 3.4 }[lines[i].scene];
     const pad = lines[i].scene === 'save' ? 1.2 : 0.25;
     out.push({ ...lines[i], audio: file, seconds: Math.max(min, Math.round((audioSeconds(path.join(outDir, file)) + pad) * FPS) / FPS) });
   }
@@ -398,7 +415,7 @@ function uploadPublic(videoPath) {
   throw new Error('全アップロードホストが失敗しました');
 }
 
-async function postReel(account, igUserId, videoPath, caption) {
+async function postReel(account, igUserId, videoPath, caption, thumbMs) {
   const igToken = (process.env[`IG_TOKEN_${account.toUpperCase()}`] || '').trim();
   const publicUrl = uploadPublic(videoPath);
   const curlJson = (args) => JSON.parse(execFileSync('curl', ['-s', ...args]).toString());
@@ -408,7 +425,7 @@ async function postReel(account, igUserId, videoPath, caption) {
     '-d', `video_url=${encodeURIComponent(publicUrl)}`,
     '-d', `caption=${encodeURIComponent(caption)}`,
     // 「15分→30秒」が出そろった地点を表紙にする
-    '-d', 'thumb_offset=1500',
+    '-d', `thumb_offset=${thumbMs}`,
     '-d', `access_token=${igToken}`,
   ]);
   if (!container.id) throw new Error(`container failed: ${JSON.stringify(container)}`);
@@ -484,6 +501,8 @@ async function main() {
     topLine: script.topLine,
     topMain: script.topMain,
     hook: script.hook,
+    worries: script.worries,
+    reason: script.reason,
     prompt: script.prompt,
     result: script.result,
     saveLabel: '保存してあとで使う',
@@ -503,7 +522,8 @@ async function main() {
     return;
   }
 
-  const result = await postReel(account, persona.igUserId, videoPath, caption);
+  const pointAt = lines.slice(0, lines.findIndex((l) => l.scene === 'point')).reduce((t, l) => t + l.seconds, 0);
+  const result = await postReel(account, persona.igUserId, videoPath, caption, Math.round((pointAt + 1) * 1000));
   console.log(`[${account}] posted:`, result.id);
 
   lastRun[account] = new Date().toISOString();
