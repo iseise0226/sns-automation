@@ -225,7 +225,7 @@ function validate(d) {
     d[k] = String(d[k] || '').replace(/\\n/g, '\n').trim();
     if (!d[k] || len(d[k].replace(/\n/g, '')) > 34) errs.push(`${k}がないか長い`);
   }
-  d.lines = (Array.isArray(d.lines) ? d.lines : []).slice(0, SCENES.length).map((l, i) => ({ scene: SCENES[i], text: String(l.text || '').trim() }));
+  d.lines = (Array.isArray(d.lines) ? d.lines : []).slice(0, SCENES.length).map((l, i) => ({ scene: SCENES[i], text: String(l.text || '').replace(/\\n|\n/g, '').trim() }));
   if (d.lines.length !== SCENES.length || d.lines.some((l) => !l.text)) errs.push(`linesが${SCENES.length}行でない`);
   if (d.lines.some((l) => len(l.text.replace(/[【】]/g, '')) > 28)) errs.push('字幕の行が長い');
   if (d.lines.some((l) => len(l.text.replace(/[【】]/g, '')) < 10)) errs.push('字幕に短すぎる行(文を2行に分けている)がある');
