@@ -1,46 +1,30 @@
 {
  "hero": {
-  "url": "https://www.amazon.co.jp/newalexa",
-  "label": "amazon.co.jp 公式",
+  "url": "https://prtimes.jp/main/html/rd/p/000002169.000006428.html",
+  "label": "freee（PR TIMES）",
   "taken": "2026-10-30",
   "shot": "hero",
-  "find": "はじめまして、Alexa+",
+  "find": "API非対応アプリのアカウントを自動同期する",
   "height": 520,
-  "quote": "プライム会員なら無料"
+  "quote": "freee IT管理、API非対応アプリのアカウントを自動同期する新機能「AIアプリコネクター」を提供開始"
  },
- "price": {
-  "url": "https://www.amazon.co.jp/newalexa",
-  "label": "amazon.co.jp 公式",
+ "steps": {
+  "url": "https://prtimes.jp/main/html/rd/p/000002169.000006428.html",
+  "label": "freee（PR TIMES）",
   "taken": "2026-10-30",
-  "shot": "price",
-  "find": "Alexa+の料金はいくらですか",
-  "height": 330,
-  "mark": "月額3,000円",
-  "quote": "月額3,000円の単独のサブスクリプション"
+  "shot": "steps",
+  "find": "わずか3ステップでアカウント同期を自動化",
+  "height": 600,
+  "mark": "わずか3ステップでアカウント同期を自動化",
+  "quote": "わずか3ステップでアカウント同期を自動化"
  },
- "can": {
-  "url": "https://www.amazon.co.jp/newalexa",
-  "label": "amazon.co.jp 公式",
+ "safe": {
+  "url": "https://prtimes.jp/main/html/rd/p/000002169.000006428.html",
+  "label": "freee（PR TIMES）",
   "taken": "2026-10-30",
-  "shot": "can",
-  "find": "Alexa+でできること",
-  "height": 760,
-  "quote": "献立の相談、書類をスキャンしての予定登録"
- },
- "devices": {
-  "url": "https://www.amazon.co.jp/newalexa",
-  "label": "amazon.co.jp 公式",
-  "taken": "2026-10-30",
-  "shot": "devices",
-  "find": "Alexa+に対応するデバイスは",
+  "shot": "safe",
+  "find": "ID・パスワードを預からない、安全な設計",
   "height": 560,
-  "mark": "Echo Dot 第1世代",
-  "quote": "一部の旧世代Echoデバイス (Echo Dot 第1世代…) を除く"
- },
- "early": {
-  "url": "https://www.amazon.co.jp/newalexa",
-  "label": "amazon.co.jp 公式",
-  "taken": "2026-10-30",
-  "quote": "Alexa+ 早期アクセスのご案内を順次開始します"
+  "quote": "ID・パスワードを預からない、安全な設計"
  }
 }
