@@ -27,8 +27,8 @@ const TOPIC_SEEDS = {
   暮らし: [
     '冷蔵庫の余りもので献立', '1週間の献立と買い物リスト', '旅行の計画表', '家計の固定費の見直し', '子どもの宿題の教え方',
     '片付けの手順を決める', '引っ越しのやることリスト', 'プレゼント選び', '学校や町内会への連絡文', '体調に合わせた作り置き',
-    '家族旅行の持ち物リスト', '習い事の比較', '朝のルーティンを作る', '家事の分担表', '長い説明書をわかりやすく',
-    '病院で伝えることをまとめる', '保険や契約書の要点をつかむ', 'お店選びの比較',
+    '家族旅行の持ち物リスト', '朝のルーティンを作る', '家事の分担表', '長い説明書をわかりやすく',
+    '病院で伝えることをまとめる', '保険や契約書の要点をつかむ', '子どもへの声かけを言い換える', 'ママ友・近所へのお断りLINE',
   ],
 };
 
@@ -150,6 +150,9 @@ function buildPrompt(pastTopics, category, seed) {
 ${JSON.stringify(GOOD_EXAMPLE)}
 
 【ルール】
+- 多くの人が週に1回はぶつかる、よくある困りごとにする(「2つの〇〇を比べる」のような、人によっては起きない場面は避ける)
+- beforeLabel は今回の作業に合った言葉にする(書く作業でなければ「自分で考える」「自分で調べる」など)
+- introの行はhookの言い換えにしない。「AIなら何ができるか」を言う
 - 本当にAIに打てば今日から使えるものだけ。特定の有料サービスや最新機能に頼らない
 - 「絶対」「誰でも稼げる」のような言い過ぎはしない
 - 下の「最近使ったテーマ」とかぶらないこと
@@ -217,10 +220,24 @@ async function generateScript(systemPrompt, pastTopics) {
 // コピペ用の文に入力例を入れて、実際にAIへ送る。返ってきた答えをそのまま動画に出す
 const fillPrompt = (prompt, input) => prompt.replace(/\[\[|\]\]/g, '').replace(/【ここに[^】]*】/, input);
 
+// 見る人の多くが使うのはChatGPTなので、答えはOpenAIで取る(無ければGroq)
+async function askLikeViewer(content) {
+  const key = (process.env.OPENAI_API_KEY || '').trim();
+  if (key) {
+    const res = await req(
+      'https://api.openai.com/v1/chat/completions',
+      { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } },
+      JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content }], max_tokens: 800 })
+    );
+    const text = res.json?.choices?.[0]?.message?.content;
+    if (text) return text;
+    console.error('OpenAIで答えを取れずGroqに切り替え: ' + JSON.stringify(res.json || {}).slice(0, 200));
+  }
+  return callLLM([{ role: 'user', content }], 1500, false);
+}
+
 async function runPrompt(script) {
-  const answer = (
-    await callLLM([{ role: 'user', content: fillPrompt(script.prompt, script.sampleInput) }], 1500, false)
-  )
+  const answer = (await askLikeViewer(fillPrompt(script.prompt, script.sampleInput)))
     .replace(/\*\*/g, '')
     .replace(/^#+\s*/gm, '')
     .replace(/\n{2,}/g, '\n')
