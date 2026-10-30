@@ -13,9 +13,9 @@ import {
 } from "remotion";
 
 // AIラク活(旧sessi_life)の「チャット型」リール(2026-10-30〜)
-// 上=固定のタイトル帯、真ん中=①悩み②結論③コピペ④完成の章ごとに切り替わる画面、下=ナレーションの字幕。
-// 悩みを言い当てて心の声を見せてから、時間の比較で結論→理由→「自分→AI」の吹き出しで
-// コピペ用の文と、その文を実際にAIへ送って返ってきた答えを見せる(悩み→PREPの流れ)。
+// 上=固定のタイトル帯、真ん中=①悩み②原因③結論④コピペ⑤完成の章ごとに切り替わる画面、下=ナレーションの字幕。
+// 悩みを言い当てて心の声を見せ、本当の原因まで掘ってから、時間の比較で結論→理由→「自分→AI」の吹き出しで
+// コピペ用の文と、その文を実際にAIへ送って返ってきた答え→もう一歩のコツを見せる(約1分の悩み→PREP)。
 // 書体はListReelと同じ理由で同梱のTTF(remotion/assets/fonts_rounded → public-dir/fonts)を読む。
 const ROUND = "ChatReelRounded";
 const fontHandle = delayRender("ChatReel fonts");
@@ -34,7 +34,7 @@ Promise.all(
     continueRender(fontHandle);
   });
 
-export type ChatScene = "pain" | "point" | "reason" | "prompt" | "result" | "save";
+export type ChatScene = "pain" | "root" | "point" | "reason" | "prompt" | "result" | "tip" | "save";
 
 export type ChatLine = {
   text: string; // 字幕。【】で囲んだ部分を色付きで強調する
@@ -49,7 +49,9 @@ export type ChatReelProps = {
   topMain: string; // 【】で囲んだ部分にマーカー
   hook: { beforeLabel: string; before: string; afterLabel: string; after: string; question: string };
   worries: string[]; // 悩んでいる時の心の声
+  root: string; // 「本当の原因は…」のカード
   reason: string; // 「〜だから」の理由カード
+  tip: string; // 「＋1のコツ」のカード
   prompt: string; // [[ ]]で囲んだ部分は「自分で書き換える所」として色を付ける
   result: string;
   saveLabel: string;
@@ -74,8 +76,8 @@ const C = {
 export const chatReelDuration = (p: ChatReelProps) =>
   p.lines.reduce((s, l) => s + Math.round(l.seconds * FPS), 0);
 
-const STEP_OF: Record<ChatScene, number> = { pain: 0, point: 1, reason: 1, prompt: 2, result: 3, save: 4 };
-const STEPS = ["悩み", "結論", "コピペ", "完成"];
+const STEP_OF: Record<ChatScene, number> = { pain: 0, root: 1, point: 2, reason: 2, prompt: 3, result: 4, tip: 4, save: 5 };
+const STEPS = ["悩み", "原因", "結論", "コピペ", "完成"];
 
 // 【強調】を色付きspanに
 const Emph: React.FC<{ text: string; color: string; bg?: string }> = ({ text, color, bg }) => (
@@ -138,7 +140,14 @@ const splitCaption = (text: string): string[] => {
     if (ch !== "【" && ch !== "】") visible++;
     if (inEmph) continue;
     const next = chars[i + 1];
-    const good = /[、。！？」]/.test(ch) ? 0 : ch === "】" ? 1 : /[をにがはでとも]/.test(ch) && next !== "】" ? 2 : 99;
+    // 助詞の後でも、次がひらがなだと「なが|ら」のように言葉の途中なので切らない
+    const good = /[、。！？」]/.test(ch)
+      ? 0
+      : ch === "】" || next === "【"
+        ? 1
+        : /[をにがはでとも]/.test(ch) && next !== "】" && !/[ぁ-ん]/.test(next)
+          ? 2
+          : 99;
     if (good === 99) continue;
     const score = Math.abs(visible - half) + good * 1.5;
     if (score < bestScore) {
@@ -260,8 +269,8 @@ const PointView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
   );
 };
 
-// 結論の理由。「なぜ？」の札と一緒に大きく出す
-const ReasonView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
+// 原因・理由・コツを、札と一緒に大きく出すカード
+const CardView: React.FC<{ label: string; text: string; f: number; dark?: boolean }> = ({ label, text, f, dark }) => {
   const { fps } = useVideoConfig();
   const e = pop(f, fps, 0);
   const t = pop(f, fps, 6);
@@ -271,7 +280,7 @@ const ReasonView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
         width: "100%",
         padding: "70px 50px 76px",
         borderRadius: 48,
-        background: "#fff",
+        background: dark ? C.ink : "#fff",
         boxShadow: `0 16px 44px ${C.shadow}`,
         textAlign: "center",
         opacity: e,
@@ -290,9 +299,9 @@ const ReasonView: React.FC<{ p: ChatReelProps; f: number }> = ({ p, f }) => {
           transform: `scale(${t})`,
         }}
       >
-        なぜ？
+        {label}
       </span>
-      <div style={{ marginTop: 40, fontSize: 68, fontWeight: 900, lineHeight: 1.42, color: C.ink, whiteSpace: "pre-line" }}>{p.reason}</div>
+      <div style={{ marginTop: 40, fontSize: 68, fontWeight: 900, lineHeight: 1.42, color: dark ? "#fff" : C.ink, whiteSpace: "pre-line" }}>{text}</div>
     </div>
   );
 };
@@ -504,7 +513,7 @@ export const ChatReel: React.FC<ChatReelProps> = (p) => {
       </div>
 
       {/* 章 */}
-      <div style={{ position: "absolute", top: 470, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 20 }}>
+      <div style={{ position: "absolute", top: 470, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 14 }}>
         {STEPS.map((s, i) => {
           const done = i < step;
           const on = i === step;
@@ -512,15 +521,15 @@ export const ChatReel: React.FC<ChatReelProps> = (p) => {
             <span
               key={s}
               style={{
-                fontSize: 30,
+                fontSize: 29,
                 fontWeight: 800,
-                padding: "10px 28px",
+                padding: "10px 22px",
                 borderRadius: 999,
                 background: on ? C.coral : done ? C.coralSoft : "rgba(255,255,255,0.75)",
                 color: on ? "#fff" : done ? C.coral : "#A3A2C2",
               }}
             >
-              {done ? "✓ " : ["① ", "② ", "③ ", "④ "][i]}
+              {done ? "✓ " : ["① ", "② ", "③ ", "④ ", "⑤ "][i]}
               {s}
             </span>
           );
@@ -542,7 +551,9 @@ export const ChatReel: React.FC<ChatReelProps> = (p) => {
       >
         {line.scene === "pain" && <PainView p={p} f={sf} dur={sdur} />}
         {line.scene === "point" && <PointView p={p} f={sf} />}
-        {line.scene === "reason" && <ReasonView p={p} f={sf} />}
+        {line.scene === "root" && <CardView label="本当の原因は…" text={p.root} f={sf} dark />}
+        {line.scene === "reason" && <CardView label="なぜAIだと楽？" text={p.reason} f={sf} />}
+        {line.scene === "tip" && <CardView label="＋1のコツ" text={p.tip} f={sf} />}
         {line.scene === "prompt" && <PromptView p={p} f={sf} dur={sdur} />}
         {(line.scene === "result" || line.scene === "save") && (
           <ResultView p={p} f={sf} dur={sdur} save={line.scene === "save"} />
