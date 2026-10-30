@@ -1,0 +1,13 @@
+days/*/output.mp4
+days/*/audio/
+days/*/index.html
+days/*/lines.json
+days/*/fonts/
+days/*/vendor/
+days/*/node_modules/
+days/*/.hyperframes/
+days/*/package.json
+days/*/hyperframes.json
+days/*/sheet.png
+__pycache__/
+.pytest_cache/

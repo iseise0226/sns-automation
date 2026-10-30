@@ -1,0 +1,7 @@
+{
+ "hero": {"url": "https://www.amazon.co.jp/newalexa", "label": "amazon.co.jp 公式", "taken": "2026-10-30", "shot": "hero", "quote": "はじめまして、Alexa+ プライム会員なら無料"},
+ "price": {"url": "https://www.amazon.co.jp/newalexa", "label": "amazon.co.jp 公式", "taken": "2026-10-30", "shot": "price", "quote": "早期アクセス終了後も、Alexa+はプライム会員なら会員特典に含まれるため無料のままです。プライム会員以外のお客様については、Alexa+が自動更新されることはなく、月額3,000円の単独のサブスクリプションとしてご利用いただけるようになります。"},
+ "can": {"url": "https://www.amazon.co.jp/newalexa", "label": "amazon.co.jp 公式", "taken": "2026-10-30", "shot": "can", "quote": "レストランの予約※から献立の相談、書類をスキャンしての予定登録、対応スマート家電(別売)の操作まで、Alexaに任せましょう。※本予約機能は今後提供予定です。"},
+ "devices": {"url": "https://www.amazon.co.jp/newalexa", "label": "amazon.co.jp 公式", "taken": "2026-10-30", "shot": "devices", "quote": "一部の旧世代Echoデバイス (Echo Dot 第1世代、Echo 第1世代、Echo 第2世代、Echo Plus 第1世代、Echo Show 第1世代、Echo Show 第2世代、Echo Spot 第1世代) を除く、すべてのEchoデバイスで動作します。"},
+ "early": {"url": "https://www.amazon.co.jp/newalexa", "label": "amazon.co.jp 公式", "taken": "2026-10-30", "shot": "devices", "quote": "対象デバイスをお持ちのお客様を対象に、Alexa+ 早期アクセスのご案内を順次開始します。Alexa+は日本では日本語でのみご利用いただけます。"}
+}

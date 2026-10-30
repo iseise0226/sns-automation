@@ -1,0 +1,166 @@
+name: tabi_life 新サービス図解リール（作って投稿）
+
+# 考える係＝Claudeのクラウド定期実行（毎朝10時JST）が tabi/days/YYYY-MM-DD/script.json と sources.json を
+# claude/tabi-YYYY-MM-DD ブランチに push する → このワークフローが動く。
+# 画面撮り（capture）→ 声 → 動画 → 出典照合（verify）→ 表紙 → 投稿 → 結果を main に記録。
+# PCは使わない。verify が NG の日は投稿しない。
+on:
+  push:
+    branches: ["claude/**"]
+    paths: ["tabi/days/**/script.json"]
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "作る日（YYYY-MM-DD）。空なら一番新しい日"
+        required: false
+        default: ""
+      dryrun:
+        description: "1なら投稿しない（動画と表紙だけ作る）"
+        required: false
+        default: "0"
+  schedule:
+    - cron: "30 0 * * 1"  # 月曜 9:30 JST：週の見直し
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tabi-reel
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - name: 直近7本の成績を取って系統の重みを更新
+        env:
+          TOKEN: ${{ secrets.IG_TOKEN_TABI_LIFE_DESIGN }}
+        working-directory: tabi/engine
+        run: |
+          IDS=$(python topics.py ids)
+          [ -n "$IDS" ] || exit 0
+          : > insights.txt
+          for ID in ${IDS//,/ }; do
+            R=$(curl -s "https://graph.facebook.com/v23.0/$ID/insights?metric=views,saved,shares,follows&access_token=$TOKEN")
+            echo "INSIGHT $ID $(echo "$R" | jq -c '[.data[]? | {(.name): .values[0].value}] | add // {}')" | tee -a insights.txt
+          done
+          python topics.py weekly insights.txt
+          rm insights.txt
+          git config user.name "tabi-bot"; git config user.email "tabi-bot@users.noreply.github.com"
+          git add ../topics.json; git diff --cached --quiet || git commit -m "tabi: 週の見直し（系統の重み）"; git push
+
+  reel:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 作る日を決める
+        id: day
+        run: |
+          D="${{ github.event.inputs.day }}"
+          if [ -z "$D" ]; then D=$(ls tabi/days | sort | tail -1); fi
+          [ -f "tabi/days/$D/script.json" ] || { echo "tabi/days/$D/script.json がない"; exit 1; }
+          echo "day=$D" >> "$GITHUB_OUTPUT"; echo "作る日: $D"
+
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+
+      - name: ffmpeg・Playwright・Pillow
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg p7zip-full
+          pip install playwright pillow pytest
+          python -m playwright install --with-deps chromium
+
+      - name: VOICEVOXエンジンをキャッシュ
+        id: cache-voicevox
+        uses: actions/cache@v4
+        with:
+          path: scripts/daily-pipeline/voicevox_engine
+          key: voicevox-engine-linux-cpu-x64-0.25.2
+      - name: VOICEVOXエンジン取得
+        if: steps.cache-voicevox.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p scripts/daily-pipeline/voicevox_engine && cd scripts/daily-pipeline/voicevox_engine
+          curl -sL -o engine.7z https://github.com/VOICEVOX/voicevox_engine/releases/download/0.25.2/voicevox_engine-linux-cpu-x64-0.25.2.7z.001
+          7z x engine.7z && rm engine.7z
+      - name: VOICEVOXの場所
+        run: |
+          RUN=$(find "$GITHUB_WORKSPACE/scripts/daily-pipeline/voicevox_engine" -name run -type f | head -1)
+          chmod +x "$RUN"; echo "VOICEVOX_RUN=$RUN" >> "$GITHUB_ENV"
+
+      - name: 仕組みのテスト
+        working-directory: tabi/engine
+        run: python -m pytest tests -q
+
+      - name: 雛形を入れる
+        run: |
+          D=tabi/days/${{ steps.day.outputs.day }}
+          cp -rn tabi/engine/template/. "$D/"
+          mkdir -p "$D/shots" "$D/audio"
+
+      - name: 画面と本文を取る（capture）
+        working-directory: tabi/days/${{ steps.day.outputs.day }}
+        run: python ../../engine/capture.py
+
+      - name: 声（tts）
+        working-directory: tabi/days/${{ steps.day.outputs.day }}
+        run: python ../../engine/tts.py
+
+      - name: 動画（build → check → render）
+        working-directory: tabi/days/${{ steps.day.outputs.day }}
+        run: |
+          node ../../engine/build.mjs
+          npx --yes hyperframes@0.8.216 browser ensure
+          npx --yes hyperframes@0.8.216 check || echo "check に指摘あり（warning は続行）"
+          npx --yes hyperframes@0.8.216 render -o output.mp4
+
+      - name: 出典照合（verify）と表紙
+        working-directory: tabi/days/${{ steps.day.outputs.day }}
+        run: |
+          python ../../engine/verify.py || true
+          cat verify.json
+          python ../../engine/cover.py
+          ffmpeg -y -v error -i output.mp4 -vf "fps=1/3,scale=270:-1,tile=7x2" -frames:v 1 sheet.png || true
+
+      - name: 投稿
+        id: post
+        working-directory: tabi/days/${{ steps.day.outputs.day }}
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN_TABI_LIFE_DESIGN }}
+          IG_USER_ID: "17841410048474816"
+          DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+        run: python ../../engine/post.py
+
+      - name: 動画を保存（確認用・7日）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tabi-${{ steps.day.outputs.day }}
+          path: |
+            tabi/days/${{ steps.day.outputs.day }}/output.mp4
+            tabi/days/${{ steps.day.outputs.day }}/cover.png
+            tabi/days/${{ steps.day.outputs.day }}/sheet.png
+            tabi/days/${{ steps.day.outputs.day }}/verify.json
+          retention-days: 7
+
+      - name: 結果を main に記録
+        if: always() && steps.day.outputs.day != ''
+        run: |
+          D=${{ steps.day.outputs.day }}
+          mkdir -p /tmp/day && cp -r "tabi/days/$D/." /tmp/day/
+          git config user.name "tabi-bot"; git config user.email "tabi-bot@users.noreply.github.com"
+          git fetch -q origin main && git checkout -q -B main origin/main
+          rm -rf "tabi/days/$D" && mkdir -p "tabi/days/$D" && cp -r /tmp/day/. "tabi/days/$D/"
+          if [ -f "tabi/days/$D/post.json" ] && grep -q '"ok": true' "tabi/days/$D/post.json"; then
+            (cd tabi/engine && python topics.py record "../days/$D")
+          fi
+          git add tabi
+          git diff --cached --quiet || git commit -q -m "tabi: $D の結果"
+          git push -q origin main
