@@ -4,7 +4,7 @@ const { execFileSync } = require('child_process');
 
 // satoshi_mind_coaching is handled by wf-hitmehard.yml.
 // ise_sato_kosodate is handled by wf4-kosodate-quote.yml.
-// sessi_life and tabi_life_design are intentionally excluded until their new brand content is ready.
+// sessi_life (AIラク活) is handled by wf4-ai-rakukatsu.yml. tabi_life_design stays paused until its new brand content is ready.
 const ACCOUNTS = [
   'satoshi_mindset',
   'ise_kenkou_otaku',

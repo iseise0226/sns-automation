@@ -8,6 +8,7 @@ import { TaidanReel } from "./TaidanReel";
 import { EditorialCover, EditorialCut } from "./EditorialScenes";
 import { ListReel, listReelDuration } from "./ListReel";
 import { ClipQuote, clipQuoteDuration } from "./ClipQuote";
+import { ChatReel, chatReelDuration } from "./ChatReel";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -185,6 +186,27 @@ export const RemotionRoot: React.FC = () => {
         bgm: "bgm.mp3",
       }}
       calculateMetadata={({ props }) => ({ durationInFrames: listReelDuration(props, 30) })}
+    />
+    <Composition
+      id="ChatReel"
+      component={ChatReel}
+      durationInFrames={900}
+      fps={30}
+      width={1080}
+      height={1920}
+      defaultProps={{
+        chip: "コピペOK｜AIラク活",
+        topLine: "サンプル",
+        topMain: "【サンプル】でOK",
+        hook: { beforeLabel: "自分で", before: "15分", afterLabel: "AIなら", after: "30秒", question: "サンプル" },
+        prompt: "サンプル",
+        result: "サンプル",
+        saveLabel: "保存してあとで使う",
+        comment: "サンプル",
+        handle: "@ai_rakukatsu.sessi",
+        lines: [{ text: "サンプル", scene: "hook" as const, seconds: 3 }],
+      }}
+      calculateMetadata={({ props }) => ({ durationInFrames: chatReelDuration(props) })}
     />
     </>
   );
