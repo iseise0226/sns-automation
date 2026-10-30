@@ -9,6 +9,7 @@ import { EditorialCover, EditorialCut } from "./EditorialScenes";
 import { ListReel, listReelDuration } from "./ListReel";
 import { ClipQuote, clipQuoteDuration } from "./ClipQuote";
 import { ChatReel, chatReelDuration } from "./ChatReel";
+import { ChatCover } from "./ChatCover";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -207,6 +208,23 @@ export const RemotionRoot: React.FC = () => {
         lines: [{ text: "サンプル", scene: "hook" as const, seconds: 3 }],
       }}
       calculateMetadata={({ props }) => ({ durationInFrames: chatReelDuration(props) })}
+    />
+    <Still
+      id="ChatCover"
+      component={ChatCover}
+      width={1080}
+      height={1920}
+      defaultProps={{
+        variant: "A" as const,
+        chip: "コピペOK｜AIラク活",
+        topic: "サンプル",
+        pain: "サンプル",
+        hook: "サンプル",
+        question: "サンプル",
+        before: "15分",
+        after: "30秒",
+        handle: "@ai_rakukatsu.sessi",
+      }}
     />
     </>
   );

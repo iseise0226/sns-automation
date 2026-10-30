@@ -68,7 +68,9 @@ jobs:
             wf4_preview/**/video.mp4
             wf4_preview/**/caption.txt
             wf4_preview/**/script.json
+            wf4_preview/**/cover.jpg
             wf4_media/**/video.mp4
             wf4_media/**/caption.txt
             wf4_media/**/script.json
+            wf4_media/**/cover.jpg
           if-no-files-found: ignore

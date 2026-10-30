@@ -133,6 +133,7 @@ const GOOD_EXAMPLE = {
     { scene: 'save', text: '断るたびに悩む日は、もう終わり。【保存】してね' },
   ],
   comment: '一番返信に困るメールは？',
+  cover: { topic: '断りのメール', pain: '断りのメール、書けない…', hook: '原因は文章力じゃない' },
 };
 
 function buildPrompt(pastTopics, category, seed) {
@@ -170,6 +171,10 @@ function buildPrompt(pastTopics, category, seed) {
 - lines: ナレーション兼字幕。ちょうど16行。sceneは順に pain, pain, pain, root, root, point, reason, reason, prompt, prompt, prompt, result, result, tip, tip, save
   - 1行24字以内。話し言葉で、やさしく。強調したい部分を1か所だけ【】で囲む(無い行があってもよい)
 - comment: 最後に出すコメントの問いかけ(16字以内)
+- cover: 表紙の文字。表紙は「悩みの一言 → 本当の原因は… → (答え)」で、続きが気になるように作る
+  - topic: 何の話か(8字以内。「断りのメール」)
+  - pain: 悩みの一言(14字以内。「〜できない…」「〜決まらない…」など)
+  - hook: 本当の原因を短く。「原因は〇〇」の形(12字以内。答えは言い切るが、どうすればいいかは動画を見ないと分からないように)
 - caption: 投稿文の本文。同じ流れで書く: 悩みを言い当てる一言 → 本音に寄りそう一言 → 「でも本当の原因は〜」 → 「だからAIに任せれば〇〇で終わります」と理由 → 「■ 使い方」として1〜3の手順 → 「■ もう一歩のコツ」を2つ。400〜600字。コピペ用の文とハッシュタグは書かない(あとで自動で付け足す)
 - hashtags: 5つ(#ChatGPT #AI活用 を含む)
 
@@ -191,7 +196,7 @@ ${JSON.stringify(GOOD_EXAMPLE)}
 【最近使ったテーマ(かぶらないこと)】
 ${pastTopics.length ? pastTopics.map((t) => '- ' + t).join('\n') : '- (なし)'}
 
-JSONだけを返す: {"topLine":"..","topMain":"..","hook":{"beforeLabel":"..","before":"..","afterLabel":"..","after":"..","question":".."},"worries":[".."],"root":"..","reason":"..","tip":"..","prompt":"..","sampleInput":"..","lines":[{"scene":"pain","text":".."}],"comment":"..","caption":"..","hashtags":["#.."]}`;
+JSONだけを返す: {"topLine":"..","topMain":"..","hook":{"beforeLabel":"..","before":"..","afterLabel":"..","after":"..","question":".."},"worries":[".."],"root":"..","reason":"..","tip":"..","prompt":"..","sampleInput":"..","lines":[{"scene":"pain","text":".."}],"comment":"..","cover":{"topic":"..","pain":"..","hook":".."},"caption":"..","hashtags":["#.."]}`;
 }
 
 const SCENES = ['pain', 'pain', 'pain', 'root', 'root', 'point', 'reason', 'reason', 'prompt', 'prompt', 'prompt', 'result', 'result', 'tip', 'tip', 'save'];
@@ -230,6 +235,10 @@ function validate(d) {
   if (d.lines.some((l) => len(l.text.replace(/[【】]/g, '')) > 28)) errs.push('字幕の行が長い');
   if (d.lines.some((l) => len(l.text.replace(/[【】]/g, '')) < 10)) errs.push('字幕に短すぎる行(文を2行に分けている)がある');
   if (d.lines.some((l) => /\[\[|\]\]|ここに/.test(l.text))) errs.push('字幕に[[ ]]や「ここに〜」が入っている');
+  const cv = d.cover || {};
+  d.cover = { topic: String(cv.topic || '').trim(), pain: String(cv.pain || '').trim(), hook: String(cv.hook || '').trim() };
+  if (!d.cover.topic || !d.cover.pain || !d.cover.hook) errs.push('coverが欠けている');
+  if (len(d.cover.topic) > 10 || len(d.cover.pain) > 16 || len(d.cover.hook) > 14) errs.push('coverの文字が長い');
   d.hashtags = (Array.isArray(d.hashtags) ? d.hashtags : []).map((t) => '#' + String(t).replace(/^#+/, '').trim()).filter((t) => t.length > 1).slice(0, 5);
   return errs;
 }
@@ -396,18 +405,32 @@ function render(props, outDir) {
   return videoPath;
 }
 
+// 表紙(ChatCover)を1枚の画像にする。fontsは render() で public-dir に写したものを使う
+function renderCover(props, outDir) {
+  const propsPath = path.join(outDir, 'cover_props.json');
+  fs.writeFileSync(propsPath, JSON.stringify(props), 'utf-8');
+  const coverPath = path.join(outDir, 'cover.jpg');
+  execFileSync('npx', ['remotion', 'still', 'src/index.ts', 'ChatCover', `"${coverPath}"`, `--props="${propsPath}"`, `--public-dir="${outDir}"`, '--image-format=jpeg', '--jpeg-quality=92'], {
+    cwd: REMOTION_DIR,
+    timeout: 300000,
+    shell: true,
+    stdio: 'inherit',
+  });
+  return coverPath;
+}
+
 // generate-list-reel.js と同じ: 一時アップロード先を順に試し、直リンクとして使えるものを採用
-function isDirectVideoUrl(url) {
+function isDirectUrl(url, kind) {
   try {
     const out = execFileSync('curl', ['-s', '-I', '-L', '-o', '/dev/null', '-w', '%{http_code} %{content_type}', url], { timeout: 30000 }).toString().trim();
     const [code, type] = out.split(' ');
-    return code === '200' && (type || '').startsWith('video/');
+    return code === '200' && (type || '').startsWith(`${kind}/`);
   } catch (e) {
     return false;
   }
 }
 
-function uploadPublic(videoPath) {
+function uploadPublic(videoPath, kind = 'video') {
   const uploaders = [
     {
       name: 'litterbox',
@@ -425,7 +448,7 @@ function uploadPublic(videoPath) {
   for (const up of uploaders) {
     try {
       const url = up.run();
-      if (url.startsWith('https://') && isDirectVideoUrl(url)) {
+      if (url.startsWith('https://') && isDirectUrl(url, kind)) {
         console.log(`upload host: ${up.name}`);
         return url;
       }
@@ -437,17 +460,25 @@ function uploadPublic(videoPath) {
   throw new Error('全アップロードホストが失敗しました');
 }
 
-async function postReel(account, igUserId, videoPath, caption) {
+async function postReel(account, igUserId, videoPath, caption, coverPath) {
   const igToken = (process.env[`IG_TOKEN_${account.toUpperCase()}`] || '').trim();
   const publicUrl = uploadPublic(videoPath);
+  // 表紙の画像が上げられなければ、動画の途中のコマを表紙にする
+  let coverArgs = ['-d', 'thumb_offset=2500'];
+  if (coverPath) {
+    try {
+      coverArgs = ['-d', `cover_url=${encodeURIComponent(uploadPublic(coverPath, 'image'))}`];
+    } catch (e) {
+      console.log('表紙の画像を上げられず、動画のコマを表紙にします:', e.message);
+    }
+  }
   const curlJson = (args) => JSON.parse(execFileSync('curl', ['-s', ...args]).toString());
   const container = curlJson([
     '-X', 'POST', `https://graph.facebook.com/v23.0/${igUserId}/media`,
     '-d', 'media_type=REELS',
     '-d', `video_url=${encodeURIComponent(publicUrl)}`,
     '-d', `caption=${encodeURIComponent(caption)}`,
-    // 悩みの問いかけと心の声が出た地点を表紙にする
-    '-d', 'thumb_offset=2500',
+    ...coverArgs,
     '-d', `access_token=${igToken}`,
   ]);
   if (!container.id) throw new Error(`container failed: ${JSON.stringify(container)}`);
@@ -537,6 +568,23 @@ async function main() {
     se: { pop: 'pop.mp3', save: 'save.mp3' },
   };
   const videoPath = render(props, outDir);
+  let coverPath = null;
+  try {
+    coverPath = renderCover(
+      {
+        variant: persona.coverVariant || 'C',
+        chip: props.chip,
+        ...script.cover,
+        question: script.hook.question,
+        before: script.hook.before,
+        after: script.hook.after,
+        handle: props.handle,
+      },
+      outDir
+    );
+  } catch (e) {
+    console.log('表紙を作れませんでした:', e.message);
+  }
   const caption = buildCaption(script, persona);
   fs.writeFileSync(path.join(outDir, 'caption.txt'), caption, 'utf-8');
   console.log(`[${account}] video rendered: ${videoPath}`);
@@ -546,7 +594,7 @@ async function main() {
     return;
   }
 
-  const result = await postReel(account, persona.igUserId, videoPath, caption);
+  const result = await postReel(account, persona.igUserId, videoPath, caption, coverPath);
   console.log(`[${account}] posted:`, result.id);
 
   lastRun[account] = new Date().toISOString();

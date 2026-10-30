@@ -17,7 +17,7 @@ import {
 // 悩みを言い当てて心の声を見せ、本当の原因まで掘ってから、時間の比較で結論→理由→「自分→AI」の吹き出しで
 // コピペ用の文と、その文を実際にAIへ送って返ってきた答え→もう一歩のコツを見せる(約1分の悩み→PREP)。
 // 書体はListReelと同じ理由で同梱のTTF(remotion/assets/fonts_rounded → public-dir/fonts)を読む。
-const ROUND = "ChatReelRounded";
+export const ROUND = "ChatReelRounded";
 const fontHandle = delayRender("ChatReel fonts");
 Promise.all(
   [
@@ -63,7 +63,7 @@ export type ChatReelProps = {
 };
 
 const FPS = 30;
-const C = {
+export const C = {
   ink: "#23224A",
   muted: "#8584A6",
   coral: "#FF6B5B",
@@ -124,9 +124,9 @@ const plainLength = (t: string) => [...t.replace(/\[\[|\]\]/g, "")].length;
 
 // 字幕を1〜2行に分ける。1〜2文字だけ次の行に落ちないよう、真ん中に近い切れ目(、や助詞の後)で自分で改行する
 const CAP_ONE_LINE = 14;
-const splitCaption = (text: string): string[] => {
+export const splitCaption = (text: string, oneLine = CAP_ONE_LINE): string[] => {
   const plain = text.replace(/[【】]/g, "");
-  if ([...plain].length <= CAP_ONE_LINE) return [text];
+  if ([...plain].length <= oneLine) return [text];
   const chars = [...text];
   let best = -1;
   let bestScore = Infinity;
