@@ -1,0 +1,64 @@
+name: Post tabi_life reel (from local PC)
+
+# 手元のPC（C:\動画\tabi_life自動\engine\post.py / topics.py）から gh workflow run で起動する。
+# 動画は手元で作り、一時置き場の公開URLだけを受け取る。トークンはこのシークレットから出さない。
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "post=投稿 / check=アカウント確認だけ / insights=成績取得"
+        required: false
+        default: "post"
+      video_url:
+        description: "公開URLのmp4（post のとき）"
+        required: false
+        default: "-"
+      caption:
+        description: "投稿文（post のとき）"
+        required: false
+        default: "-"
+      ids:
+        description: "カンマ区切りのmedia_id（insights のとき）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Graph API
+        env:
+          TOKEN: ${{ secrets.IG_TOKEN_TABI_LIFE_DESIGN }}
+          IG: "17841410048474816"
+          MODE: ${{ github.event.inputs.mode }}
+          VIDEO: ${{ github.event.inputs.video_url }}
+          CAPTION: ${{ github.event.inputs.caption }}
+          IDS: ${{ github.event.inputs.ids }}
+        run: |
+          set -e
+          G=https://graph.facebook.com/v23.0
+          curl -s "$G/$IG?fields=username&access_token=$TOKEN" | tee me.json; echo
+          jq -e .username me.json > /dev/null
+          if [ "$MODE" = "check" ]; then exit 0; fi
+          if [ "$MODE" = "insights" ]; then
+            for ID in ${IDS//,/ }; do
+              R=$(curl -s "$G/$ID/insights?metric=views,saved,shares,follows&access_token=$TOKEN")
+              echo "INSIGHT $ID $(echo "$R" | jq -c '[.data[]? | {(.name): .values[0].value}] | add // {}')"
+            done
+            exit 0
+          fi
+          C=$(curl -s -X POST "$G/$IG/media" --data-urlencode "media_type=REELS" --data-urlencode "video_url=$VIDEO" \
+               --data-urlencode "caption=$CAPTION" --data-urlencode "share_to_feed=true" -d "access_token=$TOKEN" | tee create.json | jq -r .id)
+          [ "$C" != "null" ] || { cat create.json; exit 1; }
+          S=""
+          for i in $(seq 1 60); do
+            S=$(curl -s "$G/$C?fields=status_code&access_token=$TOKEN" | jq -r .status_code)
+            echo "status $S"; [ "$S" = "FINISHED" ] && break; [ "$S" = "ERROR" ] && exit 1; sleep 10
+          done
+          [ "$S" = "FINISHED" ] || exit 1
+          curl -s -X POST "$G/$IG/media_publish" -d "creation_id=$C" -d "access_token=$TOKEN" | tee published.json; echo
+          echo "MEDIA_ID=$(jq -r .id published.json)"
+          jq -e .id published.json > /dev/null
