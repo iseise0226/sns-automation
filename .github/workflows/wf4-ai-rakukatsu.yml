@@ -3,6 +3,9 @@ name: WF4 AIラク活 chat reel (sessi_life, daily)
 # 旧sessi_lifeを「AIラク活」に作り直したアカウント用(2026-10-30〜)。
 # 台本 → コピペ用の文を実際にAIへ送って答えを取る → VOICEVOXの声 → Remotion(ChatReel) → 投稿。
 on:
+  schedule:
+    # JST 20:00 = UTC 11:00。仕事・家事が終わってスマホを見る時間に合わせる
+    - cron: "0 11 * * *"
   workflow_dispatch:
     inputs:
       dryrun:
