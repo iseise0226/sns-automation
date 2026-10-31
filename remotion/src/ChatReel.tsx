@@ -301,7 +301,20 @@ const CardView: React.FC<{ label: string; text: string; f: number; dark?: boolea
       >
         {label}
       </span>
-      <div style={{ marginTop: 40, fontSize: 68, fontWeight: 900, lineHeight: 1.42, color: dark ? "#fff" : C.ink, whiteSpace: "pre-line" }}>{text}</div>
+      {(() => {
+        // AIが改行を入れ忘れた時は、言葉の切れ目で2行に分けて、1行に収まる大きさにする
+        const rows = text.includes("\n") ? text.split("\n") : splitCaption(text, 10);
+        const size = Math.min(68, Math.floor(860 / Math.max(...rows.map((r) => [...r].length))));
+        return (
+          <div style={{ marginTop: 40, fontSize: size, fontWeight: 900, lineHeight: 1.42, color: dark ? "#fff" : C.ink }}>
+            {rows.map((r, i) => (
+              <div key={i} style={{ whiteSpace: "nowrap" }}>
+                {r}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 };
