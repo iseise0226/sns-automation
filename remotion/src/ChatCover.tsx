@@ -122,7 +122,8 @@ const CoverC: React.FC<ChatCoverProps> = (p) => (
       本当の原因は…
     </div>
     {(() => {
-      const rows = splitCaption(p.hook.replace(/^(本当の)?原因は、?/, ""), 7);
+      // 9字までは1行に収める(「直接言えな|い不安」のような言葉の途中の改行を避ける)
+      const rows = splitCaption(p.hook.replace(/^(本当の)?原因は、?/, ""), 9);
       return (
         <div style={{ marginTop: 44, fontSize: fit(rows, 940, 150), fontWeight: 900, lineHeight: 1.22, color: "#fff" }}>
           {rows.map((r, i) => (

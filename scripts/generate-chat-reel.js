@@ -175,7 +175,7 @@ function buildPrompt(pastTopics, category, seed) {
   - topic: 何の話か(8字以内。「断りのメール」)
   - pain: 悩みの一言(14字以内。「〜できない…」「〜決まらない…」など)
   - hook: 本当の原因を短く。「原因は〇〇」の形(12字以内。答えは言い切るが、どうすればいいかは動画を見ないと分からないように。「情報整理不足」のような漢字の固まりにせず、「原因は“決める順番”だった」のように話し言葉で)
-- caption: 投稿文の本文。同じ流れで書く: 悩みを言い当てる一言 → 本音に寄りそう一言 → 「でも本当の原因は〜」 → 「だからAIに任せれば〇〇で終わります」と理由 → 「■ 使い方」として1〜3の手順 → 「■ もう一歩のコツ」を2つ。400〜600字。コピペ用の文とハッシュタグは書かない(あとで自動で付け足す)
+- caption: 投稿文の本文。段落ごとに空行を入れ、1文ごとに改行する。同じ流れで書く: 悩みを言い当てる一言 → 本音に寄りそう一言 → 「でも本当の原因は〜」 → 「だからAIに任せれば〇〇で終わります」と理由 → 「■ 使い方」として1〜3の手順 → 「■ もう一歩のコツ」を2つ。400〜600字。コピペ用の文とハッシュタグは書かない(あとで自動で付け足す)
 - hashtags: 5つ(#ChatGPT #AI活用 を含む)
 
 【良い例(この深さと流れを目指す。言い回しや締めの一言は真似しない)】
@@ -505,9 +505,21 @@ async function postReel(account, igUserId, videoPath, caption, coverPath) {
   return publish;
 }
 
+// 改行の少ない本文は、文の終わりと「■」「①」の前で改行して読みやすくする。[[ ]]は〔 〕に直す
+function tidyCaption(text) {
+  let t = text.trim().replace(/\[\[/g, '〔').replace(/\]\]/g, '〕');
+  if ((t.match(/\n/g) || []).length < 4) {
+    t = t
+      .replace(/([。！？])(?=[^\n」』）)])/g, '$1\n')
+      .replace(/\s*(■)/g, '\n\n$1')
+      .replace(/\s*([①②③④⑤])/g, '\n$1');
+  }
+  return t.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function buildCaption(script, persona) {
   return [
-    script.caption.trim(),
+    tidyCaption(script.caption),
     '',
     '▼ コピペ用（〔 〕の所を自分用に書き換えてね）',
     script.prompt.replace(/\[\[/g, '〔').replace(/\]\]/g, '〕'),
