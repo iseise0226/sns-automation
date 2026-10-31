@@ -14,7 +14,9 @@ push すると GitHub Actions（`.github/workflows/tabi-reel.yml`＝作る係）
 1. `tabi/topics.json` を読む。`done` にあるサービスは扱わない。`weights`（ai / money / work / life）の高い系統を優先。money＝家計・ポイント・決済系アプリ、work＝仕事効率、life＝暮らし系サービス。
 2. WebSearch で、直近1〜2週間に **日本で** 始まった・話題になったアプリ／AI／Webサービスを探す。ゲームは扱わない。sessi_life（ChatGPTのコピペワザ）や oshiete.okane（暮らしの制度）と同じネタは避ける。
 3. 候補の **公式ページ**（料金・対象・できることが書いてあるページ。ログイン不要で見られること）を WebFetch で読む。料金や対象が公式に書いていなければ次の候補へ。
-   - 「公式」は運営会社のドメインのページ。まとめ記事・個人ブログは出典にしない。
+   - 「公式」は運営会社のドメインのページ、または運営会社が出したプレスリリース（PR TIMES・自社ニュースルーム）。まとめ記事・個人ブログは出典にしない。
+   - **作る係はGitHubのサーバーから開くので、ロボット確認が出るサイトは使えない**（例：amazon.co.jp の商品・案内ページは「ショッピングを続ける」画面になる）。その場合は同じ会社のプレスリリースを出典にする。ロボット確認を突破しようとはしない。
+   - 事前確認：`curl -sL -A "Mozilla/5.0" <URL> | sed 's/<[^>]*>//g' | grep -c "<find の文字>"` が 1 以上か見る（0 でも JavaScript で表示するページなら作る係では見えることがある。ロボット確認・captcha の文字が出たら使わない）。
 4. 今日の日付（JST、`TZ=Asia/Tokyo date +%F`）で `tabi/days/YYYY-MM-DD/` を作り、`sources.json` と `script.json` を書く（下の形）。
 5. 自分で確認：`cd tabi/engine && python -c "import json,sys;sys.path.insert(0,'.');from verify import check_facts;d='../days/YYYY-MM-DD/';print(check_facts(json.load(open(d+'script.json',encoding='utf-8')),json.load(open(d+'sources.json',encoding='utf-8'))))"` → `[]` になること（quote と照合。本番は本文と照合）。
 6. ブランチ `claude/tabi-YYYY-MM-DD` を作り、その2ファイルだけを commit して push する（main には push しない）。push で作る係が動く。

@@ -1,0 +1,9 @@
+{
+ "hero": {"url": "https://www.lycorp.co.jp/ja/news/release/020921/", "label": "LINEヤフー 公式", "taken": "2026-10-31", "shot": "hero", "quote": "未読のまま、LINEのトークルームのすべてのやりとりを確認できる 「スクロールプレビュー」機能がLYPプレミアム会員特典に新登場！"},
+ "release": {"url": "https://www.lycorp.co.jp/ja/news/release/020921/", "label": "LINEヤフー 公式", "taken": "2026-10-31", "shot": "release", "quote": "LINEヤフー株式会社（以下、LINEヤフー）は、月額制サービス「LYPプレミアム」の「LYPプレミアム スタンダードプラン」および「LYPプレミアム with Netflix」会員特典として、未読のまま、トークルーム全体を確認できる「スクロールプレビュー」機能（※1）を、11月4日（水）より提供します。本機能は、10月より順次「LINEラボ」にて全ての「LINE」ユーザーに無料で先行提供しており、この度正式にLYPプレミアム特典へ移行します。"},
+ "android": {"url": "https://www.lycorp.co.jp/ja/news/release/020921/", "label": "LINEヤフー 公式", "taken": "2026-10-31", "shot": "release", "quote": "これにより、「LYPプレミアム」未登録を含むすべてのAndroidユーザーは、「LINE」のトークリスト上でトークルームを長押しすることで、未読のまま、トークルームの一部を表示可能です。"},
+ "note": {"url": "https://www.lycorp.co.jp/ja/news/release/020921/", "label": "LINEヤフー 公式", "taken": "2026-10-31", "shot": "note", "quote": "※1 本機能は「LINE」のバージョン26.15.0以上で利用できます。なお現時点では、PC版LINEは利用対象外となります"},
+ "howto": {"url": "https://www.lycorp.co.jp/ja/news/release/020921/", "label": "LINEヤフー 公式", "taken": "2026-10-31", "shot": "howto", "quote": "トークリスト上でプレビューしたいトークを長押し プレビュー画面が立ち上がり、過去のやり取りは画面内をスクロールで確認できます"},
+ "price": {"url": "https://premium.yahoo.co.jp/", "label": "LYPプレミアム 公式", "taken": "2026-10-31", "shot": "price", "quote": "LINEアカウントと連携して 最大2カ月無料で登録※1 無料期間終了後は自動的に月額508円（税込） ※1 無料期間は登録日に関わらず、登録翌月の月末まで。"},
+ "softbank": {"url": "https://www.lycorp.co.jp/ja/news/release/020921/", "label": "LINEヤフー 公式", "taken": "2026-10-31", "shot": "release", "quote": "なお、ソフトバンク端末でスマートログイン設定をしている場合、またはワイモバイル端末でY!mobileサービスの初期登録をしている場合は、追加料金なしで「LYPプレミアム スタンダードプラン」を利用できます。"}
+}
