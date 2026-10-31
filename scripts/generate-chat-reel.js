@@ -185,7 +185,7 @@ ${JSON.stringify(GOOD_EXAMPLE)}
 - 多くの人が週に1回はぶつかる、よくある困りごとにする(「2つの〇〇を比べる」のような、人によっては起きない場面は避ける)
 - beforeLabel は今回の作業に合った言葉にする(書く作業でなければ「自分で考える」「自分で調べる」など)
 - 同じことを別の言葉で言い直す行を作らない。1行ごとに話が1歩進むこと
-- 1つの文を2行に分けない。どの行もそれだけで意味が通る言い切りにする(10字以上)
+- 1つの文を2行に分けない。どの行もそれだけで意味が通る言い切りにする(7字以上)
 - 字幕の行に[[ ]]や【ここに〇〇を貼る】をそのまま書かない(「色の付いた所」「下の枠」などと言う)
 - reasonとtipは、コピペ用の文で本当に起きることだけ言う(文に無い「AIが質問してくれる」などは言わない)
 - 本当の原因は、そのテーマならではのものにする(どのテーマにも当てはまる「時間がない」「慣れていない」は使わない)
@@ -233,8 +233,10 @@ function validate(d) {
   d.lines = (Array.isArray(d.lines) ? d.lines : []).slice(0, SCENES.length).map((l, i) => ({ scene: SCENES[i], text: String(l.text || '').replace(/\\n|\n/g, '').trim() }));
   if (d.lines.length !== SCENES.length || d.lines.some((l) => !l.text)) errs.push(`linesが${SCENES.length}行でない`);
   if (d.lines.some((l) => len(l.text.replace(/[【】]/g, '')) > 28)) errs.push('字幕の行が長い');
-  if (d.lines.some((l) => len(l.text.replace(/[【】]/g, '')) < 10)) errs.push('字幕に短すぎる行(文を2行に分けている)がある');
-  if (d.lines.some((l) => /\[\[|\]\]|ここに/.test(l.text))) errs.push('字幕に[[ ]]や「ここに〜」が入っている');
+  const short = d.lines.filter((l) => len(l.text.replace(/[【】]/g, '')) < 7).map((l) => l.text);
+  if (short.length) errs.push(`字幕に短すぎる行がある(1つの文を2行に分けず、1行で言い切る): ${short.join('、')}`);
+  const slots = d.lines.filter((l) => /\[\[|\]\]|ここに/.test(l.text)).map((l) => l.text);
+  if (slots.length) errs.push(`字幕に[[ ]]や「ここに〜」が入っている: ${slots.join('、')}`);
   const cv = d.cover || {};
   d.cover = { topic: String(cv.topic || '').trim(), pain: String(cv.pain || '').trim(), hook: String(cv.hook || '').trim() };
   if (!d.cover.topic || !d.cover.pain || !d.cover.hook) errs.push('coverが欠けている');
