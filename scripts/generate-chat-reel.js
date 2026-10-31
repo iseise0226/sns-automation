@@ -252,18 +252,26 @@ async function generateScript(systemPrompt, pastTopics) {
     { role: 'user', content: buildPrompt(pastTopics, category, seed) },
   ];
   let lastErrs = [];
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  // 1分の台本は長いので、考える分も含めて出力の枠を広く取る。不正なら何がだめだったかを伝えて直させる
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    let raw;
     let d;
     try {
-      d = JSON.parse(await callLLM(messages, 4000));
+      raw = await callLLM(messages, 12000);
+      d = JSON.parse(raw);
     } catch (e) {
       lastErrs = ['JSONの解析に失敗: ' + e.message];
+      console.error(`台本が不正(${attempt}/5): ${lastErrs[0]}`);
       continue;
     }
     lastErrs = validate(d);
     d.seed = seed;
     if (!lastErrs.length) return d;
-    console.error(`台本が不正(${attempt}/3): ${lastErrs.join(' / ')}`);
+    console.error(`台本が不正(${attempt}/5): ${lastErrs.join(' / ')}`);
+    messages.splice(2, 2,
+      { role: 'assistant', content: raw },
+      { role: 'user', content: `次の点を直して、全部の項目をそろえたJSONをもう一度返して: ${lastErrs.join(' / ')}。captionは必ず入れる。字幕の行には[[ ]]や「ここに」を書かない。cover は topic 8字・pain 14字・hook 12字以内。` }
+    );
   }
   throw new Error('台本を生成できませんでした: ' + lastErrs.join(' / '));
 }
