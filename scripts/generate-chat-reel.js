@@ -618,7 +618,7 @@ async function main() {
   execFileSync('git', ['add', 'data/wf4_last_run.json', 'data/wf4_chat_topics']);
   try {
     execFileSync('git', ['commit', '-m', `chore: WF4 ${account} chat-reel ${today}`]);
-    execFileSync('git', ['pull', '--rebase']);
+    execFileSync('git', ['pull', '--rebase', '--autostash']);
     execFileSync('git', ['push']);
   } catch (e) {
     console.log('no changes to commit or push failed:', e.message);
