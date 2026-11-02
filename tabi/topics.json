@@ -31,5 +31,26 @@
    "media_id": "17985093536901068"
   }
  ],
- "weekly": []
+ "weekly": [
+  {
+   "stats": [
+    {
+     "media_id": "18113253659234420",
+     "category": "ai",
+     "score": 0.0
+    },
+    {
+     "media_id": "17985093536901068",
+     "category": "life",
+     "score": 0.0
+    }
+   ],
+   "weights": {
+    "ai": 1.0,
+    "money": 1.0,
+    "work": 1.0,
+    "life": 1.0
+   }
+  }
+ ]
 }
