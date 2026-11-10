@@ -1,4 +1,4 @@
-name: WF6 8チャンネル毎日自動投稿
+name: WF6 5チャンネル毎日自動投稿
 
 on:
   workflow_dispatch:
@@ -8,14 +8,10 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '3 21 * * *'   # ise_satoshi        06:03 JST
-    - cron: '17 23 * * *'  # satoshi_mindset    08:17 JST
-    - cron: '41 1 * * *'   # satoshi_mind_coach 10:41 JST
     - cron: '29 3 * * *'   # ise_sato_kosodate  12:29 JST
     - cron: '53 5 * * *'   # ise_kenkou_otaku   14:53 JST
     - cron: '7 8 * * *'    # tabi_life_design40 17:07 JST
     - cron: '22 10 * * *'  # sessi_life         19:22 JST
-    - cron: '38 12 * * *'  # ko_gi_omoti        21:38 JST
     - cron: '50 13 * * *'  # okane_taidan       22:50 JST（対談チャンネル）
 
 jobs:
@@ -30,18 +26,19 @@ jobs:
         id: pick
         run: |
           if [ -n "${{ github.event.inputs.account }}" ]; then
+            case "${{ github.event.inputs.account }}" in
+              ise_satoshi|satoshi_mindset|satoshi_mind_coach|ko_gi_omoti)
+                echo "account=" >> "$GITHUB_OUTPUT"
+                exit 0 ;;
+            esac
             echo "account=${{ github.event.inputs.account }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           case "${{ github.event.schedule }}" in
-            "3 21 * * *")  echo "account=ise_satoshi" >> "$GITHUB_OUTPUT" ;;
-            "17 23 * * *") echo "account=satoshi_mindset" >> "$GITHUB_OUTPUT" ;;
-            "41 1 * * *")  echo "account=satoshi_mind_coach" >> "$GITHUB_OUTPUT" ;;
             "29 3 * * *")  echo "account=ise_sato_kosodate" >> "$GITHUB_OUTPUT" ;;
             "53 5 * * *")  echo "account=ise_kenkou_otaku" >> "$GITHUB_OUTPUT" ;;
             "7 8 * * *")   echo "account=tabi_life_design40" >> "$GITHUB_OUTPUT" ;;
             "22 10 * * *") echo "account=sessi_life" >> "$GITHUB_OUTPUT" ;;
-            "38 12 * * *") echo "account=ko_gi_omoti" >> "$GITHUB_OUTPUT" ;;
             "50 13 * * *") echo "account=okane_taidan" >> "$GITHUB_OUTPUT" ;;
             *) echo "account=" >> "$GITHUB_OUTPUT" ;;
           esac
