@@ -210,10 +210,11 @@ async function postToThreads(account, text) {
 async function main() {
   const targetAccount = process.argv[2];
   // ko_gi_omotiは画像付き投稿(post-corgi.js)専用のため、通常実行(全件)からは除外
+  // sessi_lifeは作り替え中のため除外（手動指定なら実行できる）
   // ise_satoshiは自然な通常投稿として再開。古いCTAは上で明示的に無効化。
   const accountsToRun = targetAccount
     ? [targetAccount]
-    : Object.keys(ACCOUNTS).filter((a) => a !== 'ko_gi_omoti');
+    : Object.keys(ACCOUNTS).filter((a) => a !== 'ko_gi_omoti' && a !== 'sessi_life');  // sessi_life: 2026-11-12 逆転ストーリーに作り替えるため自動投稿を止める
 
   const trends = await getBraveTrends();
   console.log('trends:', trends);
