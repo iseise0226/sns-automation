@@ -215,7 +215,7 @@ async function main() {
   const accountsToRun = targetAccount
     ? [targetAccount]
     : Object.keys(ACCOUNTS).filter(
-        (a) => a !== 'ko_gi_omoti' && a !== 'sessi_life' && a !== 'ise_satoshi'
+        (a) => a !== 'ko_gi_omoti' && a !== 'sessi_life' && a !== 'ise_satoshi' && a !== 'satoshi_mind_coaching' // satoshi_mind_coaching は英語の地図アカウントに作り変えたので外す（2026-11-13）
       );
 
   const trends = await getBraveTrends();

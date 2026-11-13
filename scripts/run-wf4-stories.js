@@ -5,7 +5,7 @@ const { execFileSync } = require('child_process');
 // sessi_life and tabi_life_design are intentionally excluded until their new brand content is ready.
 const ACCOUNTS = [
   'satoshi_mindset',
-  'satoshi_mind_coaching',
+  // satoshi_mind_coaching は2026-11-13に英語の地図アカウント（Why on the Map）へ作り変えたので外した
   'ise_sato_kosodate',
   'ise_kenkou_otaku',
 ];
