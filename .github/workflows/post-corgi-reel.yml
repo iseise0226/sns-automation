@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "post=投稿 / check=アカウント確認だけ / insights=成績取得"
+        description: "post=リール投稿 / story=ストーリー（video_url に画像URL） / check=アカウント確認だけ / insights=成績取得"
         required: false
         default: "post"
       video_url:
@@ -48,6 +48,20 @@ jobs:
           curl -s "$G/$IG?fields=username&access_token=$TOKEN" | tee me.json; echo
           jq -e .username me.json > /dev/null
           if [ "$MODE" = "check" ]; then exit 0; fi
+          if [ "$MODE" = "story" ]; then
+            # video_url に画像の公開URLを入れて呼ぶ（ストーリーは画像1枚）
+            C=$(curl -s -X POST "$G/$IG/media" --data-urlencode "media_type=STORIES" --data-urlencode "image_url=$VIDEO" \
+                 -d "access_token=$TOKEN" | tee create.json | jq -r .id)
+            [ "$C" != "null" ] || { cat create.json; exit 1; }
+            for i in $(seq 1 30); do
+              S=$(curl -s "$G/$C?fields=status_code&access_token=$TOKEN" | jq -r .status_code)
+              echo "status $S"; [ "$S" = "FINISHED" ] && break; [ "$S" = "ERROR" ] && exit 1; sleep 5
+            done
+            curl -s -X POST "$G/$IG/media_publish" -d "creation_id=$C" -d "access_token=$TOKEN" | tee published.json; echo
+            echo "MEDIA_ID=$(jq -r .id published.json)"
+            jq -e .id published.json > /dev/null
+            exit 0
+          fi
           if [ "$MODE" = "insights" ]; then
             for ID in ${IDS//,/ }; do
               R=$(curl -s "$G/$ID/insights?metric=views,saved,shares,follows&access_token=$TOKEN")
