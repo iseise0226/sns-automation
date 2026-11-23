@@ -7,7 +7,7 @@ const ACCOUNTS = [
   'satoshi_mindset',
   // satoshi_mind_coaching は2026-11-13に英語の地図アカウント（Why on the Map）へ作り変えたので外した
   'ise_sato_kosodate',
-  'ise_kenkou_otaku',
+  // 'ise_kenkou_otaku', // 2026-11-23 聖さんの指示で投稿停止(別の自動化に移行。戻すときはコメントを外す)
 ];
 
 // WF4_ONLYが指定されていればそのアカウントだけ実行する(テスト用)

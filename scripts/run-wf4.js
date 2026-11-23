@@ -7,7 +7,7 @@ const { execFileSync } = require('child_process');
 // sessi_life (AIラク活) is handled by wf4-ai-rakukatsu.yml. tabi_life_design stays paused until its new brand content is ready.
 const ACCOUNTS = [
   'satoshi_mindset',
-  'ise_kenkou_otaku',
+  // 'ise_kenkou_otaku', // 2026-11-23 聖さんの指示で投稿停止(別の自動化に移行。戻すときはコメントを外す)
 ];
 
 // WF4_ONLYが指定されていればそのアカウントだけ実行する（テスト用）
